@@ -14,6 +14,7 @@ import { colors } from '../theme/colors'
 
 // Auth Screens
 import LoginScreen from '../screens/auth/LoginScreen'
+import RegisterPathScreen from '../screens/auth/RegisterPathScreen'
 import RegisterScreen from '../screens/auth/RegisterScreen'
 import VerifyEmailScreen from '../screens/auth/VerifyEmailScreen'
 
@@ -25,6 +26,7 @@ import TeacherTabs from './TeacherTabs'
 
 export type AuthStackParamList = {
   Login: undefined
+  RegisterPath: undefined
   Register: undefined
   VerifyEmail: { email: string; devOtp?: string }
 }
@@ -35,6 +37,7 @@ function AuthNavigator() {
   return (
     <AuthStack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="RegisterPath" component={RegisterPathScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />
       <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
     </AuthStack.Navigator>

@@ -62,7 +62,7 @@ const bar = StyleSheet.create({
 
 // ─── Quick action item type ───────────────────────────────────────────────────
 
-const QUICK_ACTIONS = [
+const B2C_QUICK_ACTIONS = [
   {
     label: 'Generate',
     sub: 'New paper',
@@ -73,8 +73,38 @@ const QUICK_ACTIONS = [
     bg: colors.accentLight,
   },
   {
+    label: 'My Papers',
+    sub: 'View all',
+    icon: 'document-text-outline' as const,
+    screen: 'Papers',
+    params: { screen: 'PapersList' },
+    color: '#0284C7',
+    bg: '#F0F9FF',
+  },
+  {
+    label: 'Results',
+    sub: 'Grades & feedback',
+    icon: 'checkmark-circle-outline' as const,
+    screen: 'Results',
+    params: { screen: 'ResultsList' },
+    color: '#059669',
+    bg: '#ECFDF5',
+  },
+  {
+    label: 'AI Studio',
+    sub: 'Chat with AI',
+    icon: 'sparkles-outline' as const,
+    screen: 'AIStudio',
+    params: undefined,
+    color: '#7C3AED',
+    bg: '#F5F3FF',
+  },
+]
+
+const SCHOOL_QUICK_ACTIONS = [
+  {
     label: 'My Exams',
-    sub: 'Teacher exams',
+    sub: 'Teacher assigned',
     icon: 'calendar-outline' as const,
     screen: 'Exams',
     params: undefined,
@@ -83,7 +113,7 @@ const QUICK_ACTIONS = [
   },
   {
     label: 'My Papers',
-    sub: 'View all',
+    sub: 'Practice papers',
     icon: 'document-text-outline' as const,
     screen: 'Papers',
     params: { screen: 'PapersList' },
@@ -96,8 +126,8 @@ const QUICK_ACTIONS = [
     icon: 'camera-outline' as const,
     screen: 'Scan',
     params: undefined,
-    color: '#7C3AED',
-    bg: '#F5F3FF',
+    color: '#059669',
+    bg: '#ECFDF5',
   },
   {
     label: 'Results',
@@ -105,8 +135,17 @@ const QUICK_ACTIONS = [
     icon: 'checkmark-circle-outline' as const,
     screen: 'Results',
     params: { screen: 'ResultsList' },
-    color: '#059669',
-    bg: '#ECFDF5',
+    color: '#7C3AED',
+    bg: '#F5F3FF',
+  },
+  {
+    label: 'My Teachers',
+    sub: 'Roster & subjects',
+    icon: 'people-outline' as const,
+    screen: 'Profile',
+    params: { screen: 'MyTeachers' },
+    color: colors.accent,
+    bg: colors.accentLight,
   },
   {
     label: 'AI Studio',
@@ -126,6 +165,8 @@ export default function HomeScreen() {
   const navigation = useNavigation<any>()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
+  const isSchoolStudent = user?.role === 'student'
+  const QUICK_ACTIONS = isSchoolStudent ? SCHOOL_QUICK_ACTIONS : B2C_QUICK_ACTIONS
 
   const { data: analytics, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['analytics', 'student-dashboard'],
@@ -150,7 +191,7 @@ export default function HomeScreen() {
   const summary = analytics?.summary
   const gradedSubs = (analytics?.submissions ?? []).filter(s => s.status === 'graded')
   const avgPct = gradedSubs.length > 0
-    ? Math.round(gradedSubs.reduce((acc, s) => acc + (s.score / s.max_score) * 100, 0) / gradedSubs.length)
+    ? Math.round(gradedSubs.reduce((acc, s) => acc + ((s.score ?? 0) / (s.max_score ?? 1)) * 100, 0) / gradedSubs.length)
     : null
 
   const recentSubs = (analytics?.submissions ?? [])
@@ -159,8 +200,8 @@ export default function HomeScreen() {
     .slice(0, 3)
 
   const subjectAccuracy = Object.entries(analytics?.subject_question_types ?? {}).map(([subject, types]) => {
-    const totalScored = types.reduce((s, t) => s + t.scored, 0)
-    const totalMarks = types.reduce((s, t) => s + t.total, 0)
+    const totalScored = types.reduce((s, t) => s + (t.accuracy ?? 0), 0)
+    const totalMarks = types.reduce((s, t) => s + (t.marks ?? 1), 0)
     const accuracy = totalMarks > 0 ? Math.round((totalScored / totalMarks) * 100) : 0
     return { subject, accuracy }
   }).sort((a, b) => b.accuracy - a.accuracy)
@@ -196,9 +237,9 @@ export default function HomeScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.greeting}>Hello, {firstName} 👋</Text>
             {standard ? (
-              <Text style={styles.greetingSub}>{standard}</Text>
+              <Text style={styles.greetingSub}>{standard}{isSchoolStudent ? ' · School Student' : ''}</Text>
             ) : (
-              <Text style={styles.greetingSub}>Ready to practise today?</Text>
+              <Text style={styles.greetingSub}>{isSchoolStudent ? 'School Student' : 'Ready to practise today?'}</Text>
             )}
           </View>
           <View style={styles.brandMark}>
@@ -279,6 +320,17 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ── Analytics Button ─────────────────────────────────────────── */}
+        <TouchableOpacity
+          style={styles.analyticsBtn}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('DashboardLab')}
+        >
+          <Ionicons name="bar-chart-outline" size={16} color={colors.accent} />
+          <Text style={styles.analyticsBtnText}>View Full Analytics</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.accent} style={{ marginLeft: 'auto' }} />
+        </TouchableOpacity>
+
         {/* ── Subject Performance ───────────────────────────────────────── */}
         {!isLoading && subjectAccuracy.length > 0 && (
           <>
@@ -319,7 +371,7 @@ export default function HomeScreen() {
             </View>
             <View style={{ gap: cardGap }}>
               {recentSubs.map((sub) => {
-                const pct = Math.round((sub.score / sub.max_score) * 100)
+                const pct = Math.round(((sub.score ?? 0) / (sub.max_score ?? 1)) * 100)
                 const scoreColor = getScoreColor(pct)
                 const dateStr = new Date(sub.date).toLocaleDateString('en-IN', {
                   day: 'numeric',
@@ -537,4 +589,24 @@ const styles = StyleSheet.create({
   },
   recentScoreText: { fontSize: 13, fontWeight: '800' },
   recentPct: { fontSize: 10, fontWeight: '700' },
+
+  // Analytics button
+  analyticsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    backgroundColor: colors.accentLight,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.accent + '40',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    marginTop: spacing[4],
+  },
+  analyticsBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: fonts.bold,
+    color: colors.accent,
+  },
 })

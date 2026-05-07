@@ -17,6 +17,7 @@ import { stackScreenOptions } from './shared'
 import StudentExamsNavigator from './StudentExamsNavigator'
 import ScanNavigator from './ScanNavigator'
 import HomeScreen from '../screens/home/HomeScreen'
+import DashboardLabScreen from '../screens/home/DashboardLabScreen'
 import PapersScreen from '../screens/papers/PapersScreen'
 import GeneratePaperScreen from '../screens/papers/GeneratePaperScreen'
 import PaperDetailScreen from '../screens/papers/PaperDetailScreen'
@@ -50,6 +51,11 @@ export type StudentProfileStackParamList = {
   MyTeachers: undefined
 }
 
+export type StudentHomeStackParamList = {
+  HomeMain: undefined
+  DashboardLab: undefined
+}
+
 export type StudentTabParamList = {
   Home: undefined
   Exams: undefined
@@ -62,10 +68,20 @@ export type StudentTabParamList = {
 
 // ─── Stacks ───────────────────────────────────────────────────────────────────
 
+const HomeStack = createNativeStackNavigator<StudentHomeStackParamList>()
 const PapersStack = createNativeStackNavigator<StudentPapersStackParamList>()
 const ResultsStack = createNativeStackNavigator<StudentResultsStackParamList>()
 const ProfileStack = createNativeStackNavigator<StudentProfileStackParamList>()
 const Tab = createBottomTabNavigator<StudentTabParamList>()
+
+function HomeNavigator() {
+  return (
+    <HomeStack.Navigator screenOptions={stackScreenOptions}>
+      <HomeStack.Screen name="HomeMain" component={HomeScreen} options={{ headerShown: false }} />
+      <HomeStack.Screen name="DashboardLab" component={DashboardLabScreen} options={{ title: 'Analytics Dashboard' }} />
+    </HomeStack.Navigator>
+  )
+}
 
 function PapersNavigator() {
   return (
@@ -153,7 +169,7 @@ export default function StudentTabs() {
         }
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Home" component={HomeNavigator} />
       <Tab.Screen name="Exams" component={StudentExamsNavigator} />
       <Tab.Screen name="Papers" component={PapersNavigator} />
       <Tab.Screen name="Scan" component={ScanNavigator} />

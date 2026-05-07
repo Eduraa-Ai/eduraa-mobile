@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery } from '@tanstack/react-query'
 import type { StudentProfileStackParamList } from '../../navigation/StudentTabs'
 import { b2cApi } from '../../api/b2c'
+import { rosterApi } from '../../api/roster'
 import { useAuthStore } from '../../stores/authStore'
 import { colors } from '../../theme/colors'
 import { spacing, radius, shadows } from '../../theme/spacing'
@@ -81,9 +82,20 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
 
-  const { data: profile, isLoading } = useQuery({
+  const isSchoolStudent = user?.role === 'student'
+
+  // B2C profile — only for b2c_student
+  const { data: b2cProfile, isLoading: b2cLoading } = useQuery({
     queryKey: ['b2c-profile'],
     queryFn: b2cApi.getProfile,
+    enabled: !isSchoolStudent,
+  })
+
+  // School student master profile — only for school student
+  const { data: masterProfile, isLoading: masterLoading } = useQuery({
+    queryKey: ['student-master-profile'],
+    queryFn: rosterApi.getStudentMasterProfile,
+    enabled: isSchoolStudent,
   })
 
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -91,19 +103,45 @@ export default function ProfileScreen() {
     Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start()
   }, [fadeAnim])
 
-  const fullName = profile ? `${profile.first_name} ${profile.last_name}` : (user?.display_name || 'Student')
-  const initials = fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-  const educationLabel = profile?.education_level.replace(/_/g, ' ') ?? ''
-
+  const isLoading = isSchoolStudent ? masterLoading : b2cLoading
   const hPad = width < 380 ? spacing[4] : spacing[5]
 
-  const infoRows = profile ? [
-    { icon: 'mail-outline' as const,    label: 'Email',          value: profile.email },
-    { icon: 'school-outline' as const,  label: 'Education',      value: educationLabel },
-    { icon: 'layers-outline' as const,  label: 'Standard',       value: profile.standard || '—' },
-    { icon: 'ribbon-outline' as const,  label: 'Board',          value: profile.board || '—' },
-    { icon: 'book-outline' as const,    label: 'Subjects',       value: profile.subjects?.join(', ') || '—' },
-  ] : []
+  // Derive display name
+  const fullName = isSchoolStudent
+    ? masterProfile?.profile
+      ? `${(masterProfile.profile as any).first_name ?? ''} ${(masterProfile.profile as any).last_name ?? ''}`.trim()
+      : user?.display_name || 'Student'
+    : b2cProfile
+      ? `${b2cProfile.first_name} ${b2cProfile.last_name}`
+      : user?.display_name || 'Student'
+
+  const initials = fullName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
+
+  const roleLabel = isSchoolStudent ? 'School Student' : 'Individual Learner'
+
+  // Build info rows based on role
+  const infoRows = isSchoolStudent
+    ? (() => {
+        const p = masterProfile?.profile as any
+        if (!p) return []
+        return [
+          { icon: 'mail-outline' as const,    label: 'Email',      value: p.email || '—' },
+          { icon: 'business-outline' as const, label: 'School',    value: p.school_name || '—' },
+          { icon: 'ribbon-outline' as const,   label: 'Board',     value: p.board || '—' },
+          { icon: 'layers-outline' as const,   label: 'Standard',  value: p.standard || '—' },
+          { icon: 'grid-outline' as const,     label: 'Division',  value: p.division || '—' },
+          { icon: 'book-outline' as const,     label: 'Subjects',  value: masterProfile?.subjects?.join(', ') || '—' },
+        ]
+      })()
+    : b2cProfile
+      ? [
+          { icon: 'mail-outline' as const,    label: 'Email',       value: b2cProfile.email },
+          { icon: 'school-outline' as const,  label: 'Preparing for', value: b2cProfile.education_level.replace(/_/g, ' ') },
+          { icon: 'layers-outline' as const,  label: 'Standard',    value: b2cProfile.standard || '—' },
+          { icon: 'ribbon-outline' as const,  label: 'Board',       value: b2cProfile.board || '—' },
+          { icon: 'book-outline' as const,    label: 'Subjects',    value: b2cProfile.subjects?.join(', ') || '—' },
+        ]
+      : []
 
   return (
     <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
@@ -121,20 +159,26 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.name}>{fullName}</Text>
           <View style={styles.rolePill}>
-            <Ionicons name="person-outline" size={12} color={colors.muted} />
-            <Text style={styles.roleText}>B2C Learner</Text>
+            <Ionicons
+              name={isSchoolStudent ? 'school-outline' : 'person-outline'}
+              size={12}
+              color={colors.muted}
+            />
+            <Text style={styles.roleText}>{roleLabel}</Text>
           </View>
         </View>
 
-        {/* Edit button */}
-        <TouchableOpacity
-          style={[styles.editBtn, shadows.xs]}
-          onPress={() => navigation.navigate('EditProfile')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="pencil-outline" size={16} color={colors.ink} />
-          <Text style={styles.editBtnText}>Edit Profile</Text>
-        </TouchableOpacity>
+        {/* Edit button — only for B2C (school profile is managed by school admin) */}
+        {!isSchoolStudent && (
+          <TouchableOpacity
+            style={[styles.editBtn, shadows.xs]}
+            onPress={() => navigation.navigate('EditProfile')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="pencil-outline" size={16} color={colors.ink} />
+            <Text style={styles.editBtnText}>Edit Profile</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Profile info */}
         {isLoading ? (
@@ -144,7 +188,7 @@ export default function ProfileScreen() {
         ) : (
           <View style={[styles.infoCard, shadows.xs]}>
             <Text style={styles.infoCardTitle}>Profile Info</Text>
-            {infoRows.map((r, i) => (
+            {infoRows.length > 0 ? infoRows.map((r, i) => (
               <InfoRow
                 key={r.label}
                 icon={r.icon}
@@ -152,13 +196,15 @@ export default function ProfileScreen() {
                 value={r.value}
                 last={i === infoRows.length - 1}
               />
-            ))}
+            )) : (
+              <Text style={styles.emptyText}>No profile data available.</Text>
+            )}
           </View>
         )}
 
         {/* Menu items */}
         <View style={[styles.menuCard, shadows.xs]}>
-          {user?.role === 'student' ? (
+          {isSchoolStudent && (
             <TouchableOpacity
               style={[styles.menuRow, styles.menuRowBorder]}
               onPress={() => (navigation as any).navigate('MyTeachers')}
@@ -170,7 +216,7 @@ export default function ProfileScreen() {
               <Text style={styles.menuText}>My Teachers</Text>
               <Ionicons name="chevron-forward" size={16} color={colors.subtle} />
             </TouchableOpacity>
-          ) : null}
+          )}
           <TouchableOpacity style={[styles.menuRow, styles.menuRowBorder]} activeOpacity={0.7}>
             <View style={[styles.menuIconWrap, { backgroundColor: colors.infoBg }]}>
               <Ionicons name="help-circle-outline" size={16} color={colors.info} />
@@ -236,7 +282,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  roleText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
+  roleText: { fontSize: 12, color: colors.muted, fontWeight: '600', fontFamily: fonts.semibold },
 
   editBtn: {
     flexDirection: 'row',
@@ -249,9 +295,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
   },
-  editBtnText: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  editBtnText: { fontSize: 14, fontWeight: '700', fontFamily: fonts.bold, color: colors.ink },
 
   loadingWrap: { height: 80, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { fontSize: 13, color: colors.muted, fontFamily: fonts.regular, paddingVertical: spacing[3] },
 
   infoCard: {
     backgroundColor: colors.card,
@@ -264,6 +311,7 @@ const styles = StyleSheet.create({
   infoCardTitle: {
     fontSize: 11,
     fontWeight: '700',
+    fontFamily: fonts.bold,
     color: colors.subtle,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -313,6 +361,7 @@ const styles = StyleSheet.create({
   version: {
     textAlign: 'center',
     fontSize: 12,
+    fontFamily: fonts.regular,
     color: colors.subtle,
     marginTop: -spacing[2],
     marginBottom: spacing[2],

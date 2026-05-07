@@ -192,7 +192,7 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               style={styles.registerLink}
-              onPress={() => navigation.navigate('Register')}
+              onPress={() => navigation.navigate('RegisterPath')}
               activeOpacity={0.7}
             >
               <Text style={styles.registerLinkText}>
