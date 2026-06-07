@@ -20,6 +20,12 @@ export interface AccountMinimal {
   display_name: string
   identifier: string
   role: Role
+  profile_completed?: boolean | null
+  b2c_education_level?: string | null
+  b2c_board?: string | null
+  b2c_standard?: string | null
+  b2c_target_exam?: string | null
+  b2c_subjects?: string[] | null
   class_teacher_opt_in?: boolean | null
   class_teacher_standard?: string | null
   class_teacher_division?: string | null
@@ -78,10 +84,11 @@ export interface B2CRegisterRequest {
   password: string
   confirm_password: string
   education_level: EducationLevel
-  school_name?: string
-  school_board?: string
-  school_standard?: string
-  subjects?: string[]
+  school_name?: string | null
+  competitive_exam?: string | null
+  school_board?: string | null
+  school_standard?: string | null
+  subjects?: string[] | null
 }
 
 // ─── Papers ───────────────────────────────────────────────────────────────────
@@ -113,6 +120,15 @@ export interface RubricItem {
   marks: number
 }
 
+export interface QuestionVisualPayload {
+  kind: string
+  asset_url?: string | null
+  alt_text?: string | null
+  source_figure_id?: string | null
+  figure_type?: string | null
+  page_number?: number | null
+}
+
 export interface QuestionInPaper {
   id: string
   question_number: number
@@ -127,6 +143,10 @@ export interface QuestionInPaper {
   topic_id?: string
   topic_name?: string
   subject_name?: string
+  chapter_id?: string | null
+  chapter_title?: string | null
+  subtopic_tags?: string[]
+  visual_payload?: QuestionVisualPayload | null
 }
 
 export interface Paper {
@@ -156,8 +176,11 @@ export interface PaperListItem {
   title: string
   subject_id?: string
   subject_name?: string
+  standard?: string | null
+  division?: string | null
+  category?: string | null
   total_marks: number
-  duration_minutes?: number
+  duration_minutes?: number | null
   status: PaperStatus
   created_at: string
   question_count?: number
@@ -174,6 +197,8 @@ export interface PaperGenerateRequest {
   category?: string
   standard?: string
   division?: string
+  duration_minutes?: number | null
+  instructions?: string
   topic_ids?: string[]
   chapter_titles?: string[]
   note_ids?: string[]
@@ -190,8 +215,31 @@ export interface PaperGenerateRequest {
   marks_per_match_columns?: number
   marks_per_true_false?: number
   additional_instructions?: string
-  timer_value?: number
+  custom_question_types?: Array<{ name: string; count: number; marks: number }>
+  include_reference_visuals?: boolean
+  visual_question_types?: string[]
+  subtopic_names?: string[]
+  only_fill_blanks?: boolean
+  timer_value?: number | null
   timer_unit?: string
+  blueprint_header?: {
+    title: string
+    subject_name?: string
+    board?: string
+    standard?: string
+    division?: string
+    duration_minutes?: number | null
+    target_marks?: number
+  }
+  blueprint_sections?: Array<{
+    id?: string
+    title: string
+    question_type: string
+    custom_type_name?: string
+    marks: number
+    count: number
+    order?: number
+  }>
 }
 
 // ─── Submission ───────────────────────────────────────────────────────────────
@@ -264,6 +312,7 @@ export interface StudentExamPaper {
   title: string
   total_marks: number
   status: PaperStatus
+  is_submitted_by_me?: boolean
   created_at: string
 }
 

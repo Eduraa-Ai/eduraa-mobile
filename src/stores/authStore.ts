@@ -1,12 +1,11 @@
 /**
- * Eduraa Mobile — Auth Store (Zustand)
- * Mirrors frontend/src/stores/authStore.ts
- * Uses SecureStore instead of localStorage
+ * Eduraa Mobile - Auth Store (Zustand)
+ * Mirrors frontend auth behavior using SecureStore for native persistence.
  */
 
 import { create } from 'zustand'
 import * as SecureStore from 'expo-secure-store'
-import { TOKEN_KEY, registerLogoutCallback } from '../api/client'
+import { TOKEN_KEY, registerLogoutCallback, registerRefreshTokenCallback, setAccessToken } from '../api/client'
 import type { AccountMinimal, AuthToken } from '../types'
 
 interface AuthState {
@@ -14,17 +13,21 @@ interface AuthState {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
-
-  // Actions
   setAuth: (authToken: AuthToken) => Promise<void>
   logout: () => Promise<void>
   loadFromStorage: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set, get) => {
-  // Register logout callback so axios interceptor can trigger it
   registerLogoutCallback(() => {
-    get().logout()
+    void get().logout()
+  })
+  registerRefreshTokenCallback((token) => {
+    set((state) => ({
+      token,
+      isAuthenticated: state.isAuthenticated || Boolean(state.user),
+      isLoading: false,
+    }))
   })
 
   return {
@@ -36,9 +39,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
     setAuth: async (authToken: AuthToken) => {
       try {
         await SecureStore.setItemAsync(TOKEN_KEY, authToken.access_token)
-      } catch (e) {
-        // SecureStore unavailable in web/simulator fallback
+      } catch {
+        // SecureStore is not always available in the web preview.
       }
+
+      setAccessToken(authToken.access_token)
       set({
         user: authToken.user,
         token: authToken.access_token,
@@ -50,9 +55,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
     logout: async () => {
       try {
         await SecureStore.deleteItemAsync(TOKEN_KEY)
-      } catch (e) {
-        // ignore
+      } catch {
+        // Ignore storage cleanup failures on unsupported platforms.
       }
+
+      setAccessToken(null)
       set({
         user: null,
         token: null,
@@ -65,14 +72,16 @@ export const useAuthStore = create<AuthState>((set, get) => {
       try {
         const token = await SecureStore.getItemAsync(TOKEN_KEY)
         if (token) {
-          // Token exists — we'll validate via /auth/me in the app root
+          setAccessToken(token)
           set({ token, isLoading: false })
-        } else {
-          set({ isLoading: false })
+          return
         }
-      } catch (e) {
-        set({ isLoading: false })
+      } catch {
+        // Fall through to the unauthenticated state.
       }
+
+      setAccessToken(null)
+      set({ isLoading: false })
     },
   }
 })

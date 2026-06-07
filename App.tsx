@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { StyleSheet, View, ActivityIndicator } from 'react-native'
+import { StyleSheet, View, ActivityIndicator, Platform } from 'react-native'
 import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope'
 import { SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk'
 import RootNavigator from './src/navigation'
@@ -24,7 +24,7 @@ const queryClient = new QueryClient({
 })
 
 function AppContent() {
-  const { setAuth, logout, isLoading } = useAuthStore()
+  const { setAuth, logout } = useAuthStore()
 
   // On mount: load token from SecureStore, then validate with /auth/me
   useEffect(() => {
@@ -37,22 +37,37 @@ function AppContent() {
       if (token) {
         try {
           const user = await authApi.me()
+          const latestToken = useAuthStore.getState().token || token
           // Reconstruct minimal auth state with the validated user
-          setAuth({ access_token: token, token_type: 'bearer', user })
+          await setAuth({ access_token: latestToken, token_type: 'bearer', user })
         } catch {
           // Token is invalid or expired
-          logout()
+          await logout()
         }
       }
     }
-    init()
+    void init()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
       <StatusBar style="auto" />
-      <RootNavigator />
+      <WebPreviewShell>
+        <RootNavigator />
+      </WebPreviewShell>
     </>
+  )
+}
+
+function WebPreviewShell({ children }: { children: React.ReactNode }) {
+  if (Platform.OS !== 'web') {
+    return <>{children}</>
+  }
+
+  return (
+    <View style={styles.webStage}>
+      <View style={styles.webPhone}>{children}</View>
+    </View>
   )
 }
 
@@ -89,4 +104,23 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  webStage: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#e9eef2',
+  },
+  webPhone: {
+    width: '100%',
+    maxWidth: 430,
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: '#fffaf2',
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.10)',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.18,
+    shadowRadius: 50,
+  },
 })

@@ -1,265 +1,615 @@
-import React, { useRef, useEffect } from 'react'
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Animated,
-  useWindowDimensions,
-} from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import React, { useLayoutEffect } from 'react'
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery } from '@tanstack/react-query'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { PapersStackParamList } from '../../navigation'
 import { papersApi } from '../../api/papers'
-import { colors } from '../../theme/colors'
-import { spacing, radius, shadows } from '../../theme/spacing'
-import { fonts } from '../../theme/fonts'
 import type { PaperListItem } from '../../types'
+import { colors } from '../../theme/colors'
+import { fonts } from '../../theme/fonts'
+import { gradients } from '../../theme/gradients'
+import { radius, shadows, spacing } from '../../theme/spacing'
+import { Screen } from '../../components/ui/Screen'
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, 'PapersList'>
+const papersHeaderImage = require('../../../assets/papers-header-bg.png')
 
-function PaperCard({ item, onPress }: { item: PaperListItem; onPress: () => void }) {
+const subjectVisuals = [
+  {
+    label: 'Mathematics',
+    keys: ['math', 'mathematics', 'algebra', 'geometry', 'calculus'],
+    uri: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    label: 'Physics',
+    keys: ['physics', 'science'],
+    uri: 'https://images.unsplash.com/photo-1581093450021-4a7360e9a6b5?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    label: 'Chemistry',
+    keys: ['chemistry', 'chemical'],
+    uri: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    label: 'Biology',
+    keys: ['biology', 'bio', 'zoology', 'botany', 'anatomy'],
+    uri: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    label: 'Computer Science',
+    keys: ['computer', 'coding', 'programming', 'technology', 'ict'],
+    uri: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    label: 'English',
+    keys: ['english', 'language', 'literature', 'grammar'],
+    uri: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=900&q=80',
+  },
+]
+
+const fallbackSubjectPhoto = 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=900&q=80'
+
+function matchSubjectVisual(value: string) {
+  const normalized = value.trim().toLowerCase()
+  return subjectVisuals.find((visual) => visual.keys.some((key) => normalized.includes(key)))
+}
+
+function hasSpecificSubject(value?: string | null) {
+  const normalized = value?.trim().toLowerCase()
+  return Boolean(normalized && normalized !== 'subject')
+}
+
+function resolvePaperSubject(item: PaperListItem) {
+  const subjectContext = [item.subject_name, item.title, item.category].filter(Boolean).join(' ')
+  const matchedVisual = matchSubjectVisual(subjectContext)
+  const label = hasSpecificSubject(item.subject_name) ? item.subject_name!.trim() : matchedVisual?.label ?? 'Subject'
+
+  return {
+    label,
+    photoUri: matchedVisual?.uri ?? fallbackSubjectPhoto,
+  }
+}
+
+function formatDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Recent'
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function PapersHeaderTitle() {
   return (
-    <TouchableOpacity style={[styles.card, shadows.xs]} onPress={onPress} activeOpacity={0.78}>
-      <View style={styles.cardTop}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-      </View>
-      <View style={styles.cardMeta}>
-        {item.subject_name ? (
-          <View style={styles.metaChip}>
-            <Ionicons name="book-outline" size={11} color={colors.muted} />
-            <Text style={styles.metaText}>{item.subject_name}</Text>
+    <View style={styles.navTitleWrap}>
+      <Text style={styles.navTitle}>Papers</Text>
+      <Text style={styles.navSubtitle}>Practice library</Text>
+    </View>
+  )
+}
+
+function PapersPhotoHeader() {
+  const insets = useSafeAreaInsets()
+
+  return (
+    <View style={[styles.photoHeaderWrap, { paddingTop: insets.top }]}>
+      <View style={styles.headerImage}>
+        <Image source={papersHeaderImage} resizeMode="stretch" style={styles.headerPhoto} />
+        <LinearGradient
+          colors={['rgba(2,6,23,0.88)', 'rgba(15,23,42,0.28)', 'rgba(194,65,12,0)']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View pointerEvents="none" style={styles.headerWarmVeil} />
+        <View style={styles.photoHeaderContent}>
+          <PapersHeaderTitle />
+          <View style={styles.photoHeaderIcon}>
+            <Ionicons name="document-text-outline" size={20} color={colors.white} />
           </View>
-        ) : null}
-        <View style={styles.metaChip}>
-          <Ionicons name="star-outline" size={11} color={colors.muted} />
-          <Text style={styles.metaText}>{item.total_marks} marks</Text>
         </View>
-        {item.duration_minutes ? (
-          <View style={styles.metaChip}>
-            <Ionicons name="time-outline" size={11} color={colors.muted} />
-            <Text style={styles.metaText}>{item.duration_minutes} min</Text>
-          </View>
-        ) : null}
-        {item.question_count ? (
-          <View style={styles.metaChip}>
-            <Ionicons name="help-circle-outline" size={11} color={colors.muted} />
-            <Text style={styles.metaText}>{item.question_count} Qs</Text>
-          </View>
-        ) : null}
       </View>
-      <View style={styles.cardArrow}>
-        <Ionicons name="arrow-forward" size={14} color={colors.subtle} />
+    </View>
+  )
+}
+
+function GeneratePanel({ onPress }: { onPress: () => void }) {
+  return (
+    <View style={styles.generateCard}>
+      <Text style={styles.generateTitle}>Generate your next paper</Text>
+      <Text style={styles.generateBody}>Use the guided mobile flow to build a paper tuned to your current prep.</Text>
+      <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={styles.generateButtonWrap}>
+        <LinearGradient colors={[...gradients.hero]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.generateButton}>
+          <Ionicons name="sparkles-outline" size={18} color={colors.white} />
+          <Text style={styles.generateButtonText}>Create paper</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+function PaperTile({ item, onPress }: { item: PaperListItem; onPress: () => void }) {
+  const questionCount = item.question_count ? `${item.question_count}Q` : 'Paper'
+  const duration = item.duration_minutes ? `${item.duration_minutes} min` : 'Practice'
+  const subject = resolvePaperSubject(item)
+  const meta = `${subject.label} - ${item.total_marks} marks - ${duration}`
+
+  return (
+    <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={styles.paperTile}>
+      <View style={styles.tileVisual}>
+        <Image source={{ uri: subject.photoUri }} resizeMode="cover" style={styles.tilePhoto} />
+        <LinearGradient
+          colors={['rgba(15,23,42,0.76)', 'rgba(15,23,42,0.28)', 'rgba(194,65,12,0.24)']}
+          start={{ x: 0, y: 0.45 }}
+          end={{ x: 1, y: 0.45 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <LinearGradient
+          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.28)']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.tileIcon}>
+          <Ionicons name="document-text-outline" size={22} color={colors.white} />
+        </View>
+        <View style={styles.tileMetric}>
+          <Text style={styles.tileMetricValue}>{questionCount}</Text>
+          <Text style={styles.tileMetricLabel}>{formatDate(item.created_at)}</Text>
+        </View>
+      </View>
+
+      <View style={styles.tileBody}>
+        <View style={styles.tileBodyTop}>
+          <View style={styles.tileCopy}>
+            <Text style={styles.tileTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={styles.tileSubtitle} numberOfLines={1}>
+              {meta}
+            </Text>
+          </View>
+          <View style={styles.tileChevron}>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </View>
+        </View>
+        <View style={styles.tileFooter}>
+          <View style={styles.tileChip}>
+            <Ionicons name="albums-outline" size={14} color={colors.accentStrong} />
+            <Text style={styles.tileChipText}>{subject.label}</Text>
+          </View>
+          <View style={[styles.tileChip, styles.tileStatusChip]}>
+            <Ionicons name="checkmark-circle-outline" size={14} color={colors.success} />
+            <Text style={[styles.tileChipText, styles.tileStatusText]}>{item.status}</Text>
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   )
 }
 
+function PaperEmpty({ onPress }: { onPress: () => void }) {
+  return (
+    <View style={styles.emptyCard}>
+      <View style={styles.emptyIcon}>
+        <Ionicons name="document-text-outline" size={22} color={colors.accentStrong} />
+      </View>
+      <Text style={styles.emptyTitle}>No papers yet</Text>
+      <Text style={styles.emptyBody}>Create your first Eduraa paper and it will appear here ready for practice.</Text>
+      <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={styles.emptyButton}>
+        <Text style={styles.emptyButtonText}>Create first paper</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
 export default function PapersScreen() {
   const navigation = useNavigation<Nav>()
-  const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    })
+  }, [navigation])
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['papers'],
     queryFn: () => papersApi.list({ skip: 0, limit: 50 }),
   })
 
-  // Entrance animation
-  const fadeAnim = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start()
-  }, [fadeAnim])
-
-  const isSmall = width < 380
-  const hPad = isSmall ? spacing[4] : spacing[5]
+  const papers = data?.items ?? []
+  const openGenerate = () => navigation.navigate('GeneratePaper')
 
   return (
-    <Animated.View style={[styles.root, { opacity: fadeAnim }]}>
-      {/* Generate CTA banner */}
-      <View style={[styles.topBanner, { paddingHorizontal: hPad }]}>
-        <TouchableOpacity
-          style={[styles.generateBtn, shadows.sm]}
-          onPress={() => navigation.navigate('GeneratePaper')}
-          activeOpacity={0.82}
-        >
-          <View style={styles.generateBtnLeft}>
-            <View style={styles.generateIcon}>
-              <Ionicons name="add" size={20} color={colors.white} />
-            </View>
-            <View>
-              <Text style={styles.generateBtnTitle}>Generate New Paper</Text>
-              <Text style={styles.generateBtnSub}>AI-powered, customised for you</Text>
-            </View>
-          </View>
-          <Ionicons name="arrow-forward-circle" size={24} color="rgba(255,255,255,0.7)" />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.root}>
+      <PapersPhotoHeader />
+      <Screen contentStyle={styles.screenContent}>
+        <GeneratePanel onPress={openGenerate} />
 
-      {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.accent} size="large" />
-        </View>
-      ) : isError ? (
-        <View style={styles.center}>
-          <Ionicons name="alert-circle-outline" size={40} color={colors.subtle} />
-          <Text style={styles.errorText}>Failed to load papers</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
-            <Text style={styles.retryText}>Try again</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={data?.items || []}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <PaperCard
-              item={item}
-              onPress={() => navigation.navigate('PaperDetail', { paperId: item.id })}
-            />
-          )}
-          contentContainerStyle={[
-            styles.list,
-            { paddingHorizontal: hPad, paddingBottom: insets.bottom + 24 },
-          ]}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                <Ionicons name="document-text-outline" size={32} color={colors.subtle} />
+        {isLoading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color={colors.accentStrong} />
+            <Text style={styles.loadingText}>Loading papers</Text>
+          </View>
+        ) : isError ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTitle}>Could not load papers</Text>
+            <Text style={styles.errorBody}>Refresh the library and try again.</Text>
+            <TouchableOpacity activeOpacity={0.88} onPress={() => refetch()} style={styles.retryButton}>
+              <Text style={styles.retry}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.listBlock}>
+            {papers.length > 0 ? (
+              <View style={styles.listHeader}>
+                <Text style={styles.listEyebrow}>Library</Text>
+                <Text style={styles.listCount}>{papers.length} saved</Text>
               </View>
-              <Text style={styles.emptyTitle}>No papers yet</Text>
-              <Text style={styles.emptyBody}>Generate your first paper to get started.</Text>
-            </View>
-          }
-          showsVerticalScrollIndicator={false}
-        />
-      )}
-    </Animated.View>
+            ) : null}
+            <FlatList
+              data={papers}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <PaperTile item={item} onPress={() => navigation.navigate('PaperDetail', { paperId: item.id })} />
+              )}
+              ItemSeparatorComponent={() => <View style={{ height: spacing[4] }} />}
+              scrollEnabled={false}
+              ListEmptyComponent={<PaperEmpty onPress={openGenerate} />}
+            />
+          </View>
+        )}
+      </Screen>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.surface1 },
-
-  topBanner: {
-    paddingTop: spacing[4],
-    paddingBottom: spacing[3],
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  generateBtn: {
-    backgroundColor: colors.accent,
+  screenContent: {
+    paddingTop: spacing[4],
+    paddingBottom: 112,
+  },
+  navTitleWrap: {
+    gap: 1,
+  },
+  photoHeaderWrap: {
+    height: 112,
+    overflow: 'hidden',
+    backgroundColor: colors.slate[950],
+  },
+  headerImage: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  headerPhoto: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+    opacity: 0.98,
+  },
+  headerWarmVeil: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    backgroundColor: 'rgba(249,115,22,0.72)',
+  },
+  photoHeaderContent: {
+    minHeight: 76,
+    paddingHorizontal: spacing[5],
+    paddingBottom: spacing[3],
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  photoHeaderIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.20)',
+  },
+  navTitle: {
+    color: colors.white,
+    fontFamily: fonts.displayBold,
+    fontSize: 18,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
+  navSubtitle: {
+    color: 'rgba(255,255,255,0.76)',
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    lineHeight: 12,
+    textTransform: 'uppercase',
+  },
+  generateCard: {
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing[6],
+    gap: spacing[3],
+    ...shadows.sm,
+  },
+  generateTitle: {
+    color: colors.text,
+    fontFamily: fonts.displayBold,
+    fontSize: 27,
+    lineHeight: 32,
+    letterSpacing: 0,
+  },
+  generateBody: {
+    color: colors.textSecondary,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  generateButtonWrap: {
+    marginTop: spacing[3],
+    borderRadius: radius.full,
+  },
+  generateButton: {
+    minHeight: 68,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing[2],
+    paddingHorizontal: spacing[6],
+  },
+  generateButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    letterSpacing: 0,
+  },
+  loading: {
+    minHeight: 150,
     borderRadius: radius.xl,
-    paddingVertical: spacing[4],
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[3],
+  },
+  loadingText: {
+    color: colors.textMuted,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+  },
+  errorCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing[5],
+    gap: spacing[2],
+  },
+  errorTitle: {
+    color: colors.danger,
+    fontFamily: fonts.bold,
+    fontSize: 16,
+  },
+  errorBody: {
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    marginTop: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: colors.accentSurfaceStrong,
     paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  retry: {
+    color: colors.accentStrong,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+  },
+  listBlock: {
+    gap: spacing[3],
+  },
+  listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: spacing[1],
   },
-  generateBtnLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    flex: 1,
-  },
-  generateIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  generateBtnTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+  listEyebrow: {
+    color: colors.accentStrong,
     fontFamily: fonts.bold,
-    color: colors.white,
-  },
-  generateBtnSub: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.75)',
-    marginTop: 1,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
   },
-
-  list: { paddingTop: spacing[2] },
-
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    padding: spacing[4],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+  listCount: {
+    color: colors.textMuted,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
   },
-  cardTop: {
+  paperTile: {
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+    backgroundColor: colors.backgroundElevated,
+    overflow: 'hidden',
+    ...shadows.sm,
+  },
+  tileVisual: {
+    minHeight: 128,
+    padding: spacing[5],
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: spacing[2],
-    marginBottom: spacing[2],
   },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    fontFamily: fonts.bold,
-    color: colors.ink,
+  tilePhoto: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  tileGlowOne: {
+    position: 'absolute',
+    right: -26,
+    top: -20,
+    width: 120,
+    height: 96,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  tileGlowTwo: {
+    position: 'absolute',
+    left: 48,
+    bottom: -42,
+    width: 170,
+    height: 112,
+    borderRadius: 86,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  tileIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  tileMetric: {
+    alignItems: 'flex-end',
+  },
+  tileMetricValue: {
+    color: colors.white,
+    fontFamily: fonts.displayBold,
+    fontSize: 24,
+    letterSpacing: 0,
+  },
+  tileMetricLabel: {
+    color: 'rgba(255,255,255,0.82)',
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+  },
+  tileBody: {
+    padding: spacing[5],
+    gap: spacing[4],
+  },
+  tileBodyTop: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    alignItems: 'center',
+  },
+  tileCopy: {
     flex: 1,
-    lineHeight: 21,
+    gap: spacing[1],
   },
-  cardMeta: {
+  tileTitle: {
+    color: colors.text,
+    fontFamily: fonts.displaySemibold,
+    fontSize: 18,
+    lineHeight: 23,
+    letterSpacing: 0,
+  },
+  tileSubtitle: {
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  tileChevron: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundTint,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+  },
+  tileFooter: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing[2],
-    marginBottom: spacing[2],
   },
-  metaChip: {
+  tileChip: {
+    minHeight: 32,
+    maxWidth: '100%',
+    borderRadius: radius.full,
+    backgroundColor: colors.accentSurface,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+    paddingHorizontal: spacing[3],
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: spacing[1],
   },
-  metaText: {
+  tileStatusChip: {
+    backgroundColor: colors.successSurface,
+    borderColor: colors.successSurface,
+  },
+  tileChipText: {
+    color: colors.accentStrong,
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontFamily: fonts.regular,
-    color: colors.muted,
+    textTransform: 'capitalize',
   },
-  cardArrow: {
-    alignItems: 'flex-end',
+  tileStatusText: {
+    color: colors.success,
   },
-
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[3] },
-  errorText: { fontSize: 14, color: colors.muted },
-  retryBtn: {
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[2],
-    backgroundColor: colors.accent,
-    borderRadius: radius.full,
-  },
-  retryText: { color: colors.white, fontWeight: '700', fontSize: 14 },
-
-  empty: {
-    alignItems: 'center',
-    paddingTop: spacing[10],
+  emptyCard: {
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing[6],
+    alignItems: 'flex-start',
     gap: spacing[3],
+    ...shadows.sm,
   },
   emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: radius['2xl'],
-    backgroundColor: colors.surface2,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.accentSurfaceStrong,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', fontFamily: fonts.displaySemibold, color: colors.ink },
+  emptyTitle: {
+    color: colors.text,
+    fontFamily: fonts.displayBold,
+    fontSize: 22,
+    letterSpacing: 0,
+  },
   emptyBody: {
-    fontSize: 14,
+    color: colors.textSecondary,
     fontFamily: fonts.regular,
-    color: colors.muted,
-    textAlign: 'center',
-    maxWidth: 240,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  emptyButton: {
+    marginTop: spacing[1],
+    borderRadius: radius.full,
+    backgroundColor: colors.slate[950],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[3],
+  },
+  emptyButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 13,
   },
 })

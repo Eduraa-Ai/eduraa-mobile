@@ -1,0 +1,135 @@
+127.0.0.1 - - [06/Jun/2026 21:49:16] "GET /learning-home-mocks.html HTTP/1.1" 200 -
+127.0.0.1 - - [06/Jun/2026 21:49:16] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:49:16] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:50:33] "GET /learning-home-mocks.html HTTP/1.1" 200 -
+127.0.0.1 - - [06/Jun/2026 21:50:34] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:50:34] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:51:57] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:51:57] "GET /learning-home-mocks.html HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:51:58] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:51:58] "GET /learning-home-mocks.html HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:52:26] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:52:26] "GET /learning-home-mocks.html HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:52:28] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:52:28] "GET /learning-home-mocks.html HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:52:29] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:52:29] "GET /learning-home-mocks.html HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:52:29] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:52:29] "GET /learning-home-mocks.html HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:52:30] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:52:30] "GET /learning-home-mocks.html HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:52:30] code 404, message File not found
+127.0.0.1 - - [06/Jun/2026 21:52:30] "GET /learning-home-mocks.html HTTP/1.1" 404 -
+127.0.0.1 - - [06/Jun/2026 21:53:39] "GET /learning-home-mocks.html HTTP/1.1" 200 -
+127.0.0.1 - - [06/Jun/2026 21:56:51] "GET /learning-home-mocks.html HTTP/1.1" 200 -
+127.0.0.1 - - [06/Jun/2026 22:00:01] "GET /learning-home-mocks.html HTTP/1.1" 200 -
+127.0.0.1 - - [06/Jun/2026 22:01:11] "GET /learning-home-mocks.html HTTP/1.1" 200 -
+127.0.0.1 - - [06/Jun/2026 22:01:13] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:31] "GET /learning-home-mocks.html HTTP/1.1" 200 -
+127.0.0.1 - - [06/Jun/2026 22:01:32] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:32] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:33] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:33] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:33] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:34] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:35] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:35] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:36] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:39] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:01:39] "GET /learning-home-mocks.html HTTP/1.1" 304 -
+127.0.0.1 - - [06/Jun/2026 22:04:44] "GET /learning-home-mocks.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:03:55] "GET /auth-wireframe.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:11:34] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:12:42] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:13:00] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:13:04] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:13:04] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:13:05] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:13:06] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:13:07] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:13:08] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:14:43] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:18:53] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:55] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:56] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:57] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:57] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:57] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:57] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:58] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:58] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:58] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:59] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:59] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:59] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:18:59] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:00] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:00] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:00] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:01] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:28] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:30] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:34] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:38] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:39] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:56] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:57] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:57] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:19:57] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:21:47] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:21:59] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:23:50] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:26:31] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:29:45] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:30:26] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:26] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:28] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:28] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:28] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:29] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:29] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:29] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:29] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:30:32] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:31:04] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:32:25] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:32:26] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:32:27] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:32:27] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:32:28] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:33:10] "GET /auth-real-preview.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 01:33:13] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:33:13] code 404, message File not found
+127.0.0.1 - - [07/Jun/2026 01:33:13] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [07/Jun/2026 01:33:15] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:33:15] code 404, message File not found
+127.0.0.1 - - [07/Jun/2026 01:33:15] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [07/Jun/2026 01:33:15] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:33:15] code 404, message File not found
+127.0.0.1 - - [07/Jun/2026 01:33:15] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [07/Jun/2026 01:33:16] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:33:16] code 404, message File not found
+127.0.0.1 - - [07/Jun/2026 01:33:16] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [07/Jun/2026 01:33:16] "GET /auth-real-preview.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:33:16] code 404, message File not found
+127.0.0.1 - - [07/Jun/2026 01:33:16] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [07/Jun/2026 01:48:31] "GET /home-dashboard-mock.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:48:31] code 404, message File not found
+127.0.0.1 - - [07/Jun/2026 01:48:31] "GET /assets/eduraa-book-brain.png HTTP/1.1" 404 -
+127.0.0.1 - - [07/Jun/2026 01:48:31] code 404, message File not found
+127.0.0.1 - - [07/Jun/2026 01:48:31] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [07/Jun/2026 01:50:30] "GET /home-dashboard-mock.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:50:30] "GET /assets/eduraa-book-brain.png HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:51:14] "GET /home-dashboard-mock.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:52:34] "GET /home-dashboard-mock.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:52:35] "GET /assets/eduraa-book-brain.png HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:52:35] code 404, message File not found
+127.0.0.1 - - [07/Jun/2026 01:52:35] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [07/Jun/2026 01:55:31] "GET /home-dashboard-mock.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:56:11] "GET /home-dashboard-mock.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 01:56:44] "GET /home-dashboard-mock.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 02:01:31] "GET /home-dashboard-mock.html HTTP/1.1" 200 -
+127.0.0.1 - - [07/Jun/2026 02:05:23] "GET /home-dashboard-mock.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 02:05:26] "GET /home-dashboard-mock.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 02:05:27] "GET /home-dashboard-mock.html HTTP/1.1" 304 -
+127.0.0.1 - - [07/Jun/2026 02:05:27] "GET /home-dashboard-mock.html HTTP/1.1" 304 -

@@ -1,461 +1,282 @@
-/**
- * Register Screen — B2C Individual Learner
- */
-
-import React, { useState, useRef, useEffect } from 'react'
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-  Animated,
-  useWindowDimensions,
-} from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import React from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { AppScreen, AuthLogoMark } from '../../components/ui'
 import type { AuthStackParamList } from '../../navigation'
-import { authApi } from '../../api/auth'
-import { useAuthStore } from '../../stores/authStore'
-import { colors } from '../../theme/colors'
-import { radius, spacing, shadows } from '../../theme/spacing'
-import { fonts } from '../../theme/fonts'
-import type { EducationLevel } from '../../types'
+import { colors, radius, shadows, spacing, typography } from '../../theme'
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Register'>
 
-const EDUCATION_OPTIONS: { label: string; sublabel: string; value: EducationLevel; icon: string }[] = [
-  { label: 'JEE / NEET', sublabel: 'Competitive exams', value: 'competitive_exams', icon: '🎯' },
-]
+const authPalette = {
+  card: '#ffffff',
+  navy: '#12141f',
+  orange: '#f97316',
+  orangeDark: '#c2410c',
+  peach: '#fff7ed',
+  sky: '#2f80ed',
+  skySoft: '#e7f0ff',
+  sun: '#ffbf33',
+  sunSoft: '#fff2cc',
+  coral: '#ff695f',
+  coralSoft: '#ffe8e3',
+  line: '#eadfce',
+}
 
 export default function RegisterScreen() {
   const navigation = useNavigation<Nav>()
-  useAuthStore()
-  const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
-
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [educationLevel, setEducationLevel] = useState<EducationLevel>('competitive_exams')
-  const [standard, setStandard] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [focusedField, setFocusedField] = useState<string | null>(null)
-
-  const firstNameRef = useRef<TextInput>(null)
-  const lastNameRef = useRef<TextInput>(null)
-  const emailRef = useRef<TextInput>(null)
-  const passwordRef = useRef<TextInput>(null)
-  const confirmPasswordRef = useRef<TextInput>(null)
-  const standardRef = useRef<TextInput>(null)
-
-  // Entrance animation
-  const fadeAnim = useRef(new Animated.Value(0)).current
-  const slideAnim = useRef(new Animated.Value(20)).current
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 450, useNativeDriver: true }),
-    ]).start()
-  }, [fadeAnim, slideAnim])
-
-  const handleRegister = async () => {
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password.trim()) {
-      Alert.alert('Missing fields', 'Please fill in all required fields.')
-      return
-    }
-    if (password.length < 8) {
-      Alert.alert('Weak password', 'Password must be at least 8 characters.')
-      return
-    }
-    if (password !== confirmPassword) {
-      Alert.alert('Password mismatch', 'Passwords do not match.')
-      return
-    }
-
-    setLoading(true)
-    try {
-      const challenge = await authApi.registerIndividual({
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        email: email.trim(),
-        password,
-        confirm_password: confirmPassword,
-        education_level: educationLevel,
-        school_standard: standard.trim() || undefined,
-      })
-      navigation.navigate('VerifyEmail', {
-        email: challenge.email,
-        devOtp: challenge.dev_otp ?? undefined,
-      })
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail
-      const status = err?.response?.status
-      let message: string
-      if (typeof detail === 'string') {
-        message = detail
-      } else if (Array.isArray(detail)) {
-        message = detail.map((d: any) => d.msg || JSON.stringify(d)).join('\n')
-      } else if (!err?.response) {
-        message = 'Network error — could not reach the server.'
-      } else {
-        message = `Error ${status}: ${JSON.stringify(err?.response?.data)}`
-      }
-      Alert.alert('Registration failed', message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const isSmall = width < 380
-  const hPad = isSmall ? spacing[4] : spacing[5]
-
-  const inputStyle = (field: string) => [
-    styles.inputWrap,
-    focusedField === field && styles.inputWrapFocused,
-  ]
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingHorizontal: hPad, paddingTop: insets.top + 16 }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+    <AppScreen contentStyle={styles.screen}>
+      <View style={styles.topRow}>
+        <View style={styles.leftHeader}>
+          <Pressable style={({ pressed }) => [styles.backButton, pressed && styles.pressed]} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={18} color={colors.text} />
+          </Pressable>
+          <AuthLogoMark size={42} />
+        </View>
+        <View style={styles.stepPill}>
+          <Text style={styles.stepText}>Choose path</Text>
+        </View>
+      </View>
 
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={20} color={colors.ink} />
-            </TouchableOpacity>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Create account</Text>
-              <Text style={styles.subtitle}>Join Eduraa and start practising</Text>
+      <LinearGradient colors={['#ffffff', '#fffaf2', '#fff2cc']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.introPanel}>
+        <View style={styles.introCopy}>
+          <Text style={styles.kicker}>Create account</Text>
+          <Text style={styles.introTitle}>Choose your path</Text>
+          <Text style={styles.introBody}>Select the workspace that matches your account.</Text>
+        </View>
+        <View style={styles.routeSpark} />
+      </LinearGradient>
+
+      <View style={styles.pathStack}>
+        <Pressable style={({ pressed }) => [styles.pathCard, styles.schoolCard, pressed && styles.pressed]} onPress={() => navigation.navigate('RegisterSchool')}>
+          <View style={[styles.pathAccent, styles.schoolAccent]} />
+          <View style={styles.pathTop}>
+            <View style={[styles.pathIcon, styles.schoolIcon]}>
+              <Ionicons name="business-outline" size={22} color={colors.white} />
+            </View>
+            <View style={styles.pathPill}>
+              <Text style={styles.pathPillText}>School</Text>
             </View>
           </View>
-
-          {/* Form Card */}
-          <View style={[styles.card, shadows.sm]}>
-
-            {/* Name row */}
-            <View style={styles.row}>
-              <View style={[styles.field, { flex: 1, marginRight: spacing[2] }]}>
-                <Text style={styles.label}>First name</Text>
-                <TouchableOpacity style={inputStyle('firstName')} onPress={() => firstNameRef.current?.focus()} activeOpacity={1}>
-                  <TextInput
-                    ref={firstNameRef}
-                    style={[styles.input, { flex: 1 }]}
-                    placeholder="First"
-                    placeholderTextColor={colors.placeholder}
-                    value={firstName}
-                    onChangeText={setFirstName}
-                    autoCapitalize="words"
-                    onFocus={() => setFocusedField('firstName')}
-                    onBlur={() => setFocusedField(null)}
-                    returnKeyType="next"
-                    onSubmitEditing={() => lastNameRef.current?.focus()}
-                  />
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Last name</Text>
-                <TouchableOpacity style={inputStyle('lastName')} onPress={() => lastNameRef.current?.focus()} activeOpacity={1}>
-                  <TextInput
-                    ref={lastNameRef}
-                    style={[styles.input, { flex: 1 }]}
-                    placeholder="Last"
-                    placeholderTextColor={colors.placeholder}
-                    value={lastName}
-                    onChangeText={setLastName}
-                    autoCapitalize="words"
-                    onFocus={() => setFocusedField('lastName')}
-                    onBlur={() => setFocusedField(null)}
-                    returnKeyType="next"
-                    onSubmitEditing={() => emailRef.current?.focus()}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Email */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Email</Text>
-              <TouchableOpacity style={inputStyle('email')} onPress={() => emailRef.current?.focus()} activeOpacity={1}>
-                <Ionicons name="mail-outline" size={16} color={focusedField === 'email' ? colors.accent : colors.subtle} style={styles.fieldIcon} />
-                <TextInput
-                  ref={emailRef}
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="you@example.com"
-                  placeholderTextColor={colors.placeholder}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  onFocus={() => setFocusedField('email')}
-                  onBlur={() => setFocusedField(null)}
-                  returnKeyType="next"
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Password */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Password <Text style={styles.hint}>(min 8 characters)</Text></Text>
-              <TouchableOpacity style={inputStyle('password')} onPress={() => passwordRef.current?.focus()} activeOpacity={1}>
-                <Ionicons name="lock-closed-outline" size={16} color={focusedField === 'password' ? colors.accent : colors.subtle} style={styles.fieldIcon} />
-                <TextInput
-                  ref={passwordRef}
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Create a password"
-                  placeholderTextColor={colors.placeholder}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  onFocus={() => setFocusedField('password')}
-                  onBlur={() => setFocusedField(null)}
-                  returnKeyType="next"
-                  onSubmitEditing={() => confirmPasswordRef.current?.focus()}
-                />
-                <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={16} color={colors.subtle} />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            </View>
-
-            {/* Confirm Password */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Confirm password</Text>
-              <TouchableOpacity style={inputStyle('confirmPassword')} onPress={() => confirmPasswordRef.current?.focus()} activeOpacity={1}>
-                <Ionicons name="lock-closed-outline" size={16} color={focusedField === 'confirmPassword' ? colors.accent : colors.subtle} style={styles.fieldIcon} />
-                <TextInput
-                  ref={confirmPasswordRef}
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Repeat your password"
-                  placeholderTextColor={colors.placeholder}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showPassword}
-                  onFocus={() => setFocusedField('confirmPassword')}
-                  onBlur={() => setFocusedField(null)}
-                  returnKeyType="next"
-                  onSubmitEditing={() => standardRef.current?.focus()}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Education Level */}
-            <View style={styles.field}>
-              <Text style={styles.label}>I'm preparing for</Text>
-              <View style={styles.educationGrid}>
-                {EDUCATION_OPTIONS.map((opt) => {
-                  const active = educationLevel === opt.value
-                  return (
-                    <TouchableOpacity
-                      key={opt.value}
-                      style={[styles.eduCard, active && styles.eduCardActive]}
-                      onPress={() => setEducationLevel(opt.value)}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={styles.eduIcon}>{opt.icon}</Text>
-                      <Text style={[styles.eduLabel, active && styles.eduLabelActive]}>{opt.label}</Text>
-                      <Text style={[styles.eduSub, active && styles.eduSubActive]}>{opt.sublabel}</Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </View>
-            </View>
-
-            {/* Class */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Class / Standard <Text style={styles.optional}>(optional)</Text></Text>
-              <TouchableOpacity style={inputStyle('standard')} onPress={() => standardRef.current?.focus()} activeOpacity={1}>
-                <Ionicons name="school-outline" size={16} color={focusedField === 'standard' ? colors.accent : colors.subtle} style={styles.fieldIcon} />
-                <TextInput
-                  ref={standardRef}
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="e.g. 11 or 12"
-                  placeholderTextColor={colors.placeholder}
-                  value={standard}
-                  onChangeText={setStandard}
-                  keyboardType="numeric"
-                  onFocus={() => setFocusedField('standard')}
-                  onBlur={() => setFocusedField(null)}
-                  returnKeyType="done"
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Submit */}
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleRegister}
-              disabled={loading}
-              activeOpacity={0.82}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.buttonText}>Create Account</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.loginLink} onPress={() => navigation.goBack()}>
-              <Text style={styles.loginLinkText}>
-                Already have an account?{'  '}
-                <Text style={styles.loginLinkAccent}>Sign in</Text>
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.pathCopy}>
+            <Text style={styles.pathTitle}>Institution workspace</Text>
+            <Text style={styles.pathSubtitle}>Student, teacher, or principal account connected to a school branch.</Text>
           </View>
+          <View style={styles.pathFooter}>
+            <Text style={styles.pathMeta}>Role, branch, approvals</Text>
+            <Ionicons name="arrow-forward" size={18} color={colors.text} />
+          </View>
+        </Pressable>
 
-          <View style={{ height: 40 }} />
-        </Animated.View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <Pressable style={({ pressed }) => [styles.pathCard, styles.learnerCard, pressed && styles.pressed]} onPress={() => navigation.navigate('RegisterIndividual')}>
+          <View style={[styles.pathAccent, styles.learnerAccent]} />
+          <View style={styles.pathTop}>
+            <View style={[styles.pathIcon, styles.learnerIcon]}>
+              <Ionicons name="sparkles-outline" size={22} color={authPalette.orangeDark} />
+            </View>
+            <View style={styles.pathPill}>
+              <Text style={styles.pathPillText}>JEE / Self prep</Text>
+            </View>
+          </View>
+          <View style={styles.pathCopy}>
+            <Text style={styles.pathTitle}>Individual learner</Text>
+            <Text style={styles.pathSubtitle}>Build a personal study profile and verify your email with OTP.</Text>
+          </View>
+          <View style={styles.pathFooter}>
+            <Text style={styles.pathMeta}>Exam goals, AI path, PYQs</Text>
+            <Ionicons name="arrow-forward" size={18} color={colors.text} />
+          </View>
+        </Pressable>
+      </View>
+
+      <View style={styles.loginRow}>
+        <Text style={styles.loginText}>Already have an account?</Text>
+        <Pressable onPress={() => navigation.navigate('Login')} hitSlop={8}>
+          <Text style={styles.loginLink}>Sign in</Text>
+        </Pressable>
+      </View>
+    </AppScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.surface1 },
-  scroll: { flexGrow: 1, paddingBottom: 32 },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[3],
-    marginBottom: spacing[5],
+  screen: {
+    justifyContent: 'flex-start',
+    gap: spacing[4],
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
-    backgroundColor: colors.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    fontFamily: fonts.displayBold,
-    color: colors.ink,
-    letterSpacing: -0.3,
-  },
-  subtitle: {
-    fontSize: 13,
-    fontFamily: fonts.regular,
-    color: colors.muted,
-    marginTop: 3,
-  },
-
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius['2xl'],
-    padding: spacing[5],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-
-  row: { flexDirection: 'row' },
-  field: { marginBottom: spacing[4] },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: fonts.semibold,
-    color: colors.ink,
-    marginBottom: 6,
-    letterSpacing: 0.1,
-  },
-  hint: { color: colors.subtle, fontWeight: '400', fontFamily: fonts.regular },
-  optional: { color: colors.subtle, fontWeight: '400', fontFamily: fonts.regular },
-
-  inputWrap: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 50,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    paddingHorizontal: spacing[3],
+    justifyContent: 'space-between',
   },
-  inputWrapFocused: {
-    borderColor: colors.accent,
-    backgroundColor: colors.card,
-  },
-  fieldIcon: { marginRight: spacing[2] },
-  input: {
-    fontSize: 15,
-    fontFamily: fonts.regular,
-    color: colors.ink,
-    paddingVertical: 0,
-  },
-
-  educationGrid: {
+  leftHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: spacing[2],
-    marginTop: 4,
   },
-  eduCard: {
-    width: '47.5%',
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    padding: spacing[3],
-    alignItems: 'flex-start',
-    gap: 2,
-  },
-  eduCardActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentLight,
-  },
-  eduIcon: { fontSize: 18, marginBottom: 2 },
-  eduLabel: { fontSize: 12, fontWeight: '700', fontFamily: fonts.bold, color: colors.ink },
-  eduLabelActive: { color: colors.accentStrong },
-  eduSub: { fontSize: 10, fontFamily: fonts.regular, color: colors.muted },
-  eduSubActive: { color: colors.accent },
-
-  button: {
-    height: 52,
-    backgroundColor: colors.accent,
-    borderRadius: radius.full,
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: authPalette.line,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.xs,
+  },
+  pressed: {
+    transform: [{ scale: 0.97 }],
+    opacity: 0.9,
+  },
+  stepPill: {
+    borderRadius: radius.full,
+    backgroundColor: authPalette.peach,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  stepText: {
+    ...typography.roles.eyebrow,
+    color: authPalette.orangeDark,
+  },
+  introPanel: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    alignItems: 'center',
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: authPalette.line,
+    padding: spacing[4],
+    ...shadows.sm,
+  },
+  introCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  kicker: {
+    ...typography.roles.eyebrow,
+    color: authPalette.orangeDark,
+  },
+  introTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.heading,
+    fontSize: 28,
+    lineHeight: 32,
     marginTop: spacing[2],
   },
-  buttonDisabled: { opacity: 0.65 },
-  buttonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: '700',
-    fontFamily: fonts.bold,
-    letterSpacing: 0.2,
+  introBody: {
+    ...typography.roles.body,
+    color: colors.textMuted,
+    marginTop: spacing[2],
   },
-
-  loginLink: {
-    marginTop: spacing[4],
+  routeSpark: {
+    width: 6,
+    alignSelf: 'stretch',
+    borderRadius: radius.full,
+    backgroundColor: authPalette.orange,
+  },
+  pathStack: {
+    gap: spacing[3],
+  },
+  pathCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    minHeight: 148,
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: authPalette.line,
+    padding: spacing[4],
+    justifyContent: 'space-between',
+    gap: spacing[3],
+    ...shadows.sm,
+  },
+  pathAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+  },
+  schoolAccent: {
+    backgroundColor: authPalette.navy,
+  },
+  learnerAccent: {
+    backgroundColor: authPalette.orange,
+  },
+  schoolCard: {
+    backgroundColor: authPalette.card,
+  },
+  learnerCard: {
+    backgroundColor: authPalette.card,
+  },
+  pathTop: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pathIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  schoolIcon: {
+    backgroundColor: authPalette.navy,
+  },
+  learnerIcon: {
+    backgroundColor: authPalette.card,
+  },
+  pathPill: {
+    borderRadius: radius.full,
+    backgroundColor: authPalette.peach,
+    paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
   },
-  loginLinkText: { fontSize: 14, fontFamily: fonts.regular, color: colors.muted },
-  loginLinkAccent: { color: colors.accent, fontWeight: '700', fontFamily: fonts.bold },
+  pathPillText: {
+    ...typography.roles.label,
+    color: authPalette.orangeDark,
+    fontFamily: typography.fonts.bodyBold,
+  },
+  pathCopy: {
+    gap: spacing[1],
+  },
+  pathMeta: {
+    ...typography.roles.eyebrow,
+    color: authPalette.orangeDark,
+  },
+  pathTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.heading,
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  pathSubtitle: {
+    ...typography.roles.body,
+    color: colors.textMuted,
+  },
+  pathFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  loginRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+  },
+  loginText: {
+    ...typography.roles.body,
+    color: colors.textMuted,
+  },
+  loginLink: {
+    ...typography.roles.body,
+    fontFamily: typography.fonts.bodyBold,
+    color: authPalette.orangeDark,
+  },
 })

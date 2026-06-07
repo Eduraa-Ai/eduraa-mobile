@@ -1,208 +1,189 @@
-import React, { useState, useRef, useEffect } from 'react'
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-  Animated,
-  useWindowDimensions,
-} from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import React, { useState } from 'react'
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { AuthStackParamList } from '../../navigation'
 import { authApi } from '../../api/auth'
+import { API_BASE_URL, API_TARGET } from '../../api/client'
+import { AnimatedCard, AppScreen, AuthLogoMark, TextInputField } from '../../components/ui'
+import type { AuthStackParamList } from '../../navigation'
 import { useAuthStore } from '../../stores/authStore'
-import { colors } from '../../theme/colors'
-import { radius, spacing, shadows } from '../../theme/spacing'
-import { fonts } from '../../theme/fonts'
+import { colors, motion, radius, shadows, spacing, typography } from '../../theme'
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>
+
+const authPalette = {
+  paper: '#fffaf2',
+  card: '#ffffff',
+  navy: '#111827',
+  orange: '#f97316',
+  orangeDark: '#c2410c',
+  peach: '#fff7ed',
+  sky: '#2f80ed',
+  sun: '#ffbf33',
+  sunSoft: '#fff2cc',
+  line: '#eadfce',
+  fieldLine: '#e4e9ef',
+  muted: '#667085',
+}
+
+const formatLoginError = (err: any) => {
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => item?.msg || item?.message || JSON.stringify(item))
+      .filter(Boolean)
+      .join('\n')
+  }
+  if (err?.response?.status) return `Login request failed with status ${err.response.status}.`
+  if (err?.message) return err.message
+  return 'Login failed. Please check your credentials.'
+}
+
+const buildGoogleSignInUrl = () => {
+  const params = new URLSearchParams()
+  params.set('next', '/student/dashboard-lab')
+  params.set('intent', 'login')
+  return `${API_BASE_URL}/api/v1/auth/google/start?${params.toString()}`
+}
 
 export default function LoginScreen() {
   const navigation = useNavigation<Nav>()
   const { setAuth } = useAuthStore()
-  const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
-
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [emailFocused, setEmailFocused] = useState(false)
-  const [passwordFocused, setPasswordFocused] = useState(false)
-  const emailRef = useRef<TextInput>(null)
-  const passwordRef = useRef<TextInput>(null)
-
-  // Screen entrance animation
-  const fadeAnim = useRef(new Animated.Value(0)).current
-  const slideAnim = useRef(new Animated.Value(24)).current
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start()
-  }, [fadeAnim, slideAnim])
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Missing fields', 'Please enter your email and password.')
+      Alert.alert('Missing fields', 'Enter your email or student ID and password to continue.')
       return
     }
+
     setLoading(true)
     try {
       const authToken = await authApi.login({ username: email.trim(), password })
       await setAuth(authToken)
     } catch (err: any) {
-      const message = err?.response?.data?.detail || 'Login failed. Please check your credentials.'
-      Alert.alert('Login failed', message)
+      Alert.alert('Login failed', formatLoginError(err))
     } finally {
       setLoading(false)
     }
   }
 
-  const isSmall = width < 380
-  const hPad = isSmall ? spacing[5] : spacing[6]
+  const handleGoogleSignIn = async () => {
+    const url = buildGoogleSignInUrl()
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.location.href = url
+      return
+    }
+
+    try {
+      await Linking.openURL(url)
+    } catch {
+      Alert.alert('Google sign-in unavailable', 'Unable to open Google sign-in on this device.')
+    }
+  }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingHorizontal: hPad, paddingTop: insets.top + 32 }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          {/* Brand */}
-          <View style={styles.brand}>
-            <View style={styles.brandMark}>
-              <Ionicons name="sparkles" size={26} color={colors.white} />
-            </View>
-            <Text style={styles.brandName}>Eduraa</Text>
-            <Text style={styles.brandTagline}>AI-powered exam prep</Text>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AppScreen contentStyle={styles.screen}>
+        <View style={styles.brandRow}>
+          <AuthLogoMark size={44} />
+          <View>
+            <Text style={styles.brandName}>Eduraa AI</Text>
+            <Text style={styles.brandMeta}>JEE + school workspace</Text>
+          </View>
+        </View>
+
+        <LinearGradient colors={['#ffffff', '#fffaf2', authPalette.sunSoft]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.authPanel}>
+          <View style={styles.authCopy}>
+            <Text style={styles.kicker}>Welcome back</Text>
+            <Text style={styles.authTitle}>Continue learning</Text>
+            <Text style={styles.authSubtitle}>Resume your papers, results, lessons, and AI study support from one secure account.</Text>
+          </View>
+          <View style={styles.pathMini} pointerEvents="none">
+            <View style={styles.pathRail} />
+            <View style={styles.pathRailActive} />
+            <View style={[styles.pathNode, styles.pathNodeStart]} />
+            <View style={[styles.pathNode, styles.pathNodeMid]} />
+            <View style={[styles.pathNode, styles.pathNodeEnd]} />
+          </View>
+        </LinearGradient>
+
+        <AnimatedCard delay={motion.cardEntrance.stagger} elevated style={styles.formCard}>
+          <View style={styles.formHeader}>
+            <Text style={styles.kicker}>Sign in</Text>
+            <Text style={styles.formTitle}>Enter your account</Text>
+            <Text style={styles.formSubtitle}>Use your teacher ID, student ID, or email.</Text>
+            {__DEV__ ? (
+              <Text style={styles.apiTargetText} numberOfLines={1}>
+                API {API_TARGET}: {API_BASE_URL}
+              </Text>
+            ) : null}
           </View>
 
-          {/* Card */}
-          <View style={[styles.card, shadows.sm]}>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in to continue your prep</Text>
+          <View style={styles.form}>
+            <TextInputField
+              label="Teacher ID / Student ID / Email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              left={<Ionicons name="mail-outline" size={18} color={authPalette.orangeDark} />}
+              placeholder="teacher ID, student ID, or email"
+            />
 
-            {/* Email */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Email</Text>
-              <TouchableOpacity
-                style={[styles.inputWrap, emailFocused && styles.inputWrapFocused]}
-                onPress={() => emailRef.current?.focus()}
-                activeOpacity={1}
-              >
-                <Ionicons
-                  name="mail-outline"
-                  size={17}
-                  color={emailFocused ? colors.accent : colors.subtle}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  ref={emailRef}
-                  style={styles.input}
-                  placeholder="you@example.com"
-                  placeholderTextColor={colors.placeholder}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  onFocus={() => setEmailFocused(true)}
-                  onBlur={() => setEmailFocused(false)}
-                  returnKeyType="next"
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                />
-              </TouchableOpacity>
-            </View>
+            <TextInputField
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              left={<Ionicons name="lock-closed-outline" size={18} color={authPalette.orangeDark} />}
+              right={
+                <Pressable onPress={() => setShowPassword((value) => !value)} hitSlop={8}>
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
+                </Pressable>
+              }
+              placeholder="Enter your password"
+            />
 
-            {/* Password */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
-              <TouchableOpacity
-                style={[styles.inputWrap, passwordFocused && styles.inputWrapFocused]}
-                onPress={() => passwordRef.current?.focus()}
-                activeOpacity={1}
-              >
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={17}
-                  color={passwordFocused ? colors.accent : colors.subtle}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  ref={passwordRef}
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Your password"
-                  placeholderTextColor={colors.placeholder}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  onFocus={() => setPasswordFocused(true)}
-                  onBlur={() => setPasswordFocused(false)}
-                  returnKeyType="done"
-                  onSubmitEditing={handleLogin}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(v => !v)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  style={styles.eyeBtn}
-                >
-                  <Ionicons
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={17}
-                    color={colors.subtle}
-                  />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            </View>
+            <Pressable disabled={loading} onPress={handleLogin} style={({ pressed }) => [styles.darkCta, pressed && styles.darkCtaPressed, loading && styles.darkCtaDisabled]}>
+              {loading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.darkCtaText}>Continue</Text>}
+            </Pressable>
 
-            {/* Sign In Button */}
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleLogin}
-              disabled={loading}
-              activeOpacity={0.82}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
+            <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>or</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            <TouchableOpacity
-              style={styles.registerLink}
-              onPress={() => navigation.navigate('Register')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.registerLinkText}>
-                New to Eduraa?{'  '}
-                <Text style={styles.registerLinkAccent}>Create account</Text>
-              </Text>
-            </TouchableOpacity>
+            <Pressable onPress={handleGoogleSignIn} style={({ pressed }) => [styles.googleButton, pressed && styles.googleButtonPressed]}>
+              <View style={styles.googleMark}>
+                <Text style={styles.googleLetter}>G</Text>
+              </View>
+              <Text style={styles.googleText}>Continue with Google</Text>
+            </Pressable>
           </View>
-        </Animated.View>
-      </ScrollView>
+
+          <View style={styles.createRow}>
+            <Text style={styles.helper}>New to Eduraa?</Text>
+            <Pressable onPress={() => navigation.navigate('Register')} hitSlop={8}>
+              <Text style={styles.link}>Create account</Text>
+            </Pressable>
+          </View>
+        </AnimatedCard>
+
+        <View style={styles.promiseRow}>
+          <Ionicons name="lock-closed-outline" size={16} color={authPalette.orangeDark} />
+          <Text style={styles.promiseText}>Secure session. Local and production API modes supported.</Text>
+        </View>
+      </AppScreen>
     </KeyboardAvoidingView>
   )
 }
@@ -210,145 +191,224 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.surface1,
+    backgroundColor: authPalette.paper,
   },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingBottom: 40,
+  screen: {
+    justifyContent: 'flex-start',
+    gap: spacing[3],
   },
-
-  brand: {
-    alignItems: 'center',
-    marginBottom: spacing[8],
-  },
-  brandMark: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing[3],
-    ...shadows.md,
-  },
-  brandName: {
-    fontSize: 28,
-    fontWeight: '800',
-    fontFamily: fonts.displayBold,
-    color: colors.ink,
-    letterSpacing: -0.5,
-  },
-  brandTagline: {
-    fontSize: 13,
-    fontFamily: fonts.regular,
-    color: colors.muted,
-    marginTop: 4,
-    letterSpacing: 0.1,
-  },
-
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius['2xl'],
-    padding: spacing[6],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    fontFamily: fonts.displaySemibold,
-    color: colors.ink,
-    marginBottom: 4,
-    letterSpacing: -0.2,
-  },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.muted,
-    marginBottom: spacing[6],
-  },
-
-  field: { marginBottom: spacing[4] },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: fonts.semibold,
-    color: colors.ink,
-    marginBottom: spacing[1] + 2,
-    letterSpacing: 0.1,
-  },
-  inputWrap: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 50,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    paddingHorizontal: spacing[3],
+    gap: spacing[3],
   },
-  inputWrapFocused: {
-    borderColor: colors.accent,
-    backgroundColor: colors.card,
+  brandName: {
+    ...typography.roles.title,
+    color: colors.text,
   },
-  inputIcon: { marginRight: spacing[2] },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: fonts.regular,
-    color: colors.ink,
-    paddingVertical: 0,
+  brandMeta: {
+    ...typography.roles.label,
+    color: colors.textMuted,
   },
-  eyeBtn: {
-    paddingLeft: spacing[2],
+  authPanel: {
+    position: 'relative',
+    overflow: 'hidden',
+    minHeight: 150,
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: authPalette.line,
+    padding: spacing[4],
+    ...shadows.sm,
   },
-
-  button: {
-    height: 52,
-    backgroundColor: colors.accent,
+  authCopy: {
+    maxWidth: 272,
+  },
+  kicker: {
+    ...typography.roles.eyebrow,
+    color: authPalette.orangeDark,
+  },
+  authTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.heading,
+    fontSize: 24,
+    lineHeight: 27,
+    marginTop: spacing[1],
+  },
+  authSubtitle: {
+    ...typography.roles.body,
+    color: colors.textMuted,
+    marginTop: spacing[1],
+  },
+  pathMini: {
+    position: 'absolute',
+    right: spacing[4],
+    bottom: spacing[4],
+    width: 92,
+    height: 56,
+  },
+  pathRail: {
+    position: 'absolute',
+    left: 8,
+    top: 29,
+    width: 76,
+    height: 10,
+    borderRadius: radius.full,
+    backgroundColor: '#d8e2ea',
+    transform: [{ rotate: '-15deg' }],
+  },
+  pathRailActive: {
+    position: 'absolute',
+    left: 8,
+    top: 29,
+    width: 58,
+    height: 10,
+    borderRadius: radius.full,
+    backgroundColor: authPalette.orange,
+    transform: [{ rotate: '-15deg' }],
+  },
+  pathNode: {
+    position: 'absolute',
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderWidth: 4,
+    borderColor: colors.white,
+  },
+  pathNodeStart: {
+    left: 4,
+    top: 34,
+    backgroundColor: authPalette.orange,
+  },
+  pathNodeMid: {
+    left: 58,
+    top: 11,
+    backgroundColor: authPalette.sun,
+  },
+  pathNodeEnd: {
+    right: 2,
+    top: 19,
+    backgroundColor: authPalette.sky,
+  },
+  formCard: {
+    borderColor: authPalette.line,
+    backgroundColor: authPalette.card,
+    padding: spacing[4],
+  },
+  formHeader: {
+    gap: spacing[1],
+  },
+  formTitle: {
+    ...typography.roles.screenTitle,
+    color: colors.text,
+    fontSize: 24,
+  },
+  formSubtitle: {
+    ...typography.roles.body,
+    color: colors.textMuted,
+  },
+  apiTargetText: {
+    ...typography.roles.label,
+    color: colors.textSoft,
+  },
+  form: {
+    gap: spacing[3],
+    marginTop: spacing[4],
+  },
+  darkCta: {
+    minHeight: 56,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing[2],
+    backgroundColor: authPalette.navy,
+    ...shadows.sm,
   },
-  buttonDisabled: { opacity: 0.65 },
-  buttonText: {
+  darkCtaPressed: {
+    transform: [{ scale: 0.985 }],
+    opacity: 0.92,
+  },
+  darkCtaDisabled: {
+    opacity: 0.62,
+  },
+  darkCtaText: {
     color: colors.white,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
-    fontWeight: '700',
-    fontFamily: fonts.bold,
-    letterSpacing: 0.2,
   },
-
-  divider: {
+  dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing[4],
     gap: spacing[3],
   },
   dividerLine: {
     flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
+    height: 1,
+    backgroundColor: authPalette.fieldLine,
   },
   dividerText: {
-    fontSize: 12,
-    color: colors.subtle,
+    ...typography.roles.label,
+    color: colors.textSoft,
+    textTransform: 'uppercase',
   },
-
-  registerLink: {
+  googleButton: {
+    minHeight: 56,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: authPalette.fieldLine,
+    backgroundColor: colors.white,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing[1],
+    justifyContent: 'center',
+    gap: spacing[3],
+    ...shadows.sm,
   },
-  registerLinkText: {
+  googleButtonPressed: {
+    transform: [{ scale: 0.985 }],
+    opacity: 0.9,
+  },
+  googleMark: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  googleLetter: {
+    color: '#4285f4',
+    fontFamily: typography.fonts.heading,
+    fontSize: 18,
+    lineHeight: 22,
+  },
+  googleText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.muted,
   },
-  registerLinkAccent: {
-    color: colors.accent,
-    fontWeight: '700',
-    fontFamily: fonts.bold,
+  createRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    marginTop: spacing[4],
+  },
+  helper: {
+    ...typography.roles.body,
+    color: colors.textMuted,
+  },
+  link: {
+    ...typography.roles.body,
+    fontFamily: typography.fonts.bodyBold,
+    color: authPalette.orangeDark,
+  },
+  promiseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[2],
+  },
+  promiseText: {
+    ...typography.roles.label,
+    flex: 1,
+    color: colors.textMuted,
   },
 })

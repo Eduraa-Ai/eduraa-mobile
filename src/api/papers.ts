@@ -14,6 +14,24 @@ import type {
   Chapter,
 } from '../types'
 
+type JeeSyllabusResponse = {
+  chapters?: Array<{
+    key: string
+    title: string
+    standard?: string | null
+    subtopics?: string[]
+  }>
+}
+
+type JeeGenerateFormPaperResponse = {
+  paper_id: string | null
+  draft_id: string
+  job_id: string
+  status: string
+  failed_count?: number
+  error?: string | null
+}
+
 export const papersApi = {
   getOptions: async (): Promise<PaperOptions> => {
     const response = await apiClient.get<PaperOptions>('/papers/options')
@@ -30,6 +48,24 @@ export const papersApi = {
 
   generate: async (data: PaperGenerateRequest): Promise<Paper> => {
     const response = await apiClient.post<Paper>('/papers/generate', data)
+    return response.data
+  },
+
+  getJeeSyllabus: async (params: { exam_type: string; subject: string }): Promise<JeeSyllabusResponse> => {
+    const response = await apiClient.get<JeeSyllabusResponse>('/ai/jee/syllabus', { params })
+    return response.data
+  },
+
+  generateJeeFormPaper: async (data: {
+    exam_type: string
+    subject: string
+    chapter_keys: string[]
+    count: number
+    question_marks: number
+    subtopic?: string
+    title: string
+  }): Promise<JeeGenerateFormPaperResponse> => {
+    const response = await apiClient.post<JeeGenerateFormPaperResponse>('/ai/jee/generate-form-paper', data, { timeout: 240000 })
     return response.data
   },
 

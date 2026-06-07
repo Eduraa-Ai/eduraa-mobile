@@ -1,3 +1,6 @@
 export { default as colors } from './colors'
+export { default as designSystem } from './designSystem'
+export { default as gradients } from './gradients'
+export { default as motion } from './motion'
 export { default as typography } from './typography'
-export { spacing, radius, shadows } from './spacing'
+export { spacing, layout, radius, shadows, borderWidths } from './spacing'

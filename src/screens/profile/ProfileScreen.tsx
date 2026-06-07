@@ -1,15 +1,5 @@
-import React, { useRef, useEffect } from 'react'
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Animated,
-  useWindowDimensions,
-} from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import React from 'react'
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -18,290 +8,137 @@ import type { ProfileStackParamList } from '../../navigation'
 import { b2cApi } from '../../api/b2c'
 import { useAuthStore } from '../../stores/authStore'
 import { colors } from '../../theme/colors'
-import { spacing, radius, shadows } from '../../theme/spacing'
 import { fonts } from '../../theme/fonts'
+import { radius, spacing } from '../../theme/spacing'
+import { AppCard } from '../../components/ui/AppCard'
+import { HeroHeader } from '../../components/ui/HeroHeader'
+import { PrimaryButton } from '../../components/ui/PrimaryButton'
+import { Screen } from '../../components/ui/Screen'
 
 type Nav = NativeStackNavigationProp<ProfileStackParamList, 'ProfileMain'>
 
-// ─── Info Row ─────────────────────────────────────────────────────────────────
-
-function InfoRow({
-  icon,
-  label,
-  value,
-  last = false,
-}: {
-  icon: keyof typeof Ionicons.glyphMap
-  label: string
-  value: string
-  last?: boolean
-}) {
+function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <View style={[row.wrap, !last && row.border]}>
-      <View style={row.iconWrap}>
-        <Ionicons name={icon} size={16} color={colors.muted} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={row.label}>{label}</Text>
-        <Text style={row.value} numberOfLines={2}>{value}</Text>
-      </View>
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value || '-'}</Text>
     </View>
   )
 }
 
-const row = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing[3],
-    gap: spacing[3],
-  },
-  border: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  label: { fontSize: 11, color: colors.subtle, fontWeight: '600', fontFamily: fonts.semibold, textTransform: 'uppercase', letterSpacing: 0.3 },
-  value: { fontSize: 14, color: colors.ink, fontWeight: '500', fontFamily: fonts.medium, marginTop: 1 },
-})
-
-// ─── Main screen ──────────────────────────────────────────────────────────────
-
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>()
   const { logout, user } = useAuthStore()
-  const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
-
   const { data: profile, isLoading } = useQuery({
     queryKey: ['b2c-profile'],
     queryFn: b2cApi.getProfile,
   })
 
-  const fadeAnim = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start()
-  }, [fadeAnim])
-
   const fullName = profile ? `${profile.first_name} ${profile.last_name}` : (user?.display_name || 'Student')
-  const initials = fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-  const educationLabel = profile?.education_level.replace(/_/g, ' ') ?? ''
-
-  const hPad = width < 380 ? spacing[4] : spacing[5]
-
-  const infoRows = profile ? [
-    { icon: 'mail-outline' as const,    label: 'Email',          value: profile.email },
-    { icon: 'school-outline' as const,  label: 'Education',      value: educationLabel },
-    { icon: 'layers-outline' as const,  label: 'Standard',       value: profile.standard || '—' },
-    { icon: 'ribbon-outline' as const,  label: 'Board',          value: profile.board || '—' },
-    { icon: 'book-outline' as const,    label: 'Subjects',       value: profile.subjects?.join(', ') || '—' },
-  ] : []
+  const initials = fullName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
-      <ScrollView
-        style={styles.root}
-        contentContainerStyle={[styles.content, { paddingHorizontal: hPad, paddingBottom: insets.bottom + 32 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Avatar block */}
-        <View style={styles.avatarSection}>
-          <View style={[styles.avatarRing, shadows.md]}>
-            <View style={styles.avatar}>
-              <Text style={styles.initials}>{initials}</Text>
-            </View>
+    <Screen>
+      <HeroHeader
+        eyebrow="Profile"
+        title={fullName}
+        subtitle="Keep your student identity, standards, and account details up to date."
+        icon="person-circle-outline"
+      />
+
+      <AppCard tone="dark" style={styles.identityCard}>
+        <View style={styles.identityRow}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
           </View>
-          <Text style={styles.name}>{fullName}</Text>
-          <View style={styles.rolePill}>
-            <Ionicons name="person-outline" size={12} color={colors.muted} />
-            <Text style={styles.roleText}>B2C Learner</Text>
+          <View style={styles.identityCopy}>
+            <Text style={styles.identityName}>{fullName}</Text>
+            <Text style={styles.identitySub}>{profile?.email || user?.identifier || ''}</Text>
           </View>
         </View>
+      </AppCard>
 
-        {/* Edit button */}
-        <TouchableOpacity
-          style={[styles.editBtn, shadows.xs]}
-          onPress={() => navigation.navigate('EditProfile')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="pencil-outline" size={16} color={colors.ink} />
-          <Text style={styles.editBtnText}>Edit Profile</Text>
-        </TouchableOpacity>
+      <PrimaryButton label="Edit profile" variant="secondary" onPress={() => navigation.navigate('EditProfile')} />
 
-        {/* Profile info */}
-        {isLoading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator color={colors.accent} size="small" />
-          </View>
-        ) : (
-          <View style={[styles.infoCard, shadows.xs]}>
-            <Text style={styles.infoCardTitle}>Profile Info</Text>
-            {infoRows.map((r, i) => (
-              <InfoRow
-                key={r.label}
-                icon={r.icon}
-                label={r.label}
-                value={r.value}
-                last={i === infoRows.length - 1}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Menu items */}
-        <View style={[styles.menuCard, shadows.xs]}>
-          <TouchableOpacity style={[styles.menuRow, styles.menuRowBorder]} activeOpacity={0.7}>
-            <View style={[styles.menuIconWrap, { backgroundColor: colors.infoBg }]}>
-              <Ionicons name="help-circle-outline" size={16} color={colors.info} />
-            </View>
-            <Text style={styles.menuText}>Help & Support</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.subtle} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.menuRow} activeOpacity={0.7}>
-            <View style={[styles.menuIconWrap, { backgroundColor: colors.warningBg }]}>
-              <Ionicons name="shield-outline" size={16} color={colors.warning} />
-            </View>
-            <Text style={styles.menuText}>Privacy Policy</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.subtle} />
-          </TouchableOpacity>
+      {isLoading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.accent} />
         </View>
+      ) : (
+        <AppCard style={styles.detailsCard}>
+          <DetailRow label="Education level" value={profile?.education_level?.replace(/_/g, ' ') || '-'} />
+          <DetailRow label="Board" value={profile?.board || profile?.school_board || '-'} />
+          <DetailRow label="Standard" value={profile?.standard || profile?.school_standard || '-'} />
+          <DetailRow label="Subjects" value={profile?.subjects?.join(', ') || '-'} />
+          <DetailRow label="Email verified" value={profile?.is_email_verified ? 'Yes' : 'No'} />
+        </AppCard>
+      )}
 
-        {/* Logout */}
-        <TouchableOpacity style={[styles.logoutBtn, shadows.xs]} onPress={logout} activeOpacity={0.8}>
-          <Ionicons name="log-out-outline" size={18} color={colors.danger} />
-          <Text style={styles.logoutText}>Sign Out</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.version}>Eduraa v1.0.0</Text>
-      </ScrollView>
-    </Animated.View>
+      <PrimaryButton label="Sign out" variant="ghost" onPress={logout} />
+    </Screen>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.surface1 },
-  content: { paddingTop: spacing[5], gap: spacing[4] },
-
-  avatarSection: {
-    alignItems: 'center',
-    paddingVertical: spacing[4],
-    gap: spacing[2],
+  identityCard: {
+    gap: spacing[3],
   },
-  avatarRing: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: colors.card,
-    padding: 4,
-    marginBottom: spacing[1],
+  identityRow: {
+    flexDirection: 'row',
+    gap: spacing[4],
+    alignItems: 'center',
   },
   avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: colors.textOnBrand,
+    fontFamily: fonts.displayBold,
+    fontSize: 24,
+  },
+  identityCopy: {
     flex: 1,
-    borderRadius: 45,
-    backgroundColor: colors.accent,
+    gap: spacing[1],
+  },
+  identityName: {
+    color: colors.textOnBrand,
+    fontFamily: fonts.displaySemibold,
+    fontSize: 20,
+  },
+  identitySub: {
+    color: 'rgba(255,255,255,0.72)',
+    fontFamily: fonts.regular,
+    fontSize: 13,
+  },
+  loading: {
+    paddingVertical: spacing[10],
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  initials: { fontSize: 30, fontWeight: '800', fontFamily: fonts.displayBold, color: colors.white },
-  name: { fontSize: 22, fontWeight: '800', fontFamily: fonts.displayBold, color: colors.ink, letterSpacing: -0.3 },
-  rolePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface2,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  roleText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
-
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[2],
-    height: 46,
-    borderRadius: radius.full,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-  },
-  editBtnText: { fontSize: 14, fontWeight: '700', color: colors.ink },
-
-  loadingWrap: { height: 80, alignItems: 'center', justifyContent: 'center' },
-
-  infoCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[2],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  infoCardTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.subtle,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    paddingTop: spacing[3],
-    paddingBottom: spacing[2],
-  },
-
-  menuCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    paddingHorizontal: spacing[4],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  detailsCard: {
     gap: spacing[3],
-    paddingVertical: spacing[3],
   },
-  menuRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  detailRow: {
+    gap: spacing[1],
+    paddingBottom: spacing[3],
+    borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  menuIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+  detailLabel: {
+    color: colors.textSubtle,
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  menuText: { flex: 1, fontSize: 14, fontWeight: '600', fontFamily: fonts.semibold, color: colors.ink },
-
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[2],
-    height: 50,
-    borderRadius: radius.full,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.dangerBorder,
-  },
-  logoutText: { fontSize: 15, fontWeight: '700', fontFamily: fonts.bold, color: colors.danger },
-
-  version: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: colors.subtle,
-    marginTop: -spacing[2],
-    marginBottom: spacing[2],
+  detailValue: {
+    color: colors.text,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    lineHeight: 20,
   },
 })
