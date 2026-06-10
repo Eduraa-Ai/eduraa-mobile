@@ -1,29 +1,133 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useRoute } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard } from '../../components/ui'
-import { agenticLearningApi } from '../../api/agenticLearning'
-import { colors, radius, spacing, typography } from '../../theme'
+import { AnimatedButton, AnimatedCard, AppScreen, ErrorState } from '../../components/ui'
+import { agenticLearningApi, AgenticLearningTopicDetail } from '../../api/agenticLearning'
+import { colors, radius, shadows, spacing, typography } from '../../theme'
 
 type RouteParams = {
   topicId: string
 }
 
-function BulletList({ title, items }: { title: string; items: string[] }) {
+type Tone = {
+  accent: string
+  label: string
+}
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+function masteryTone(value: number): Tone {
+  if (value >= 75) return { accent: colors.success, label: 'Stable' }
+  if (value >= 45) return { accent: colors.warning, label: 'Needs polish' }
+  return { accent: colors.danger, label: 'Repair now' }
+}
+
+function cleanStatus(status: string) {
+  return status.replace(/_/g, ' ')
+}
+
+function splitConcept(text: string) {
+  const normalized = text.replace(/\s+/g, ' ')
+  return (normalized.match(/[^.!?]+[.!?]?/g) ?? [])
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+function compactMeta(topic: AgenticLearningTopicDetail) {
+  return [topic.subject_name, topic.chapter_title, topic.weightage_label].filter(Boolean).join(' / ')
+}
+
+function StatTile({ label, value, icon, tone }: { label: string; value: string; icon: keyof typeof Ionicons.glyphMap; tone: string }) {
+  return (
+    <View style={styles.statTile}>
+      <View style={[styles.statIcon, { backgroundColor: `${tone}16` }]}>
+        <Ionicons name={icon} size={15} color={tone} />
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  )
+}
+
+function RouteStep({
+  index,
+  title,
+  caption,
+  icon,
+  tone,
+  active,
+}: {
+  index: number
+  title: string
+  caption: string
+  icon: keyof typeof Ionicons.glyphMap
+  tone: string
+  active?: boolean
+}) {
+  return (
+    <View style={[styles.routeStep, active && styles.routeStepActive]}>
+      <View style={styles.routeRail}>
+        <View style={[styles.routeNode, { backgroundColor: active ? tone : colors.backgroundElevated, borderColor: `${tone}66` }]}>
+          <Ionicons name={icon} size={16} color={active ? colors.white : tone} />
+        </View>
+        <Text style={[styles.routeIndex, { color: tone }]}>0{index}</Text>
+      </View>
+      <View style={styles.routeCopy}>
+        <Text style={styles.routeTitle}>{title}</Text>
+        <Text style={styles.routeCaption}>{caption}</Text>
+      </View>
+    </View>
+  )
+}
+
+function ListSection({
+  title,
+  items,
+  icon,
+  tone,
+}: {
+  title: string
+  items: string[]
+  icon: keyof typeof Ionicons.glyphMap
+  tone: string
+}) {
   if (!items.length) return null
 
   return (
-    <AnimatedCard style={styles.card}>
-      <Text style={styles.cardTitle}>{title}</Text>
-      {items.map((item, index) => (
-        <View key={`${title}-${index}`} style={styles.bulletRow}>
-          <View style={styles.bulletDot} />
-          <Text style={styles.bulletText}>{item}</Text>
+    <AnimatedCard style={styles.listCard}>
+      <View style={styles.sectionHeaderRow}>
+        <View style={[styles.sectionIcon, { backgroundColor: `${tone}14` }]}>
+          <Ionicons name={icon} size={17} color={tone} />
         </View>
-      ))}
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      <View style={styles.smartList}>
+        {items.slice(0, 5).map((item, index) => (
+          <View key={`${title}-${index}`} style={styles.smartRow}>
+            <View style={[styles.smartNumber, { backgroundColor: `${tone}14` }]}>
+              <Text style={[styles.smartNumberText, { color: tone }]}>{index + 1}</Text>
+            </View>
+            <Text style={styles.smartText}>{item}</Text>
+          </View>
+        ))}
+      </View>
     </AnimatedCard>
+  )
+}
+
+function PracticePrompt({ prompt, index }: { prompt: string; index: number }) {
+  return (
+    <View style={styles.practicePrompt}>
+      <View style={styles.practiceNumber}>
+        <Text style={styles.practiceNumberText}>{index + 1}</Text>
+      </View>
+      <Text style={styles.practiceText}>{prompt}</Text>
+    </View>
   )
 }
 
@@ -53,6 +157,9 @@ export default function AgenticTopicScreen() {
     },
   })
 
+  const topic = topicQuery.data
+  const conceptPieces = useMemo(() => splitConcept(topic?.concept_explanation ?? ''), [topic?.concept_explanation])
+
   if (topicQuery.isLoading) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
@@ -62,7 +169,7 @@ export default function AgenticTopicScreen() {
     )
   }
 
-  if (topicQuery.isError || !topicQuery.data) {
+  if (topicQuery.isError || !topic) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
         <ErrorState
@@ -74,59 +181,164 @@ export default function AgenticTopicScreen() {
     )
   }
 
-  const topic = topicQuery.data
   const isResolved = topic.status === 'resolved'
+  const mastery = clampPercent(topic.mastery_score)
+  const confidence = clampPercent(topic.confidence)
+  const tone = masteryTone(mastery)
+  const conceptLead = conceptPieces.slice(0, 2).join(' ')
+  const conceptSupport = conceptPieces.slice(2, 6)
+  const openLoops = Math.max(0, 100 - mastery)
+  const practiceCount = topic.practice_questions.length
 
   return (
     <AppScreen contentStyle={styles.screen}>
-      <GradientHeroCard
-        eyebrow={topic.curriculum_label}
-        title={topic.topic_name}
-        subtitle={[topic.subject_name, topic.chapter_title, topic.weightage_label].filter(Boolean).join(' / ')}
-      />
+      <LinearGradient colors={['#111827', '#7c2d12', '#f97316']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
+        <View style={styles.heroTop}>
+          <View style={styles.heroKickerWrap}>
+            <Ionicons name="sparkles" size={14} color={colors.orangeScale[200]} />
+            <Text style={styles.heroKicker}>{topic.curriculum_label}</Text>
+          </View>
+          <View style={[styles.heroStatusPill, isResolved && styles.heroStatusResolved]}>
+            <Text style={styles.heroStatusText}>{isResolved ? 'Resolved' : cleanStatus(topic.status)}</Text>
+          </View>
+        </View>
 
-      <AnimatedCard style={styles.metricsCard}>
-        <View style={styles.metric}>
-          <Text style={styles.metricValue}>{Math.round(topic.mastery_score)}%</Text>
-          <Text style={styles.metricLabel}>Mastery</Text>
+        <Text style={styles.heroTitle}>{topic.topic_name}</Text>
+        <Text style={styles.heroMeta}>{compactMeta(topic)}</Text>
+
+        <View style={styles.heroMission}>
+          <View style={styles.missionCopy}>
+            <Text style={styles.missionKicker}>Smart focus</Text>
+            <Text style={styles.missionText}>
+              {tone.label}: close {openLoops}% of the gap with one concept pass, one recall pass, and a short practice burst.
+            </Text>
+          </View>
+          <View style={styles.masteryOrb}>
+            <Text style={styles.masteryOrbValue}>{mastery}%</Text>
+            <Text style={styles.masteryOrbLabel}>ready</Text>
+          </View>
         </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricValue}>{Math.round(topic.confidence)}%</Text>
-          <Text style={styles.metricLabel}>Confidence</Text>
+      </LinearGradient>
+
+      <View style={styles.statGrid}>
+        <StatTile label="Mastery" value={`${mastery}%`} icon="analytics" tone={tone.accent} />
+        <StatTile label="Confidence" value={`${confidence}%`} icon="pulse" tone={colors.info} />
+        <StatTile label="Attempts" value={`${topic.attempt_count}`} icon="repeat" tone={colors.violet[600]} />
+      </View>
+
+      <AnimatedCard style={styles.routeCard} elevated>
+        <View style={styles.sectionHeaderRow}>
+          <View style={[styles.sectionIcon, styles.routeHeaderIcon]}>
+            <Ionicons name="trail-sign" size={17} color={colors.accent} />
+          </View>
+          <View style={styles.sectionHeaderCopy}>
+            <Text style={styles.sectionTitle}>Lesson route</Text>
+            <Text style={styles.sectionSubtitle}>A compact path from understanding to recall.</Text>
+          </View>
         </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricValue}>{topic.attempt_count}</Text>
-          <Text style={styles.metricLabel}>Attempts</Text>
+        <View style={styles.routeList}>
+          <RouteStep
+            index={1}
+            title="Concept repair"
+            caption={conceptLead || topic.summary}
+            icon="bulb"
+            tone={colors.accent}
+            active
+          />
+          <RouteStep
+            index={2}
+            title="Recall anchors"
+            caption={`${topic.easy_ways_to_learn.length + topic.memory_tips.length} short hooks to remember the idea.`}
+            icon="flash"
+            tone={colors.info}
+          />
+          <RouteStep
+            index={3}
+            title="Exam transfer"
+            caption={practiceCount ? `${practiceCount} prompts ready for a quick check.` : 'Use the recap to create a fast self-check.'}
+            icon="barbell"
+            tone={colors.violet[600]}
+          />
         </View>
       </AnimatedCard>
 
-      <AnimatedCard style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Ionicons name="book" size={18} color={colors.accent} />
-          <Text style={styles.cardTitle}>Concept explanation</Text>
+      <AnimatedCard style={styles.conceptCard}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={[styles.sectionIcon, { backgroundColor: colors.accentSurface }]}>
+            <Ionicons name="library" size={17} color={colors.accent} />
+          </View>
+          <Text style={styles.sectionTitle}>Core idea</Text>
         </View>
-        <Text style={styles.bodyText}>{topic.concept_explanation}</Text>
-        {topic.text_diagram ? <Text style={styles.diagramText}>{topic.text_diagram}</Text> : null}
+        <Text style={styles.conceptLead}>{conceptLead || topic.summary}</Text>
+        {conceptSupport.length > 0 ? (
+          <View style={styles.conceptSupportList}>
+            {conceptSupport.map((part, index) => (
+              <View key={`concept-${index}`} style={styles.conceptSupportRow}>
+                <View style={styles.conceptDot} />
+                <Text style={styles.conceptSupportText}>{part}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {topic.text_diagram ? (
+          <View style={styles.whiteboard}>
+            <View style={styles.whiteboardTop}>
+              <Ionicons name="git-network" size={15} color={colors.info} />
+              <Text style={styles.whiteboardTitle}>Mental model</Text>
+            </View>
+            <Text style={styles.diagramText}>{topic.text_diagram}</Text>
+          </View>
+        ) : null}
       </AnimatedCard>
 
-      <BulletList title="Easy ways to learn" items={topic.easy_ways_to_learn} />
-      <BulletList title="Memory tips" items={topic.memory_tips} />
-      <BulletList title="Recap points" items={topic.recap_points} />
-      <BulletList title="Practice prompts" items={topic.practice_questions} />
+      <ListSection title="Easy ways to learn" items={topic.easy_ways_to_learn} icon="rocket" tone={colors.accent} />
+      <ListSection title="Memory anchors" items={topic.memory_tips} icon="bookmark" tone={colors.info} />
+      <ListSection title="Recap points" items={topic.recap_points} icon="checkmark-circle" tone={colors.success} />
 
-      {topic.coach_note ? (
-        <AnimatedCard style={styles.coachCard}>
-          <Text style={styles.coachKicker}>Coach note</Text>
-          <Text style={styles.bodyText}>{topic.coach_note}</Text>
+      {topic.practice_questions.length > 0 ? (
+        <AnimatedCard style={styles.practiceCard} elevated>
+          <View style={styles.practiceHeader}>
+            <View>
+              <Text style={styles.practiceKicker}>Practice burst</Text>
+              <Text style={styles.practiceTitle}>Prove it under exam language</Text>
+            </View>
+            <View style={styles.practiceBadge}>
+              <Text style={styles.practiceBadgeText}>{practiceCount}</Text>
+            </View>
+          </View>
+          {topic.practice_questions.slice(0, 4).map((prompt, index) => (
+            <PracticePrompt key={`practice-${index}`} prompt={prompt} index={index} />
+          ))}
         </AnimatedCard>
       ) : null}
 
-      <AnimatedButton
-        label={resolveMutation.isPending ? 'Updating...' : isResolved ? 'Mark active again' : 'Mark resolved'}
-        variant={isResolved ? 'secondary' : 'primary'}
-        loading={resolveMutation.isPending}
-        onPress={() => resolveMutation.mutate()}
-      />
+      {topic.coach_note ? (
+        <AnimatedCard style={styles.coachCard}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionIcon, { backgroundColor: colors.warningSurface }]}>
+              <Ionicons name="school" size={17} color={colors.warning} />
+            </View>
+            <Text style={styles.sectionTitle}>Coach note</Text>
+          </View>
+          <Text style={styles.coachText}>{topic.coach_note}</Text>
+        </AnimatedCard>
+      ) : null}
+
+      <AnimatedCard style={styles.actionCard}>
+        <View style={styles.actionCopy}>
+          <Text style={styles.actionTitle}>{isResolved ? 'This concept is closed' : 'Close the loop when it feels automatic'}</Text>
+          <Text style={styles.actionText}>
+            {isResolved ? 'Reopen it if the next attempt shows the same mistake.' : 'Mark resolved after you can explain it and answer the practice burst without notes.'}
+          </Text>
+        </View>
+        <AnimatedButton
+          label={resolveMutation.isPending ? 'Updating...' : isResolved ? 'Mark active again' : 'Mark resolved'}
+          variant={isResolved ? 'secondary' : 'primary'}
+          loading={resolveMutation.isPending}
+          icon={<Ionicons name={isResolved ? 'refresh' : 'checkmark'} size={18} color={isResolved ? colors.accentStrong : colors.white} />}
+          onPress={() => resolveMutation.mutate()}
+        />
+      </AnimatedCard>
     </AppScreen>
   )
 }
@@ -143,75 +355,399 @@ const styles = StyleSheet.create({
     ...typography.roles.body,
     color: colors.textMuted,
   },
-  metricsCard: {
+  heroCard: {
+    borderRadius: radius['2xl'],
+    padding: spacing[5],
+    gap: spacing[4],
+    overflow: 'hidden',
+    ...shadows.hero,
+  },
+  heroTop: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing[3],
   },
-  metric: {
+  heroKickerWrap: {
     flex: 1,
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
-    padding: spacing[3],
-  },
-  metricValue: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 20,
-  },
-  metricLabel: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    marginTop: spacing[1],
-    textTransform: 'uppercase',
-  },
-  card: {
-    gap: spacing[3],
-  },
-  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
   },
-  cardTitle: {
-    ...typography.roles.title,
-    color: colors.text,
+  heroKicker: {
+    ...typography.roles.eyebrow,
+    color: colors.orangeScale[100],
+    letterSpacing: 0.7,
   },
-  bodyText: {
-    ...typography.roles.body,
-    color: colors.textMuted,
+  heroStatusPill: {
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
   },
-  diagramText: {
-    color: colors.textSecondary,
+  heroStatusResolved: {
+    backgroundColor: 'rgba(16,185,129,0.22)',
+    borderColor: 'rgba(167,243,208,0.42)',
+  },
+  heroStatusText: {
+    color: colors.white,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 13,
-    lineHeight: 20,
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
+    fontSize: 11,
+    textTransform: 'capitalize',
+  },
+  heroTitle: {
+    color: colors.white,
+    fontFamily: typography.fonts.heading,
+    fontSize: 31,
+    lineHeight: 36,
+    letterSpacing: 0,
+  },
+  heroMeta: {
+    color: 'rgba(255,255,255,0.78)',
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  heroMission: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
+    borderRadius: radius.xl,
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
     padding: spacing[3],
   },
-  bulletRow: {
+  missionCopy: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  missionKicker: {
+    color: colors.orangeScale[100],
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+  },
+  missionText: {
+    color: colors.white,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  masteryOrb: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.94)',
+  },
+  masteryOrbValue: {
+    color: colors.text,
+    fontFamily: typography.fonts.heading,
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  masteryOrbLabel: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  statGrid: {
+    flexDirection: 'row',
+    gap: spacing[2],
+  },
+  statTile: {
+    flex: 1,
+    minHeight: 96,
+    borderRadius: radius.xl,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing[3],
+    justifyContent: 'space-between',
+    ...shadows.xs,
+  },
+  statIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 21,
+    lineHeight: 25,
+  },
+  statLabel: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  routeCard: {
+    gap: spacing[4],
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  sectionHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  sectionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  routeHeaderIcon: {
+    backgroundColor: colors.accentSurface,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 18,
+    lineHeight: 23,
+  },
+  sectionSubtitle: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  routeList: {
+    gap: spacing[3],
+  },
+  routeStep: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    borderRadius: radius.xl,
+    backgroundColor: colors.backgroundMuted,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing[3],
+  },
+  routeStepActive: {
+    backgroundColor: colors.accentSurface,
+    borderColor: colors.borderBrand,
+  },
+  routeRail: {
+    width: 40,
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  routeNode: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  routeIndex: {
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 10,
+  },
+  routeCopy: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  routeTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 14,
+  },
+  routeCaption: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  conceptCard: {
+    gap: spacing[4],
+  },
+  conceptLead: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 17,
+    lineHeight: 25,
+  },
+  conceptSupportList: {
+    gap: spacing[3],
+  },
+  conceptSupportRow: {
     flexDirection: 'row',
     gap: spacing[3],
   },
-  bulletDot: {
+  conceptDot: {
     width: 7,
     height: 7,
     borderRadius: 7,
     marginTop: 7,
     backgroundColor: colors.accent,
   },
-  bulletText: {
+  conceptSupportText: {
     flex: 1,
-    ...typography.roles.body,
-    color: colors.textMuted,
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  whiteboard: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.infoSurface,
+    borderWidth: 1,
+    borderColor: colors.sky[100],
+    padding: spacing[4],
+    gap: spacing[3],
+  },
+  whiteboardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  whiteboardTitle: {
+    color: colors.info,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+    textTransform: 'uppercase',
+  },
+  diagramText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+    lineHeight: 19,
+  },
+  listCard: {
+    gap: spacing[4],
+  },
+  smartList: {
+    gap: spacing[3],
+  },
+  smartRow: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    alignItems: 'flex-start',
+  },
+  smartNumber: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  smartNumberText: {
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  smartText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  practiceCard: {
+    gap: spacing[4],
+    backgroundColor: colors.slate[950],
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  practiceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[3],
+  },
+  practiceKicker: {
+    color: colors.orangeScale[300],
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+  },
+  practiceTitle: {
+    color: colors.white,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 19,
+    lineHeight: 24,
+    marginTop: spacing[1],
+  },
+  practiceBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  practiceBadgeText: {
+    color: colors.white,
+    fontFamily: typography.fonts.heading,
+    fontSize: 18,
+  },
+  practicePrompt: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    padding: spacing[3],
+  },
+  practiceNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(249,115,22,0.20)',
+  },
+  practiceNumberText: {
+    color: colors.orangeScale[200],
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  practiceText: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.86)',
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 20,
   },
   coachCard: {
-    gap: spacing[2],
-    backgroundColor: colors.accentSurface,
+    gap: spacing[4],
+    backgroundColor: colors.warningSurface,
+    borderColor: colors.warningBorder,
   },
-  coachKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.accent,
+  coachText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  actionCard: {
+    gap: spacing[4],
+  },
+  actionCopy: {
+    gap: spacing[1],
+  },
+  actionTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 19,
+    lineHeight: 24,
+  },
+  actionText: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 20,
   },
 })

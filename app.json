@@ -50,8 +50,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "7bafb9d9-c7f0-4d9b-a126-8b2645ad4cd3"
+        "projectId": "649f0bb2-fb2c-4c8d-8120-30df4fa995f2"
       }
-    }
+    },
+    "owner": "kk_agent"
   }
 }

@@ -64,6 +64,8 @@ export interface B2CProfileRead {
   school_name?: string
   school_board?: string
   school_standard?: string
+  competitive_exam?: string
+  exam_stream?: string
   subjects?: string[]
   board?: string
   standard?: string

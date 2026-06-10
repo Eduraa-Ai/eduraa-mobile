@@ -1,9 +1,15 @@
-import React from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
-import { colors, motion, radius, shadows, spacing, typography } from '../../theme'
+import { LinearGradient } from 'expo-linear-gradient'
+import { colors, motion, radius, spacing } from '../../theme'
+
+const ITEM_SIZE = 42
+const ITEM_GAP = 7
+const SWIPE_THRESHOLD = 34
+const SLOT_SIZE = ITEM_SIZE + ITEM_GAP
 
 const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
@@ -59,10 +65,110 @@ function getNestedFocusedRouteName(route: BottomTabBarProps['state']['routes'][n
   return null
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
 export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const focusedRoute = state.routes[state.index]
   const focusedOptions = focusedRoute ? descriptors[focusedRoute.key]?.options : undefined
   const nestedRouteName = focusedRoute ? getNestedFocusedRouteName(focusedRoute) : null
+  const scrollRef = useRef<ScrollView>(null)
+  const thumbX = useRef(new Animated.Value(state.index * SLOT_SIZE)).current
+  const dragPositionRef = useRef(state.index * SLOT_SIZE)
+  const [previewIndex, setPreviewIndex] = useState(state.index)
+  const [viewportWidth, setViewportWidth] = useState(0)
+
+  const contentWidth = Math.max(ITEM_SIZE, state.routes.length * ITEM_SIZE + Math.max(0, state.routes.length - 1) * ITEM_GAP + 1)
+
+  const scrollToIndex = useCallback((index: number, animated = true) => {
+    if (!viewportWidth) return
+    const thumbPosition = index * SLOT_SIZE
+    const maxScroll = Math.max(0, contentWidth - viewportWidth)
+    const centeredScroll = clamp(thumbPosition - (viewportWidth - ITEM_SIZE) / 2, 0, maxScroll)
+    scrollRef.current?.scrollTo({ x: centeredScroll, animated })
+  }, [contentWidth, viewportWidth])
+
+  useEffect(() => {
+    const nextPosition = state.index * SLOT_SIZE
+    dragPositionRef.current = nextPosition
+    setPreviewIndex(state.index)
+    scrollToIndex(state.index)
+    Animated.spring(thumbX, {
+      toValue: nextPosition,
+      damping: 20,
+      stiffness: 260,
+      mass: 0.72,
+      useNativeDriver: true,
+    }).start()
+  }, [state.index, scrollToIndex, thumbX])
+
+  const navigateToIndex = (index: number) => {
+    const route = state.routes[index]
+    if (!route || index === state.index) return
+
+    const event = navigation.emit({
+      type: 'tabPress',
+      target: route.key,
+      canPreventDefault: true,
+    })
+
+    if (!event.defaultPrevented) {
+      navigation.navigate(route.name)
+    }
+  }
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => {
+          const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3
+          return horizontalIntent && Math.abs(gesture.dx) > 10
+        },
+        onPanResponderGrant: () => {
+          thumbX.stopAnimation()
+          dragPositionRef.current = state.index * SLOT_SIZE
+          thumbX.setValue(dragPositionRef.current)
+        },
+        onPanResponderMove: (_, gesture) => {
+          const maxPosition = Math.max(0, (state.routes.length - 1) * SLOT_SIZE)
+          const nextPosition = clamp(state.index * SLOT_SIZE + gesture.dx, 0, maxPosition)
+          const nextPreviewIndex = clamp(Math.round(nextPosition / SLOT_SIZE), 0, state.routes.length - 1)
+
+          dragPositionRef.current = nextPosition
+          thumbX.setValue(nextPosition)
+          setPreviewIndex((current) => (current === nextPreviewIndex ? current : nextPreviewIndex))
+          scrollToIndex(nextPreviewIndex, false)
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const nearestIndex = clamp(Math.round(dragPositionRef.current / SLOT_SIZE), 0, state.routes.length - 1)
+
+          if (Math.abs(gesture.dx) >= SWIPE_THRESHOLD || nearestIndex !== state.index) {
+            navigateToIndex(nearestIndex)
+          } else {
+            Animated.spring(thumbX, {
+              toValue: state.index * SLOT_SIZE,
+              damping: 20,
+              stiffness: 260,
+              mass: 0.72,
+              useNativeDriver: true,
+            }).start()
+            setPreviewIndex(state.index)
+          }
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(thumbX, {
+            toValue: state.index * SLOT_SIZE,
+            damping: 20,
+            stiffness: 260,
+            mass: 0.72,
+            useNativeDriver: true,
+          }).start()
+          setPreviewIndex(state.index)
+        },
+      }),
+    [navigation, scrollToIndex, state.index, state.routes, thumbX],
+  )
 
   if (isTabBarStyleHidden(focusedOptions?.tabBarStyle) || (nestedRouteName && fullScreenNestedRoutes.has(nestedRouteName))) {
     return null
@@ -71,14 +177,36 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   return (
     <View style={styles.wrap}>
       <View style={styles.barShell}>
-        <View pointerEvents="none" style={styles.sliderRail} />
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(255,255,255,0.92)', 'rgba(255,247,237,0.72)', 'rgba(255,255,255,0.86)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View pointerEvents="none" style={styles.topSheen} />
         <ScrollView
+          ref={scrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           bounces
           style={styles.scroller}
           contentContainerStyle={styles.bar}
+          onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
         >
+          <View pointerEvents="none" style={styles.sliderTrack} />
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={[
+              styles.activeThumb,
+              {
+                transform: [{ translateX: thumbX }],
+              },
+            ]}
+          >
+            <Ionicons name={iconByRoute[state.routes[previewIndex]?.name] ?? 'ellipse'} size={20} color={colors.white} />
+            <View style={styles.activeDot} />
+          </Animated.View>
           {state.routes.map((route, index) => {
             const isFocused = state.index === index
             const options = descriptors[route.key]?.options
@@ -108,15 +236,9 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
                 accessibilityRole="tab"
                 accessibilityState={{ selected: isFocused }}
                 accessibilityLabel={label}
-                style={({ pressed }) => [styles.item, isFocused ? styles.itemActive : styles.itemInactive, pressed && styles.itemPressed]}
+                style={({ pressed }) => [styles.item, styles.itemInactive, pressed && styles.itemPressed]}
               >
-                {isFocused ? <View style={styles.activeHandle} /> : null}
-                <Ionicons name={iconByRoute[route.name] ?? 'ellipse'} size={20} color={isFocused ? colors.white : colors.textSecondary} />
-                {isFocused ? (
-                  <Text style={styles.label} numberOfLines={1}>
-                    {label}
-                  </Text>
-                ) : null}
+                <Ionicons name={iconByRoute[route.name] ?? 'ellipse'} size={20} color={isFocused ? 'transparent' : colors.textSecondary} />
               </Pressable>
             )
           })}
@@ -132,84 +254,99 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: spacing[5],
     paddingBottom: spacing[4],
+    alignItems: 'center',
   },
   barShell: {
     width: '100%',
-    maxWidth: '100%',
-    alignSelf: 'stretch',
-    minHeight: 64,
-    borderRadius: radius['2xl'],
-    backgroundColor: 'rgba(255,250,242,0.98)',
+    maxWidth: 430,
+    alignSelf: 'center',
+    minHeight: 58,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.86)',
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[2],
+    borderColor: 'rgba(255,255,255,0.88)',
+    paddingVertical: 7,
+    paddingHorizontal: 7,
     overflow: 'hidden',
-    ...shadows.lg,
+    shadowColor: colors.slate[950],
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.16,
+    shadowRadius: 32,
+    elevation: 14,
   },
   scroller: {
     width: '100%',
     maxWidth: '100%',
     flexGrow: 0,
   },
-  sliderRail: {
+  topSheen: {
     position: 'absolute',
-    left: spacing[5],
-    right: spacing[5],
-    top: 7,
-    height: 3,
+    left: spacing[4],
+    right: spacing[4],
+    top: 5,
+    height: 1,
     borderRadius: radius.full,
-    backgroundColor: colors.accentSurfaceStrong,
+    backgroundColor: 'rgba(255,255,255,0.95)',
   },
   bar: {
+    position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[2],
-    paddingRight: spacing[2],
+    gap: 7,
+    paddingRight: 1,
+  },
+  sliderTrack: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    top: 27,
+    height: 2,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(15,23,42,0.06)',
   },
   item: {
     position: 'relative',
-    height: 48,
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing[2],
+    zIndex: 1,
   },
   itemInactive: {
-    width: 48,
-    backgroundColor: colors.backgroundTint,
+    backgroundColor: 'rgba(255,255,255,0.7)',
     borderWidth: 1,
-    borderColor: colors.borderBrand,
-    ...shadows.xs,
+    borderColor: 'rgba(15,23,42,0.08)',
   },
-  itemActive: {
-    minWidth: 86,
-    maxWidth: 132,
-    paddingHorizontal: spacing[3],
-    backgroundColor: colors.slate[950],
-    transform: [{ scale: motion.tabSelection.scale }],
-    ...shadows.sm,
-  },
-  activeHandle: {
+  activeThumb: {
     position: 'absolute',
-    top: 5,
-    left: spacing[3],
-    width: 24,
-    height: 3,
+    left: 0,
+    top: 0,
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
     borderRadius: radius.full,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.slate[950],
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+    shadowColor: colors.slate[950],
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  activeDot: {
+    position: 'absolute',
+    bottom: 5,
+    width: 4,
+    height: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.accentLight,
   },
   itemPressed: {
     opacity: motion.press.opacity,
-  },
-  label: {
-    ...typography.roles.label,
-    color: colors.white,
-    maxWidth: 84,
-    fontSize: 12,
   },
 })
 

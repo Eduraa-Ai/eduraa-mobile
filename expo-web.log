@@ -421,3 +421,68 @@ Web Bundled 200ms index.js (1 module)
 Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
 Web Bundled 196ms index.js (1 module)
  LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 5332ms index.js (1 module)
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+ LOG  [web] Logs will appear in the browser console
+Unable to resolve "../screens/profile/ProfileScreen" from "src\navigation\index.tsx"
+[0m [90m 38 |[39m [36mimport[39m [33mExamsScreen[39m [36mfrom[39m [32m'../screens/workspace/ExamsScreen'[39m
+ [90m 39 |[39m [36mimport[39m [33mAIStudioScreen[39m [36mfrom[39m [32m'../screens/studio/AIStudioScreen'[39m
+[31m[1m>[22m[39m[90m 40 |[39m [36mimport[39m [33mProfileScreen[39m [36mfrom[39m [32m'../screens/profile/ProfileScreen'[39m
+ [90m    |[39m                            [31m[1m^[22m[39m
+ [90m 41 |[39m [36mimport[39m [33mEditProfileScreen[39m [36mfrom[39m [32m'../screens/profile/EditProfileScreen'[39m
+ [90m 42 |[39m
+ [90m 43 |[39m [36mexport[39m type [33mAuthStackParamList[39m [33m=[39m {[0m
+
+Import stack:
+
+ src\navigation\index.tsx
+ | import "../screens/profile/ProfileScreen"
+
+ App.tsx
+ | import "./src/navigation"
+
+ 
+ | import "./App"
+
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 99ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 97ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 116ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 212ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 106ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 86ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Unable to resolve "../screens/learning/AgenticTopicScreen" from "src\navigation\index.tsx"
+[0m [90m 29 |[39m [36mimport[39m [33mCompetitiveChapterScreen[39m [36mfrom[39m [32m'../screens/learning/CompetitiveChapterScreen'[39m
+ [90m 30 |[39m [36mimport[39m [33mAgenticLearningScreen[39m [36mfrom[39m [32m'../screens/learning/AgenticLearningScreen'[39m
+[31m[1m>[22m[39m[90m 31 |[39m [36mimport[39m [33mAgenticTopicScreen[39m [36mfrom[39m [32m'../screens/learning/AgenticTopicScreen'[39m
+ [90m    |[39m                                 [31m[1m^[22m[39m
+ [90m 32 |[39m [36mimport[39m [33mPreviousPapersScreen[39m [36mfrom[39m [32m'../screens/learning/PreviousPapersScreen'[39m
+ [90m 33 |[39m [36mimport[39m [33mWorkspaceScreen[39m [36mfrom[39m [32m'../screens/workspace/WorkspaceScreen'[39m
+ [90m 34 |[39m [36mimport[39m [33mFeatureScreen[39m [36mfrom[39m [32m'../screens/workspace/FeatureScreen'[39m[0m
+
+Import stack:
+
+ src\navigation\index.tsx
+ | import "../screens/learning/AgenticTopicScreen"
+
+ App.tsx
+ | import "./src/navigation"
+
+ 
+ | import "./App"
+
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 123ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console

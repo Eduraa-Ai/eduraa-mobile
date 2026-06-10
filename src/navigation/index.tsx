@@ -38,7 +38,6 @@ import ScanUploadScreen from '../screens/workspace/ScanUploadScreen'
 import ExamsScreen from '../screens/workspace/ExamsScreen'
 import AIStudioScreen from '../screens/studio/AIStudioScreen'
 import ProfileScreen from '../screens/profile/ProfileScreen'
-import EditProfileScreen from '../screens/profile/EditProfileScreen'
 
 export type AuthStackParamList = {
   Login: undefined
@@ -69,7 +68,6 @@ export type LearningStackParamList = {
   AgenticLearning: undefined
   AgenticTopic: { topicId: string }
   PreviousPapers: undefined
-  AllControls: undefined
   Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
@@ -93,7 +91,6 @@ export type StaffWorkspaceStackParamList = {
 
 export type ProfileStackParamList = {
   ProfileMain: undefined
-  EditProfile: undefined
 }
 
 export type TabParamList = {
@@ -187,7 +184,6 @@ function LearningNavigator() {
       <LearningStack.Screen name="AgenticLearning" component={AgenticLearningScreen} options={{ title: 'Agentic Learning' }} />
       <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ title: 'Concept lesson' }} />
       <LearningStack.Screen name="PreviousPapers" component={PreviousPapersScreen} options={{ title: 'Previous papers' }} />
-      <LearningStack.Screen name="AllControls" component={WorkspaceScreen} options={{ title: 'All controls' }} />
       <LearningStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <LearningStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
@@ -201,7 +197,6 @@ function ProfileNavigator() {
   return (
     <ProfileStack.Navigator screenOptions={stackScreenOptions}>
       <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} options={{ title: 'Profile' }} />
-      <ProfileStack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit profile' }} />
     </ProfileStack.Navigator>
   )
 }

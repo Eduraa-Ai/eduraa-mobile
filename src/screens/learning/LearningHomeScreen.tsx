@@ -2,11 +2,11 @@ import React from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
-import { AnimatedCard, AppScreen } from '../../components/ui'
+import { AppScreen } from '../../components/ui'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 
-type LearningDestination = 'AgenticLearning' | 'CompetitiveExam' | 'PreviousPapers' | 'AllControls'
+type LearningDestination = 'AgenticLearning' | 'CompetitiveExam' | 'PreviousPapers'
 
 interface LearningTile {
   title: string
@@ -41,14 +41,6 @@ const tiles: LearningTile[] = [
     icon: 'library',
     color: colors.paperStudio.jee,
     destination: 'PreviousPapers',
-  },
-  {
-    title: 'All website controls',
-    meta: 'Role map',
-    body: 'See every website sidebar control available to this account.',
-    icon: 'grid',
-    color: colors.info,
-    destination: 'AllControls',
   },
 ]
 
@@ -91,13 +83,6 @@ export default function LearningHomeScreen() {
         ))}
       </View>
 
-      <AnimatedCard style={styles.noteCard}>
-        <Text style={styles.noteKicker}>Routing check</Text>
-        <Text style={styles.noteTitle}>B2B students are still students here.</Text>
-        <Text style={styles.noteBody}>
-          A school student account can open Agentic Learning from this tab. B2B staff roles remain outside this student shell.
-        </Text>
-      </AnimatedCard>
     </AppScreen>
   )
 }
@@ -198,20 +183,5 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 11,
     lineHeight: 15,
-  },
-  noteCard: {
-    gap: spacing[2],
-  },
-  noteKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.accent,
-  },
-  noteTitle: {
-    ...typography.roles.title,
-    color: colors.text,
-  },
-  noteBody: {
-    ...typography.roles.body,
-    color: colors.textMuted,
   },
 })
