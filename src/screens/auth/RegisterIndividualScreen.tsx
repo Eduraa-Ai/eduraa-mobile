@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -26,6 +26,8 @@ type FormState = {
   science_exams: ScienceExam[]
 }
 
+type FormErrors = Partial<Record<keyof FormState | 'submit', string>>
+
 const initialForm: FormState = {
   first_name: '',
   last_name: '',
@@ -38,12 +40,26 @@ const initialForm: FormState = {
   science_exams: [],
 }
 
+const hasSpecialCharacter = (value: string) => /[^A-Za-z0-9\s]/.test(value)
+
+function PasswordRequirement({ met, label }: { met: boolean; label: string }) {
+  return (
+    <View style={styles.passwordRequirement}>
+      <View style={[styles.requirementIcon, met && styles.requirementIconMet]}>
+        <Ionicons name={met ? 'checkmark' : 'ellipse'} size={met ? 12 : 6} color={met ? colors.textOnBrand : colors.textSubtle} />
+      </View>
+      <Text style={[styles.requirementText, met && styles.requirementTextMet]}>{label}</Text>
+    </View>
+  )
+}
+
 export default function RegisterIndividualScreen() {
   const navigation = useNavigation<Nav>()
   const [form, setForm] = useState<FormState>(initialForm)
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [errors, setErrors] = useState<FormErrors>({})
 
   const isSchoolProfile = form.education_level === 'school'
   const selectedExamText = useMemo(
@@ -53,9 +69,11 @@ export default function RegisterIndividualScreen() {
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
+    setErrors((prev) => ({ ...prev, [key]: undefined, submit: undefined }))
   }
 
   const toggleExam = (exam: ScienceExam) => {
+    setErrors((prev) => ({ ...prev, science_exams: undefined, submit: undefined }))
     setForm((prev) => ({
       ...prev,
       science_exams: prev.science_exams.includes(exam)
@@ -65,28 +83,22 @@ export default function RegisterIndividualScreen() {
   }
 
   const handleRegister = async () => {
-    if (!form.first_name.trim() || !form.last_name.trim() || !form.email.trim() || !form.password.trim() || !form.confirm_password.trim()) {
-      Alert.alert('Missing fields', 'Fill in all required fields to continue.')
-      return
-    }
-    if (form.password.length < 8) {
-      Alert.alert('Weak password', 'Password must be at least 8 characters.')
-      return
-    }
-    if (form.password !== form.confirm_password) {
-      Alert.alert('Password mismatch', 'Passwords do not match.')
-      return
-    }
-    if (isSchoolProfile && !form.school_board) {
-      Alert.alert('Board required', 'Select your school board.')
-      return
-    }
-    if (isSchoolProfile && !form.school_standard) {
-      Alert.alert('Standard required', 'Select your standard.')
-      return
-    }
-    if (!isSchoolProfile && form.science_exams.length === 0) {
-      Alert.alert('Exam required', 'Select at least one competitive exam.')
+    if (loading) return
+    const nextErrors: FormErrors = {}
+    if (!form.first_name.trim()) nextErrors.first_name = 'Enter your first name.'
+    if (!form.last_name.trim()) nextErrors.last_name = 'Enter your last name.'
+    if (!form.email.trim()) nextErrors.email = 'Enter your email address.'
+    else if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) nextErrors.email = 'Enter a valid email address.'
+    if (!form.password) nextErrors.password = 'Create a password.'
+    else if (form.password.length < 8) nextErrors.password = 'Use at least 8 characters.'
+    else if (!hasSpecialCharacter(form.password)) nextErrors.password = 'Add at least one special character.'
+    if (!form.confirm_password) nextErrors.confirm_password = 'Confirm your password.'
+    else if (form.password !== form.confirm_password) nextErrors.confirm_password = 'The passwords do not match.'
+    if (isSchoolProfile && !form.school_board) nextErrors.school_board = 'Choose your school board.'
+    if (isSchoolProfile && !form.school_standard) nextErrors.school_standard = 'Choose your standard.'
+    if (!isSchoolProfile && form.science_exams.length === 0) nextErrors.science_exams = 'Choose at least one exam goal.'
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors)
       return
     }
 
@@ -95,7 +107,7 @@ export default function RegisterIndividualScreen() {
       const challenge = await authApi.registerIndividual({
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
-        email: form.email.trim(),
+        email: form.email.trim().toLowerCase(),
         password: form.password,
         confirm_password: form.confirm_password,
         education_level: form.education_level,
@@ -120,7 +132,7 @@ export default function RegisterIndividualScreen() {
           : Array.isArray(detail)
             ? detail.map((item: any) => item.msg || JSON.stringify(item)).join('\n')
             : 'Registration failed. Please try again.'
-      Alert.alert('Registration failed', message)
+      setErrors({ submit: message })
     } finally {
       setLoading(false)
     }
@@ -128,35 +140,55 @@ export default function RegisterIndividualScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <AppScreen>
+      <AppScreen tone="auth" contentStyle={styles.screen} keyboardShouldPersistTaps="handled">
         <View style={styles.topRow}>
           <View style={styles.leftHeader}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={18} color={colors.text} />
             </TouchableOpacity>
             <AuthLogoMark size={42} />
-          </View>
-          <View style={styles.stepPill}>
-            <Text style={styles.stepText}>Individual learner</Text>
+            <View>
+              <Text style={styles.brandName}>Eduraa AI</Text>
+              <Text style={styles.brandContext}>Individual learner</Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.heroBlock}>
-          <Text style={styles.kicker}>Personal profile</Text>
-          <Text style={styles.title}>Create your profile</Text>
-          <Text style={styles.subtitle}>
-            Set your exam goal, secure the account, then verify your email to open your learner dashboard.
-          </Text>
+        <View style={styles.identityIntro}>
+          <Text style={styles.kicker}>Individual learner</Text>
+          <Text style={styles.title}>Create your learning space.</Text>
+          <Text style={styles.subtitle}>Tell us where you are headed. You can change your goals anytime.</Text>
+          <View style={styles.intelligenceCue}>
+            <View style={styles.cueIcon}><Ionicons name="sparkles" size={15} color="#ffffff" /></View>
+            <Text style={styles.cueText}>Your goal shapes what Eduraa recommends first.</Text>
+          </View>
         </View>
 
-        <View style={styles.formCard}>
-          <Text style={styles.sectionEyebrow}>Personal information</Text>
+        {errors.submit ? (
+          <View style={styles.errorBanner} accessibilityRole="alert">
+            <Ionicons name="alert-circle-outline" size={19} color="#c2410c" />
+            <View style={styles.errorBannerCopy}>
+              <Text style={styles.errorBannerTitle}>We couldn’t create your account</Text>
+              <Text style={styles.errorBannerText}>{errors.submit}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={[styles.formCard, styles.identityCard]}>
+          <View style={[styles.sectionMarker, styles.sectionMarkerActive]}><Text style={styles.sectionMarkerText}>1</Text></View>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionEyebrow}>Personal information</Text>
+              <Text style={styles.sectionTitle}>A little about you</Text>
+            </View>
+          </View>
           <View style={styles.fieldStack}>
-            <TextInputField label="First name" value={form.first_name} onChangeText={(value) => update('first_name', value)} placeholder="First" />
-            <TextInputField label="Last name" value={form.last_name} onChangeText={(value) => update('last_name', value)} placeholder="Last" />
+            <TextInputField label="First name" error={errors.first_name} value={form.first_name} onChangeText={(value) => update('first_name', value)} placeholder="Your first name" autoComplete="given-name" textContentType="givenName" />
+            <TextInputField label="Last name" error={errors.last_name} value={form.last_name} onChangeText={(value) => update('last_name', value)} placeholder="Your last name" autoComplete="family-name" textContentType="familyName" />
           </View>
           <TextInputField
-            label="Email"
+            label="Email address"
+            error={errors.email}
             value={form.email}
             onChangeText={(value) => update('email', value)}
             keyboardType="email-address"
@@ -164,13 +196,21 @@ export default function RegisterIndividualScreen() {
             autoCorrect={false}
             left={<Ionicons name="mail-outline" size={18} color={colors.accentStrong} />}
             placeholder="you@example.com"
+            autoComplete="email"
+            textContentType="emailAddress"
           />
+          <View style={styles.identityNote}>
+            <Ionicons name="shield-checkmark-outline" size={16} color={colors.accentStrong} />
+            <Text style={styles.identityNoteText}>We’ll send a verification code to this email.</Text>
+          </View>
         </View>
 
         <View style={styles.formCard}>
+          <View style={styles.sectionMarker}><Text style={styles.sectionMarkerText}>2</Text></View>
           <Text style={styles.sectionEyebrow}>Account information</Text>
           <TextInputField
             label="Password"
+            error={errors.password}
             value={form.password}
             onChangeText={(value) => update('password', value)}
             secureTextEntry={!showPassword}
@@ -181,9 +221,30 @@ export default function RegisterIndividualScreen() {
               </TouchableOpacity>
             )}
             placeholder="Minimum 8 characters"
+            autoComplete="new-password"
+            textContentType="newPassword"
           />
+          {form.password.length > 0 || form.confirm_password.length > 0 ? (
+            <View style={styles.passwordGuide}>
+              <View style={styles.passwordGuideHeader}>
+                <Text style={styles.passwordGuideTitle}>Password guide</Text>
+                <Text style={styles.passwordStrength}>
+                  {form.password.length >= 8 && hasSpecialCharacter(form.password) && form.password === form.confirm_password
+                    ? 'Ready'
+                    : 'Keep going'}
+                </Text>
+              </View>
+              <PasswordRequirement met={form.password.length >= 8} label="At least 8 characters long" />
+              <PasswordRequirement met={hasSpecialCharacter(form.password)} label="Includes a special character" />
+              <PasswordRequirement
+                met={form.confirm_password.length > 0 && form.password === form.confirm_password}
+                label="Passwords match"
+              />
+            </View>
+          ) : null}
           <TextInputField
             label="Confirm password"
+            error={errors.confirm_password}
             value={form.confirm_password}
             onChangeText={(value) => update('confirm_password', value)}
             secureTextEntry={!showConfirmPassword}
@@ -194,10 +255,13 @@ export default function RegisterIndividualScreen() {
               </TouchableOpacity>
             )}
             placeholder="Repeat your password"
+            autoComplete="new-password"
+            textContentType="newPassword"
           />
         </View>
 
         <View style={styles.formCard}>
+          <View style={styles.sectionMarker}><Text style={styles.sectionMarkerText}>3</Text></View>
           <Text style={styles.sectionEyebrow}>Education profile</Text>
           <View style={styles.segment}>
             {[
@@ -227,8 +291,8 @@ export default function RegisterIndividualScreen() {
 
           {isSchoolProfile ? (
             <View style={styles.fieldStack}>
-              <SelectField label="Board" value={form.school_board} options={schoolBoardOptions} placeholder="Select board" onChange={(value) => update('school_board', value)} />
-              <SelectField label="Standard" value={form.school_standard} options={schoolStandardOptions} placeholder="Select standard" onChange={(value) => update('school_standard', value)} searchable={false} />
+              <SelectField label="Board" error={errors.school_board} value={form.school_board} options={schoolBoardOptions} placeholder="Select board" onChange={(value) => update('school_board', value)} />
+              <SelectField label="Standard" error={errors.school_standard} value={form.school_standard} options={schoolStandardOptions} placeholder="Select standard" onChange={(value) => update('school_standard', value)} searchable={false} />
             </View>
           ) : (
             <View style={styles.examStack}>
@@ -244,12 +308,12 @@ export default function RegisterIndividualScreen() {
                 )
               })}
               <Text style={styles.examHint}>
-                {form.science_exams.length ? `${form.science_exams.length} exam${form.science_exams.length > 1 ? 's' : ''} selected` : 'Select at least one exam'}
+                {errors.science_exams ?? (form.science_exams.length ? `${form.science_exams.length} exam${form.science_exams.length > 1 ? 's' : ''} selected` : 'Select at least one exam')}
               </Text>
             </View>
           )}
 
-          <AnimatedButton label="Create account" onPress={handleRegister} loading={loading} style={styles.cta} />
+          <AnimatedButton label="Create account" onPress={handleRegister} loading={loading} variant="auth" style={styles.cta} />
         </View>
       </AppScreen>
     </KeyboardAvoidingView>
@@ -259,6 +323,9 @@ export default function RegisterIndividualScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  screen: {
+    gap: spacing[4],
   },
   topRow: {
     flexDirection: 'row',
@@ -270,11 +337,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
   },
+  brandName: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    letterSpacing: -0.2,
+  },
+  brandContext: {
+    color: colors.textMuted,
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    marginTop: 1,
+  },
   backButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: colors.backgroundElevated,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
@@ -283,54 +362,125 @@ const styles = StyleSheet.create({
   },
   stepPill: {
     borderRadius: radius.full,
-    backgroundColor: colors.accentMid,
+    backgroundColor: '#fff0e5',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
   },
   stepText: {
-    color: colors.accentStrong,
+    color: '#c2410c',
     fontFamily: fonts.bold,
     fontSize: 10,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
-  heroBlock: {
+  identityIntro: {
     gap: spacing[1],
-    borderRadius: radius['2xl'],
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.backgroundElevated,
-    padding: spacing[4],
-    ...shadows.sm,
+    paddingTop: spacing[4],
+    paddingBottom: spacing[3],
   },
   kicker: {
-    color: colors.accentStrong,
+    color: '#c2410c',
     fontFamily: fonts.bold,
     fontSize: 11,
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
   title: {
-    color: colors.text,
+    color: '#07152d',
     fontFamily: fonts.displayBold,
-    fontSize: 25,
-    lineHeight: 29,
-    letterSpacing: 0,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.45,
   },
   subtitle: {
-    color: colors.textMuted,
+    color: '#667085',
     fontFamily: fonts.medium,
     fontSize: 13,
     lineHeight: 20,
   },
-  formCard: {
+  intelligenceCue: {
+    marginTop: spacing[3],
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[3],
-    borderRadius: radius.sheet,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.backgroundElevated,
-    padding: spacing[4],
-    ...shadows.sm,
+    borderRadius: radius.lg,
+    backgroundColor: '#07152d',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    overflow: 'hidden',
+  },
+  cueIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f36c21',
+  },
+  cueText: {
+    flex: 1,
+    color: '#d9e2ee',
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  formCard: {
+    position: 'relative',
+    gap: spacing[3],
+    marginLeft: spacing[2],
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(7,21,45,0.16)',
+    paddingLeft: spacing[5],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[1],
+  },
+  identityCard: {
+    borderTopWidth: 0,
+    paddingTop: spacing[2],
+  },
+  sectionMarker: {
+    position: 'absolute',
+    left: -13,
+    top: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: '#fbf6ec',
+    backgroundColor: '#07152d',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#07152d',
+    shadowOpacity: 0.15,
+    shadowRadius: 7,
+  },
+  sectionMarkerActive: { backgroundColor: '#f36c21' },
+  sectionMarkerText: { color: '#ffffff', fontFamily: fonts.bold, fontSize: 11 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing[3],
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontFamily: fonts.displaySemibold,
+    fontSize: 19,
+    marginTop: spacing[1],
+  },
+  identityNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[2],
+    paddingHorizontal: spacing[1],
+  },
+  identityNoteText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
   },
   sectionEyebrow: {
     color: colors.textMuted,
@@ -421,5 +571,68 @@ const styles = StyleSheet.create({
   },
   cta: {
     marginTop: spacing[2],
+    marginBottom: spacing[5],
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+    backgroundColor: '#fff7ed',
+    padding: spacing[4],
+  },
+  errorBannerCopy: { flex: 1, gap: 2 },
+  errorBannerTitle: { color: '#9a3412', fontFamily: fonts.bold, fontSize: 13 },
+  errorBannerText: { color: '#7c2d12', fontFamily: fonts.medium, fontSize: 12, lineHeight: 18 },
+  passwordGuide: {
+    gap: spacing[2],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.background,
+    padding: spacing[3],
+  },
+  passwordGuideHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  passwordGuideTitle: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  passwordStrength: {
+    color: colors.accentStrong,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+  },
+  passwordRequirement: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  requirementIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requirementIconMet: {
+    borderColor: colors.accentStrong,
+    backgroundColor: colors.accentStrong,
+  },
+  requirementText: {
+    color: colors.textMuted,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+  },
+  requirementTextMet: {
+    color: colors.text,
   },
 })

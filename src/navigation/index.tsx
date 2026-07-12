@@ -8,7 +8,8 @@ import { useAuthStore } from '../stores/authStore'
 import { colors } from '../theme/colors'
 import { fonts } from '../theme/fonts'
 import { spacing } from '../theme/spacing'
-import type { Role } from '../types'
+import type { AccountMinimal } from '../types'
+import { resolveMobileLanding } from '../auth/landing'
 
 import LoginScreen from '../screens/auth/LoginScreen'
 import RegisterScreen from '../screens/auth/RegisterScreen'
@@ -73,6 +74,7 @@ export type LearningStackParamList = {
   Attendance: undefined
   ScanUpload: undefined
   Exams: undefined
+  AIStudio: undefined
 }
 
 export type StaffWorkspaceStackParamList = {
@@ -96,12 +98,8 @@ export type ProfileStackParamList = {
 export type TabParamList = {
   Home: undefined
   Learning: undefined
-  Exams: undefined
   Papers: undefined
   Results: undefined
-  ScanUpload: undefined
-  Attendance: undefined
-  AIStudio: undefined
   Profile: undefined
 }
 
@@ -124,6 +122,7 @@ const ProfileStack = createNativeStackNavigator<ProfileStackParamList>()
 const StaffWorkspaceStack = createNativeStackNavigator<StaffWorkspaceStackParamList>()
 const Tab = createBottomTabNavigator<TabParamList>()
 const StaffTab = createBottomTabNavigator<StaffTabParamList>()
+const OnboardingStack = createNativeStackNavigator<{ B2COnboarding: undefined }>()
 
 const stackScreenOptions = {
   headerStyle: {
@@ -174,9 +173,9 @@ function ResultsNavigator() {
   )
 }
 
-function LearningNavigator() {
+function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
   return (
-    <LearningStack.Navigator screenOptions={stackScreenOptions}>
+    <LearningStack.Navigator initialRouteName={competitive ? 'CompetitiveExam' : 'LearningHome'} screenOptions={stackScreenOptions}>
       <LearningStack.Screen name="LearningHome" component={LearningHomeScreen} options={{ title: 'Learning' }} />
       <LearningStack.Screen name="CompetitiveExam" component={CompetitiveExamScreen} options={{ title: 'JEE resources' }} />
       <LearningStack.Screen name="CompetitiveSubject" component={CompetitiveSubjectScreen} options={{ title: 'Competitive subject' }} />
@@ -189,6 +188,7 @@ function LearningNavigator() {
       <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <LearningStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
       <LearningStack.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
+      <LearningStack.Screen name="AIStudio" component={AIStudioScreen} options={{ title: 'AI Studio' }} />
     </LearningStack.Navigator>
   )
 }
@@ -201,36 +201,23 @@ function ProfileNavigator() {
   )
 }
 
-const learnerRoles: Role[] = ['b2c_student', 'student']
-
-function isLearnerRole(role?: Role) {
-  return role ? learnerRoles.includes(role) : false
-}
-
-function formatRole(role?: Role) {
-  if (!role) return 'Unknown workspace'
-  return role
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function StudentTabs() {
+function StudentTabs({ competitive = false }: { competitive?: boolean }) {
   return (
     <Tab.Navigator
+      initialRouteName="Home"
       tabBar={(props) => <BottomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Learning" component={LearningNavigator} options={{ title: 'Learning' }} />
-      <Tab.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
+      <Tab.Screen name="Home">
+        {() => <HomeScreen competitive={competitive} />}
+      </Tab.Screen>
+      <Tab.Screen name="Learning" options={{ title: 'Learning' }}>
+        {() => <LearningNavigator competitive={competitive} />}
+      </Tab.Screen>
       <Tab.Screen name="Papers" component={PapersNavigator} options={{ title: 'Papers' }} />
       <Tab.Screen name="Results" component={ResultsNavigator} options={{ title: 'Results' }} />
-      <Tab.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan' }} />
-      <Tab.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
-      <Tab.Screen name="AIStudio" component={AIStudioScreen} options={{ title: 'AI Studio' }} />
       <Tab.Screen name="Profile" component={ProfileNavigator} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   )
@@ -274,11 +261,25 @@ function StaffTabs() {
   )
 }
 
-function AuthenticatedNavigator({ role }: { role?: Role }) {
-  if (isLearnerRole(role)) {
-    return <StudentTabs />
-  }
+function B2COnboardingScreen() {
+  return <ProfileScreen mode="onboarding" />
+}
 
+function OnboardingNavigator() {
+  return (
+    <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
+      <OnboardingStack.Screen name="B2COnboarding" component={B2COnboardingScreen} />
+    </OnboardingStack.Navigator>
+  )
+}
+
+function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
+  const landing = resolveMobileLanding(user)
+  if (landing === 'b2c_onboarding') return <OnboardingNavigator />
+  if (landing === 'competitive_learner') return <StudentTabs competitive />
+  if (landing === 'school_learner') return <StudentTabs />
+  if (landing === 'admin_workspace') return <StaffTabs />
+  if (landing === 'developer_workspace') return <StaffTabs />
   return <StaffTabs />
 }
 
@@ -294,7 +295,12 @@ export default function RootNavigator() {
     )
   }
 
-  return <NavigationContainer>{isAuthenticated ? <AuthenticatedNavigator role={user?.role} /> : <AuthNavigator />}</NavigationContainer>
+  const landingKey = user ? resolveMobileLanding(user) : 'auth'
+  return (
+    <NavigationContainer key={landingKey}>
+      {isAuthenticated && user ? <AuthenticatedNavigator user={user} /> : <AuthNavigator />}
+    </NavigationContainer>
+  )
 }
 
 const styles = StyleSheet.create({

@@ -26,6 +26,8 @@ export interface AccountMinimal {
   b2c_standard?: string | null
   b2c_target_exam?: string | null
   b2c_subjects?: string[] | null
+  exam_track?: string | null
+  is_email_verified?: boolean | null
   class_teacher_opt_in?: boolean | null
   class_teacher_standard?: string | null
   class_teacher_division?: string | null

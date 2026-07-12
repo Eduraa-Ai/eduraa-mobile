@@ -34,6 +34,11 @@ const resolveApiBaseUrl = () => {
 
   if (Platform.OS === 'web') return getWebLocalApiUrl()
 
+  // Android emulators expose the host machine through 10.0.2.2. Using
+  // localhost here points back to the emulator and makes every local API
+  // request fail even when the backend is healthy on Windows.
+  if (Platform.OS === 'android') return `http://10.0.2.2:${LOCAL_API_PORT}`
+
   return `http://localhost:${LOCAL_API_PORT}`
 }
 

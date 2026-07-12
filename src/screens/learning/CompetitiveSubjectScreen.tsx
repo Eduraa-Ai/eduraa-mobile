@@ -6,11 +6,11 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import type { LearningStackParamList } from '../../navigation'
-import { AnimatedCard, AppScreen, SelectableChip } from '../../components/ui'
+import { AppScreen } from '../../components/ui'
 import { competitiveExamApi, CompetitiveChapterOption, CompetitiveStandard } from '../../api/competitiveExam'
 import { getCompetitiveSyllabus } from '../../data/competitiveSyllabus'
 import { useAuthStore } from '../../stores/authStore'
-import { colors, radius, shadows, spacing, typography } from '../../theme'
+import { radius, spacing, typography } from '../../theme'
 import {
   chapterIdentity,
   decodeRouteParam,
@@ -20,7 +20,6 @@ import {
   profileSubjects,
   splitDistinctValues,
   standardVariants,
-  subjectSupportCopy,
   subjectSymbol,
   subjectTone,
 } from './competitiveExamUtils'
@@ -129,8 +128,8 @@ export default function CompetitiveSubjectScreen() {
 
   if (!allowed) {
     return (
-      <AppScreen contentStyle={styles.center}>
-        <Ionicons name="lock-closed-outline" size={34} color={colors.accentStrong} />
+      <AppScreen tone="auth" ambient={false} contentStyle={styles.center}>
+        <Ionicons name="lock-closed-outline" size={34} color="#f36c21" />
         <Text style={styles.centerTitle}>Competitive Exam is for JEE learners</Text>
         <TouchableOpacity activeOpacity={0.86} onPress={() => navigation.navigate('LearningHome')} style={styles.centerButton}>
           <Text style={styles.centerButtonText}>Back to Learning</Text>
@@ -141,8 +140,8 @@ export default function CompetitiveSubjectScreen() {
 
   if (!activeSubjectName) {
     return (
-      <AppScreen contentStyle={styles.center}>
-        <Ionicons name="alert-circle-outline" size={34} color={colors.warning} />
+      <AppScreen tone="auth" ambient={false} contentStyle={styles.center}>
+        <Ionicons name="alert-circle-outline" size={34} color="#f59e0b" />
         <Text style={styles.centerTitle}>Subject unavailable</Text>
         <TouchableOpacity activeOpacity={0.86} onPress={() => navigation.navigate('CompetitiveExam')} style={styles.centerButton}>
           <Text style={styles.centerButtonText}>Back to Competitive Exam</Text>
@@ -152,64 +151,69 @@ export default function CompetitiveSubjectScreen() {
   }
 
   const chapters = chaptersQuery.data?.chapters ?? []
-  const isFallback = chaptersQuery.data?.isFallback
+
+  // Subject gradient colors
+  const subjectGradients: Record<string, { start: string; end: string }> = {
+    Physics: { start: '#3b82f6', end: '#1d4ed8' },
+    Chemistry: { start: '#10b981', end: '#047857' },
+    Mathematics: { start: '#8b5cf6', end: '#6d28d9' },
+  }
+  const gradient = subjectGradients[activeSubjectName] || { start: tone, end: tone }
 
   return (
-    <AppScreen contentStyle={styles.screen}>
+    <AppScreen tone="auth" ambient={false} contentStyle={styles.screen}>
+      {/* Compact header: back + icon + subject + toggle — all in one row */}
       <View style={styles.topRow}>
         <TouchableOpacity activeOpacity={0.82} onPress={() => navigation.navigate('CompetitiveExam')} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={17} color={colors.text} />
+          <Ionicons name="arrow-back" size={18} color="#101828" />
         </TouchableOpacity>
+        <LinearGradient
+          colors={[gradient.start, gradient.end]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.subjectMark}
+        >
+          <Text style={styles.subjectMarkText}>{subjectSymbol(activeSubjectName)}</Text>
+        </LinearGradient>
         <View style={styles.topCopy}>
-          <Text style={styles.topKicker}>Competitive exam subject</Text>
           <Text style={styles.topTitle}>{activeSubjectName}</Text>
+          <Text style={styles.topSubtitle}>{trackLabel}</Text>
         </View>
       </View>
 
-      <LinearGradient colors={[colors.slate[950], colors.slate[900], `${tone}55`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <View style={styles.heroHead}>
-          <View style={[styles.subjectMark, { backgroundColor: tone }]}>
-            <Text style={styles.subjectMarkText}>{subjectSymbol(activeSubjectName)}</Text>
-          </View>
-          <View style={styles.trackPill}>
-            <Text style={styles.trackPillText}>{trackLabel}</Text>
-          </View>
-        </View>
-        <Text style={styles.heroTitle}>{activeSubjectName}</Text>
-        <Text style={styles.heroBody}>{subjectSupportCopy(activeSubjectName)}. Select a chapter to open formulas, hacks, revision notes, tutor chat, and MCQ drill.</Text>
-        <View style={styles.heroStats}>
-          <Metric label="Standard" value={selectedStandard} />
-          <Metric label="Chapters" value={chapters.length || '--'} />
-          <Metric label="Source" value={isFallback ? 'Syllabus' : 'Indexed'} />
-        </View>
-      </LinearGradient>
-
+      {/* Standard toggle — compact, outside the hero bloat */}
       <View style={styles.standardRow}>
-        <SelectableChip label="11th" selected={selectedStandard === '11th'} onPress={() => setSelectedStandard('11th')} />
-        <SelectableChip label="12th" selected={selectedStandard === '12th'} onPress={() => setSelectedStandard('12th')} />
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setSelectedStandard('11th')}
+          style={[styles.toggleChip, selectedStandard === '11th' && styles.toggleChipActive]}
+        >
+          <Text style={[styles.toggleChipText, selectedStandard === '11th' && styles.toggleChipTextActive]}>11th</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setSelectedStandard('12th')}
+          style={[styles.toggleChip, selectedStandard === '12th' && styles.toggleChipActive]}
+        >
+          <Text style={[styles.toggleChipText, selectedStandard === '12th' && styles.toggleChipTextActive]}>12th</Text>
+        </TouchableOpacity>
       </View>
 
-      {isFallback ? (
-        <View style={styles.noticeCard}>
-          <Ionicons name="information-circle-outline" size={18} color={colors.info} />
-          <Text style={styles.noticeText}>{chaptersQuery.data?.sourceSummary || 'Showing syllabus fallback because indexed chapter data is not available yet.'}</Text>
+      {chaptersQuery.isLoading ? (
+        <View style={styles.inlineLoading}>
+          <ActivityIndicator color="#f36c21" />
+          <Text style={styles.inlineLoadingText}>Loading chapters</Text>
         </View>
       ) : null}
 
       {optionsQuery.isError ? (
         <View style={styles.noticeCard}>
-          <Ionicons name="alert-circle-outline" size={18} color={colors.warning} />
-          <Text style={styles.noticeText}>Unable to load indexed subjects. Showing syllabus fallback when available.</Text>
+          <Ionicons name="alert-circle-outline" size={16} color="#b45309" />
+          <Text style={styles.noticeText}>Could not load indexed subjects. Showing syllabus chapters.</Text>
         </View>
       ) : null}
 
-      {chaptersQuery.isLoading ? (
-        <View style={styles.inlineLoading}>
-          <ActivityIndicator color={colors.accent} />
-          <Text style={styles.inlineLoadingText}>Loading chapters</Text>
-        </View>
-      ) : null}
-
+      {/* Chapter list — no redundant section header, just the list */}
       <View style={styles.chapterList}>
         {chapters.map((chapter, index) => {
           const key = chapterIdentity(chapter, index)
@@ -220,195 +224,172 @@ export default function CompetitiveSubjectScreen() {
               style={({ pressed }) => [styles.chapterCard, pressed && styles.pressed]}
             >
               <View style={styles.chapterTop}>
-                <View style={[styles.chapterIndex, { backgroundColor: `${tone}16`, borderColor: `${tone}40` }]}>
-                  <Text style={[styles.chapterIndexText, { color: tone }]}>
+                <View style={[styles.chapterIndex, { borderColor: `${gradient.start}30`, backgroundColor: `${gradient.start}0a` }]}>
+                  <Text style={[styles.chapterIndexText, { color: gradient.start }]}>
                     {String(chapter.index ?? index + 1).padStart(2, '0')}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSoft} />
+                <View style={styles.chapterContent}>
+                  <Text style={styles.chapterTitle}>{chapter.title}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
               </View>
-              <Text style={styles.chapterTitle}>{chapter.title}</Text>
-              <Text style={styles.chapterBody} numberOfLines={2}>
-                {chapter.document_title || 'Open dedicated study workspace for this chapter.'}
-              </Text>
             </Pressable>
           )
         })}
       </View>
 
       {!chaptersQuery.isLoading && chapters.length === 0 ? (
-        <AnimatedCard style={styles.emptyCard}>
+        <View style={styles.emptyCard}>
+          <Ionicons name="book-outline" size={28} color="#94a3b8" />
           <Text style={styles.emptyTitle}>No chapters found</Text>
-          <Text style={styles.emptyBody}>Try the other standard toggle or check whether this subject has indexed books for your exam track.</Text>
-        </AnimatedCard>
+          <Text style={styles.emptyBody}>Try switching between 11th and 12th above.</Text>
+        </View>
       ) : null}
     </AppScreen>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
-    </View>
   )
 }
 
 const styles = StyleSheet.create({
   screen: {
     paddingBottom: spacing[20],
+    backgroundColor: '#fbf6ec',
+    gap: spacing[3],
   },
   center: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingBottom: spacing[20],
+    backgroundColor: '#fbf6ec',
   },
   centerTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: 'Georgia',
+    fontWeight: '700',
+    color: '#101828',
     fontSize: 18,
+    marginTop: spacing[4],
+    letterSpacing: -0.2,
   },
   centerButton: {
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: radius.full,
-    backgroundColor: colors.nav,
-    paddingHorizontal: spacing[5],
+    backgroundColor: '#f36c21',
+    paddingHorizontal: spacing[6],
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: spacing[5],
+    shadowColor: '#f36c21',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
   centerButtonText: {
-    color: colors.white,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 13,
+    color: '#ffffff',
+    fontSize: 14,
   },
+
+  // Compact header
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
+    paddingHorizontal: spacing[1],
   },
   backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.lg,
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.xs,
+    borderColor: '#e0d6c8',
+    shadowColor: 'rgba(0,0,0,0.04)',
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  subjectMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subjectMarkText: {
+    fontFamily: 'Georgia',
+    fontWeight: '700',
+    color: '#ffffff',
+    fontSize: 18,
   },
   topCopy: {
     flex: 1,
     minWidth: 0,
   },
-  topKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.accentStrong,
-  },
   topTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.heading,
+    fontFamily: 'Georgia',
+    fontWeight: '700',
+    color: '#101828',
     fontSize: 22,
-    lineHeight: 27,
+    lineHeight: 26,
+    letterSpacing: -0.3,
   },
-  hero: {
-    borderRadius: radius['2xl'],
-    padding: spacing[5],
-    gap: spacing[3],
-    overflow: 'hidden',
-    ...shadows.lg,
-  },
-  heroHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  subjectMark: {
-    width: 54,
-    height: 54,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  subjectMarkText: {
-    color: colors.white,
-    fontFamily: typography.fonts.heading,
-    fontSize: 22,
-  },
-  trackPill: {
-    flexShrink: 1,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  trackPillText: {
-    color: colors.textOnDark,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-  },
-  heroTitle: {
-    color: colors.white,
-    fontFamily: typography.fonts.heading,
-    fontSize: 30,
-    lineHeight: 35,
-  },
-  heroBody: {
-    color: 'rgba(255,255,255,0.74)',
+  topSubtitle: {
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 14,
-    lineHeight: 21,
+    color: '#5c6a82',
+    fontSize: 13,
+    marginTop: 1,
   },
-  heroStats: {
-    flexDirection: 'row',
-    gap: spacing[2],
-    marginTop: spacing[2],
-  },
-  metric: {
-    flex: 1,
-    minHeight: 66,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    padding: spacing[3],
-    justifyContent: 'center',
-  },
-  metricLabel: {
-    color: 'rgba(255,255,255,0.58)',
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  metricValue: {
-    color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 16,
-    marginTop: spacing[1],
-  },
+
+  // Standard toggle — compact segmented
   standardRow: {
     flexDirection: 'row',
-    gap: spacing[2],
+    alignSelf: 'flex-start',
+    gap: 2,
+    backgroundColor: '#ffffff',
+    borderRadius: radius.full,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#e0d6c8',
+    shadowColor: 'rgba(0,0,0,0.03)',
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
   },
+  toggleChip: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: 8,
+    borderRadius: radius.full,
+  },
+  toggleChipActive: {
+    backgroundColor: '#f36c21',
+  },
+  toggleChipText: {
+    fontFamily: typography.fonts.bodyBold,
+    color: '#94a3b8',
+    fontSize: 13,
+  },
+  toggleChipTextActive: {
+    color: '#ffffff',
+  },
+
+  // Notice
   noticeCard: {
     flexDirection: 'row',
     gap: spacing[2],
-    borderRadius: radius.lg,
+    borderRadius: 14,
     padding: spacing[3],
-    backgroundColor: colors.infoSurface,
+    backgroundColor: 'rgba(180,83,9,0.06)',
     borderWidth: 1,
-    borderColor: colors.infoBorder,
+    borderColor: 'rgba(180,83,9,0.12)',
   },
   noticeText: {
     flex: 1,
-    color: colors.infoText,
     fontFamily: typography.fonts.bodyMedium,
+    color: '#b45309',
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   inlineLoading: {
     flexDirection: 'row',
@@ -416,61 +397,80 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   inlineLoadingText: {
-    ...typography.roles.label,
-    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    color: '#5c6a82',
+    fontSize: 12,
   },
+
+  // Chapter list
   chapterList: {
-    gap: spacing[3],
+    gap: spacing[2],
   },
   chapterCard: {
-    minHeight: 124,
-    borderRadius: radius.xl,
-    backgroundColor: colors.card,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#e0d6c8',
     padding: spacing[4],
-    gap: spacing[3],
-    ...shadows.sm,
+    shadowColor: 'rgba(0,0,0,0.03)',
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   chapterTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing[3],
   },
   chapterIndex: {
-    minWidth: 44,
-    height: 36,
-    borderRadius: radius.md,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    flexShrink: 0,
   },
   chapterIndexText: {
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
+    fontFamily: 'Georgia',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  chapterContent: {
+    flex: 1,
+    minWidth: 0,
   },
   chapterTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 17,
-    lineHeight: 22,
+    fontFamily: 'Georgia',
+    fontWeight: '700',
+    color: '#101828',
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.1,
   },
-  chapterBody: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 19,
-  },
+
+  // Empty state
   emptyCard: {
+    alignItems: 'center',
     gap: spacing[2],
+    backgroundColor: '#ffffff',
+    borderColor: '#e0d6c8',
+    borderRadius: 20,
+    padding: spacing[6],
   },
   emptyTitle: {
-    ...typography.roles.title,
-    color: colors.text,
+    fontFamily: 'Georgia',
+    fontWeight: '700',
+    color: '#101828',
+    fontSize: 16,
+    letterSpacing: -0.2,
   },
   emptyBody: {
-    ...typography.roles.body,
-    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.78,

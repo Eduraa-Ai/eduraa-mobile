@@ -9,7 +9,7 @@ interface AnimatedButtonProps {
   icon?: ReactNode
   loading?: boolean
   disabled?: boolean
-  variant?: 'primary' | 'secondary' | 'ghost'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'auth'
   style?: ViewStyle
 }
 
@@ -26,7 +26,8 @@ export function AnimatedButton({ label, onPress, icon, loading = false, disabled
   }
 
   const isPrimary = variant === 'primary'
-  const labelColor = isPrimary ? colors.textOnBrand : variant === 'secondary' ? colors.accentStrong : colors.text
+  const isAuth = variant === 'auth'
+  const labelColor = isPrimary || isAuth ? colors.textOnBrand : variant === 'secondary' ? colors.accentStrong : colors.text
 
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
@@ -44,8 +45,8 @@ export function AnimatedButton({ label, onPress, icon, loading = false, disabled
             {!loading ? <Text style={[styles.label, { color: labelColor }]}>{label}</Text> : null}
           </LinearGradient>
         ) : (
-          <Animated.View style={[styles.fill, variant === 'secondary' ? styles.secondary : styles.ghost]}>
-            {loading ? <ActivityIndicator color={colors.accent} /> : null}
+          <Animated.View style={[styles.fill, isAuth ? styles.auth : variant === 'secondary' ? styles.secondary : styles.ghost]}>
+            {loading ? <ActivityIndicator color={isAuth ? colors.white : colors.accent} /> : null}
             {!loading && icon ? icon : null}
             {!loading ? <Text style={[styles.label, { color: labelColor }]}>{label}</Text> : null}
           </Animated.View>
@@ -73,6 +74,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSurface,
     borderWidth: 1,
     borderColor: colors.borderBrand,
+  },
+  auth: {
+    borderRadius: 16,
+    backgroundColor: '#07152d',
+    shadowColor: '#07152d',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
   },
   ghost: {
     backgroundColor: colors.backgroundElevated,

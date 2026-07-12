@@ -104,6 +104,11 @@ export const authApi = {
     return response.data
   },
 
+  forgotPassword: async (identifier: string): Promise<string> => {
+    const response = await apiClient.post<{ message: string }>('/auth/forgot-password', { identifier })
+    return response.data.message
+  },
+
   listSchools: async (): Promise<SchoolOption[]> => {
     const response = await apiClient.get<SchoolOption[]>('/schools')
     return response.data

@@ -9,7 +9,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { colors } from '../../theme/colors'
 import { fonts } from '../../theme/fonts'
 import { radius, shadows, spacing } from '../../theme/spacing'
-import type { B2CProfileRead, EducationLevel } from '../../types'
+import type { AccountMinimal, B2CProfileRead, EducationLevel } from '../../types'
 import { AnimatedButton } from '../../components/ui/AnimatedButton'
 import { Screen } from '../../components/ui/Screen'
 import { SelectField } from '../../components/ui/SelectField'
@@ -102,7 +102,12 @@ function DetailRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMa
   )
 }
 
-export default function ProfileScreen() {
+type ProfileScreenProps = {
+  mode?: 'profile' | 'onboarding'
+}
+
+export default function ProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
+  const isOnboarding = mode === 'onboarding'
   const queryClient = useQueryClient()
   const { logout, user } = useAuthStore()
   const { data: profile, isLoading } = useQuery({
@@ -110,7 +115,7 @@ export default function ProfileScreen() {
     queryFn: b2cApi.getProfile,
   })
 
-  const [isEditing, setIsEditing] = useState(false)
+  const [isEditing, setIsEditing] = useState(isOnboarding)
   const [form, setForm] = useState<FormState>(emptyForm)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -126,8 +131,9 @@ export default function ProfileScreen() {
       setForm(toFormState(profile))
       setErrors({})
       setSaveError(null)
+      if (isOnboarding) setIsEditing(true)
     }
-  }, [profile])
+  }, [isOnboarding, profile])
 
   const fullName = profile ? `${profile.first_name} ${profile.last_name}`.trim() : (user?.display_name || 'Student')
   const initials = fullName
@@ -214,16 +220,29 @@ export default function ProfileScreen() {
         school_standard: isSchoolProfile ? form.schoolStandard : selectedExamText || null,
         subjects: null,
       })
-      const refreshedUser = await authApi.me().catch(() => null)
+      let refreshedUser: AccountMinimal
+      try {
+        refreshedUser = await authApi.me()
+      } catch {
+        if (!user) throw new Error('identity_refresh_failed')
+        refreshedUser = {
+          ...user,
+          profile_completed: updatedProfile.profile_completed,
+          b2c_education_level: updatedProfile.education_level,
+          b2c_board: updatedProfile.school_board || updatedProfile.board || null,
+          b2c_standard: updatedProfile.school_standard || updatedProfile.standard || null,
+          b2c_target_exam: updatedProfile.competitive_exam || null,
+          b2c_subjects: updatedProfile.subjects || null,
+          is_email_verified: updatedProfile.is_email_verified,
+        }
+      }
       return { updatedProfile, refreshedUser }
     },
     onSuccess: ({ updatedProfile, refreshedUser }) => {
       queryClient.setQueryData(['b2c-profile'], updatedProfile)
       queryClient.invalidateQueries({ queryKey: ['b2c-profile'] })
-      if (refreshedUser) {
-        useAuthStore.setState({ user: refreshedUser })
-      }
-      setIsEditing(false)
+      useAuthStore.setState({ user: refreshedUser })
+      if (!isOnboarding) setIsEditing(false)
     },
     onError: (err: any) => {
       if (err?.message === 'validation') return
@@ -256,10 +275,10 @@ export default function ProfileScreen() {
       <Screen keyboardShouldPersistTaps="handled" contentStyle={styles.screen}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.kicker}>Profile</Text>
-            <Text style={styles.title}>Account</Text>
+            <Text style={styles.kicker}>{isOnboarding ? 'Welcome to Eduraa' : 'Profile'}</Text>
+            <Text style={styles.title}>{isOnboarding ? 'Complete your profile' : 'Account'}</Text>
           </View>
-          <TouchableOpacity
+          {!isOnboarding ? <TouchableOpacity
             activeOpacity={0.86}
             style={[styles.headerAction, isEditing && styles.headerActionActive]}
             onPress={() => {
@@ -271,7 +290,7 @@ export default function ProfileScreen() {
             }}
           >
             <Ionicons name={isEditing ? 'close' : 'create-outline'} size={19} color={isEditing ? colors.accentStrong : colors.text} />
-          </TouchableOpacity>
+          </TouchableOpacity> : null}
         </View>
 
         <View style={styles.identityCard}>
@@ -396,16 +415,16 @@ export default function ProfileScreen() {
             ) : null}
 
             <View style={styles.editActions}>
-              <TouchableOpacity activeOpacity={0.86} style={styles.cancelButton} onPress={handleCancel} disabled={updateMutation.isPending}>
+              {!isOnboarding ? <TouchableOpacity activeOpacity={0.86} style={styles.cancelButton} onPress={handleCancel} disabled={updateMutation.isPending}>
                 <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> : null}
               <AnimatedButton
-                label="Save"
+                label={isOnboarding ? 'Continue' : 'Save'}
                 loading={updateMutation.isPending}
                 disabled={updateMutation.isPending}
                 icon={<Ionicons name="checkmark" size={18} color={colors.textOnBrand} />}
                 onPress={() => updateMutation.mutate()}
-                style={styles.saveButton}
+                style={isOnboarding ? styles.onboardingSaveButton : styles.saveButton}
               />
             </View>
           </View>
@@ -731,6 +750,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   saveButton: {
+    flex: 1,
+  },
+  onboardingSaveButton: {
     flex: 1,
   },
   signOutButton: {
