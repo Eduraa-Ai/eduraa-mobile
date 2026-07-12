@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eduraa — Full App Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',-apple-system,sans-serif;background:#e8e4de;padding:32px 20px;display:flex;flex-wrap:wrap;justify-content:center;gap:24px;align-items:flex-start;}
+  .phone{width:375px;height:812px;border-radius:44px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.12);position:relative;flex-shrink:0;}
+  .phone-label{position:absolute;top:-28px;left:0;right:0;text-align:center;font-size:11px;font-weight:700;color:#64748b;letter-spacing:1px;text-transform:uppercase;}
+  .screen{width:100%;height:100%;background:#fbf6ec;overflow-y:auto;padding:52px 18px 28px;position:relative;}
+  .screen::-webkit-scrollbar{display:none;}
+  .screen.dark{background:#020617;}
+
+  /* ── Shared ── */
+  .row{display:flex;align-items:center;gap:12px;}
+  .between{justify-content:space-between;}
+  .back{width:40px;height:40px;border-radius:14px;background:#fff;border:1px solid #e0d6c8;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;}
+  .back svg{width:16px;height:16px;}
+  .icon-circle{width:40px;height:40px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:16px;font-weight:700;color:#fff;flex-shrink:0;}
+  .h1{font-family:Georgia,serif;font-size:22px;font-weight:700;color:#101828;letter-spacing:-0.3px;}
+  .h2{font-family:Georgia,serif;font-size:18px;font-weight:700;color:#101828;letter-spacing:-0.2px;}
+  .h3{font-family:Georgia,serif;font-size:15px;font-weight:700;color:#101828;letter-spacing:-0.1px;}
+  .sub{font-size:12px;color:#5c6a82;font-weight:500;margin-top:1px;}
+  .card{background:#fff;border:1px solid #e0d6c8;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.03);}
+  .chip{display:inline-flex;padding:7px 16px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;}
+  .chip-active{background:#f36c21;color:#fff;}
+  .chip-inactive{background:#fff;color:#64748b;border:1px solid #e0d6c8;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 24px;border-radius:100px;font-size:14px;font-weight:600;cursor:pointer;border:none;}
+  .btn-primary{background:#f36c21;color:#fff;box-shadow:0 4px 14px rgba(243,108,33,0.3);}
+  .btn-secondary{background:#fff;color:#101828;border:1px solid #e0d6c8;}
+  .divider{height:1px;background:#e0d6c8;margin:14px 0;}
+  .mb{margin-bottom:10px;}
+  .mb2{margin-bottom:16px;}
+  .mb3{margin-bottom:24px;}
+  .gap{gap:8px;}
+  .gap2{gap:12px;}
+
+  /* ══════════════════════════════════════════
+     SCREEN 1: COMPETITIVE HOME
+  ══════════════════════════════════════════ */
+  .home-greeting{font-size:13px;color:#5c6a82;font-weight:500;}
+  .home-name{font-family:Georgia,serif;font-size:22px;font-weight:700;color:#101828;}
+  .home-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#f36c21,#ea580c);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:700;}
+  .home-bell{width:40px;height:40px;border-radius:14px;background:#fff;border:1px solid #e0d6c8;display:flex;align-items:center;justify-content:center;}
+  .home-bell svg{width:18px;height:18px;}
+  .subject-card{display:flex;align-items:center;gap:14px;padding:14px 16px;background:#fff;border:1px solid #e0d6c8;border-radius:18px;margin-bottom:8px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.03);}
+  .subject-card:hover{box-shadow:0 4px 14px rgba(0,0,0,0.06);}
+  .progress-ring{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:12px;font-weight:700;flex-shrink:0;position:relative;}
+  .progress-ring::before{content:'';position:absolute;inset:0;border-radius:50%;border:3px solid #e0d6c8;}
+  .quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;}
+  .quick-item{display:flex;align-items:center;gap:10px;padding:14px;background:#fff;border:1px solid #e0d6c8;border-radius:16px;cursor:pointer;font-size:13px;font-weight:600;color:#101828;box-shadow:0 1px 4px rgba(0,0,0,0.02);}
+  .quick-item:hover{box-shadow:0 3px 10px rgba(0,0,0,0.05);}
+  .quick-icon{width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+
+  /* ══════════════════════════════════════════
+     SCREEN 2: SUBJECT DETAIL
+  ══════════════════════════════════════════ */
+  .toggle{display:inline-flex;gap:2px;background:#fff;border:1px solid #e0d6c8;border-radius:100px;padding:3px;}
+  .toggle-chip{padding:7px 18px;border-radius:100px;font-size:13px;font-weight:600;color:#94a3b8;cursor:pointer;}
+  .toggle-chip.active{background:#f36c21;color:#fff;}
+  .ch-row{display:flex;align-items:center;gap:14px;padding:14px 16px;background:#fff;border:1px solid #e0d6c8;border-radius:18px;margin-bottom:8px;cursor:pointer;}
+  .ch-row:hover{box-shadow:0 3px 10px rgba(0,0,0,0.05);}
+  .ch-num{width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:14px;font-weight:700;border:1px solid;flex-shrink:0;}
+  .ch-name{flex:1;font-family:Georgia,serif;font-size:15px;font-weight:700;color:#101828;line-height:1.3;}
+  .ch-chevron{flex-shrink:0;width:16px;height:16px;color:#94a3b8;}
+
+  /* ══════════════════════════════════════════
+     SCREEN 3: CHAPTER WORKSPACE
+  ══════════════════════════════════════════ */
+  .ws-actions{display:flex;gap:8px;margin:12px 0;}
+  .ws-action-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:16px;font-size:13px;font-weight:600;cursor:pointer;border:none;}
+  .ws-action-primary{background:#f36c21;color:#fff;box-shadow:0 4px 12px rgba(243,108,33,0.25);}
+  .ws-action-secondary{background:#fff;color:#101828;border:1px solid #e0d6c8;}
+  .study-tabs{display:flex;gap:4px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px;}
+  .study-tab{padding:8px 14px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;border:1px solid transparent;}
+  .study-tab.active{background:#101828;color:#fff;border-color:#101828;}
+  .study-tab:not(.active){color:#64748b;background:#fff;border-color:#e0d6c8;}
+  .study-content{background:#fff;border:1px solid #e0d6c8;border-radius:18px;padding:20px;min-height:200px;}
+  .formula-item{padding:12px 0;border-bottom:1px solid #f0ebe2;}
+  .formula-item:last-child{border-bottom:none;}
+  .formula-label{font-size:13px;font-weight:600;color:#101828;margin-bottom:4px;}
+  .formula-eq{font-family:'Courier New',monospace;font-size:14px;color:#3b82f6;font-weight:600;}
+
+  /* ══════════════════════════════════════════
+     SCREEN 4: PYQ
+  ══════════════════════════════════════════ */
+  .pyq-card{padding:16px;background:#fff;border:1px solid #e0d6c8;border-radius:18px;margin-bottom:8px;cursor:pointer;}
+  .pyq-card:hover{box-shadow:0 3px 10px rgba(0,0,0,0.05);}
+  .pyq-year{font-family:Georgia,serif;font-size:15px;font-weight:700;color:#101828;}
+  .pyq-meta{font-size:12px;color:#5c6a82;margin-top:2px;}
+  .pyq-count{font-size:12px;font-weight:600;color:#f36c21;margin-top:6px;}
+
+  /* ══════════════════════════════════════════
+     SCREEN 5: GENERATE PAPER
+  ══════════════════════════════════════════ */
+  .step-bar{display:flex;align-items:center;gap:6px;margin-bottom:16px;}
+  .step-dot{width:8px;height:8px;border-radius:50%;}
+  .step-dot.active{background:#f36c21;width:24px;border-radius:4px;}
+  .step-dot.done{background:#10b981;}
+  .step-dot.pending{background:#e0d6c8;}
+  .step-title{font-size:11px;font-weight:600;color:#5c6a82;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;}
+  .form-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#fff;border:1px solid #e0d6c8;border-radius:14px;margin-bottom:8px;}
+  .form-label{font-size:14px;font-weight:600;color:#101828;}
+  .form-value{font-size:13px;color:#5c6a82;}
+  .stepper{display:flex;align-items:center;gap:10px;}
+  .stepper-btn{width:30px;height:30px;border-radius:10px;background:#fff;border:1px solid #e0d6c8;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;color:#101828;cursor:pointer;}
+  .stepper-val{font-size:16px;font-weight:700;color:#101828;min-width:20px;text-align:center;}
+
+  /* ══════════════════════════════════════════
+     SCREEN 6: AI TUTOR
+  ══════════════════════════════════════════ */
+  .tutor-bar{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid #e0d6c8;margin-bottom:12px;}
+  .tutor-dot{width:8px;height:8px;border-radius:50%;background:#10b981;}
+  .msg{max-width:80%;padding:12px 16px;border-radius:18px;font-size:13px;line-height:1.55;margin-bottom:8px;}
+  .msg-user{background:#f36c21;color:#fff;border-bottom-right-radius:6px;margin-left:auto;}
+  .msg-ai{background:#fff;border:1px solid #e0d6c8;color:#101828;border-bottom-left-radius:6px;}
+  .tutor-input{display:flex;align-items:center;gap:8px;padding:10px;background:#fff;border:1px solid #e0d6c8;border-radius:100px;position:absolute;bottom:28px;left:18px;right:18px;}
+  .tutor-input input{flex:1;border:none;outline:none;font-size:14px;padding:0 12px;font-family:'Inter',sans-serif;}
+  .tutor-send{width:36px;height:36px;border-radius:50%;background:#f36c21;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;}
+  .tutor-send svg{width:16px;height:16px;color:#fff;}
+  .suggestion-chip{display:inline-flex;padding:8px 14px;border-radius:100px;background:#fff;border:1px solid #e0d6c8;font-size:12px;font-weight:500;color:#5c6a82;cursor:pointer;margin:2px;}
+
+  /* ══════════════════════════════════════════
+     SCREEN 7: RESULTS
+  ══════════════════════════════════════════ */
+  .score-dial{width:80px;height:80px;border-radius:50%;border:4px solid #10b981;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0 auto 8px;}
+  .score-val{font-family:Georgia,serif;font-size:24px;font-weight:700;color:#101828;line-height:1;}
+  .score-pct{font-size:10px;color:#5c6a82;font-weight:500;}
+  .result-card{display:flex;align-items:center;gap:14px;padding:14px 16px;background:#fff;border:1px solid #e0d6c8;border-radius:18px;margin-bottom:8px;cursor:pointer;}
+  .result-card:hover{box-shadow:0 3px 10px rgba(0,0,0,0.05);}
+  .result-score{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:15px;font-weight:700;flex-shrink:0;}
+  .result-info{flex:1;min-width:0;}
+  .result-title{font-family:Georgia,serif;font-size:14px;font-weight:700;color:#101828;line-height:1.3;}
+  .result-meta{font-size:11px;color:#5c6a82;margin-top:2px;}
+  .result-pill{font-size:10px;font-weight:600;padding:3px 8px;border-radius:6px;}
+
+  /* ══════════════════════════════════════════
+     SCREEN 8: PROFILE
+  ══════════════════════════════════════════ */
+  .profile-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#f36c21,#ea580c);display:flex;align-items:center;justify-content:center;color:#fff;font-family:Georgia,serif;font-size:28px;font-weight:700;margin:0 auto 12px;}
+  .profile-name{text-align:center;font-family:Georgia,serif;font-size:20px;font-weight:700;color:#101828;}
+  .profile-email{text-align:center;font-size:13px;color:#5c6a82;margin-top:2px;}
+  .profile-row{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #f0ebe2;}
+  .profile-row:last-child{border-bottom:none;}
+  .profile-row-label{font-size:14px;font-weight:600;color:#101828;}
+  .profile-row-value{font-size:13px;color:#5c6a82;}
+  .verified{font-size:10px;font-weight:600;color:#10b981;background:rgba(16,185,129,0.08);padding:3px 8px;border-radius:6px;}
+
+  /* ═══ Login Screen ═══ */
+  .login-phone{background:#07152d;}
+  .login-hero{background:#fbf6ec;border-radius:0 0 120px 120px;padding:40px 24px 32px;text-align:center;position:relative;overflow:hidden;}
+  .login-hero::after{content:'';position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(to bottom,transparent,#fbf6ec);pointer-events:none;}
+  .login-logo{width:48px;height:48px;border-radius:50%;border:2px solid #c8b8a5;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;background:#fbf6ec;}
+  .login-logo-inner{width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#f36c21,#c2410c);}
+  .login-wordmark{font-family:Georgia,serif;font-size:22px;letter-spacing:7px;color:#101828;font-weight:400;}
+  .login-tagline{font-size:8px;letter-spacing:1.2px;color:#c2410c;font-weight:600;margin-top:3px;text-transform:uppercase;}
+  /* Circuit SVG */
+  .circuit-svg{position:absolute;left:0;right:0;bottom:0;width:100%;height:180px;}
+  .circuit-path{fill:none;stroke:#c8b8a5;stroke-width:2.2;stroke-linecap:round;stroke-dasharray:28 3;opacity:0.28;}
+  .circuit-node{fill:#fbf6ec;stroke:#c8b8a5;stroke-width:2;opacity:0.28;}
+  .circuit-node-center{opacity:0.5;}
+  .circuit-seam{fill:none;stroke:#f36c21;stroke-width:2.3;opacity:0.75;}
+  .circuit-glow{fill:none;stroke:#ffe0a3;stroke-width:6;stroke-linecap:round;stroke-dasharray:24 236;opacity:0.98;animation:seam-flow 3s ease-in-out infinite;}
+  @keyframes seam-flow{0%{stroke-dashoffset:250;}50%{stroke-dashoffset:-80;}100%{stroke-dashoffset:-310;}}
+  /* Login form */
+  .login-form{padding:28px 28px 0;}
+  .login-title{font-family:Georgia,serif;font-size:30px;color:#f8fafc;letter-spacing:-0.5px;line-height:1.15;}
+  .login-subtitle{font-size:14px;color:#aab5c6;margin-top:4px;line-height:1.4;}
+  .login-field{display:flex;align-items:center;gap:11px;padding:0 16px;height:54px;border-radius:16px;border:1px solid #e0d6c8;background:#fbf6ec;margin-top:12px;}
+  .login-field svg{width:20px;height:20px;flex-shrink:0;}
+  .login-field input{flex:1;border:none;outline:none;background:transparent;font-size:15px;color:#101828;font-family:'Inter',sans-serif;}
+  .login-field input::placeholder{color:#77808f;}
+  .login-cta{display:flex;align-items:center;justify-content:center;gap:10px;height:54px;border-radius:16px;background:#f36c21;border:none;cursor:pointer;margin-top:14px;width:100%;font-size:16px;font-weight:600;color:#101828;box-shadow:0 8px 18px rgba(243,108,33,0.22);font-family:'Inter',sans-serif;}
+  .login-cta:hover{box-shadow:0 10px 24px rgba(243,108,33,0.3);}
+  .login-link{text-align:center;margin-top:14px;font-size:13px;font-weight:600;color:#d4dbe6;cursor:pointer;}
+  .login-create{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:22px;}
+  .login-create span{font-size:14px;color:#aab5c6;}
+  .login-create a{font-size:14px;font-weight:600;color:#f36c21;text-decoration:none;cursor:pointer;}
+
+  /* Physics blue, Chemistry green, Math violet */
+  .blue{background:linear-gradient(135deg,#3b82f6,#1d4ed8);}
+  .green{background:linear-gradient(135deg,#10b981,#047857);}
+  .violet{background:linear-gradient(135deg,#8b5cf6,#6d28d9);}
+  .blue-tint{background:rgba(59,130,246,0.06);border-color:rgba(59,130,246,0.2);color:#3b82f6;}
+  .green-tint{background:rgba(16,185,129,0.06);border-color:rgba(16,185,129,0.2);color:#10b981;}
+  .violet-tint{background:rgba(139,92,246,0.06);border-color:rgba(139,92,246,0.2);color:#8b5cf6;}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 0: LOGIN
+═══════════════════════════════════════════════ -->
+<div class="phone login-phone" style="position:relative;">
+  <div class="phone-label" style="color:#94a3b8;">0 · Login</div>
+  <div class="screen dark" style="padding:0;background:#07152d;">
+    <!-- Warm cream hero with circuit -->
+    <div class="login-hero">
+      <div class="login-logo"><div class="login-logo-inner"></div></div>
+      <div class="login-wordmark">EDURAA</div>
+      <div class="login-tagline">Intelligence for Serious Learning</div>
+      <!-- Circuit SVG overlay -->
+      <svg class="circuit-svg" viewBox="0 0 360 250" preserveAspectRatio="xMidYMax meet">
+        <!-- Brain shape -->
+        <path d="M180 50 C136 28 88 52 83 98 C48 112 49 160 79 177 C76 218 119 238 153 216 C163 229 172 236 180 239 C188 236 197 229 207 216 C241 238 284 218 281 177 C311 160 312 112 277 98 C272 52 224 28 180 50 Z" fill="#fbf6ec" stroke="#d8cdbe" stroke-width="2" opacity="0.9"/>
+        <path d="M180 50 C136 28 88 52 83 98 C48 112 49 160 79 177 C76 218 119 238 153 216 C163 229 172 236 180 239" fill="none" stroke="#fffdf8" stroke-width="3" opacity="0.88"/>
+        <!-- Circuit paths (left = identity, right = password) -->
+        <path class="circuit-path" d="M180 191 V103"/>
+        <path class="circuit-path" d="M166 184 V142 L139 115 V78"/>
+        <path class="circuit-path" d="M158 163 H128 L105 140 V104"/>
+        <path class="circuit-path" d="M155 143 H124 L101 120 H73"/>
+        <path class="circuit-path" d="M158 123 H139 L119 103 H92"/>
+        <path class="circuit-path" d="M194 184 V142 L221 115 V78"/>
+        <path class="circuit-path" d="M202 163 H232 L255 140 V104"/>
+        <path class="circuit-path" d="M205 143 H236 L259 120 H287"/>
+        <path class="circuit-path" d="M202 123 H221 L241 103 H268"/>
+        <!-- Circuit nodes -->
+        <circle class="circuit-node circuit-node-center" cx="180" cy="98" r="5"/>
+        <circle class="circuit-node" cx="139" cy="73" r="5"/>
+        <circle class="circuit-node" cx="105" cy="99" r="5"/>
+        <circle class="circuit-node" cx="68" cy="120" r="5"/>
+        <circle class="circuit-node" cx="87" cy="103" r="5"/>
+        <circle class="circuit-node" cx="221" cy="73" r="5"/>
+        <circle class="circuit-node" cx="255" cy="99" r="5"/>
+        <circle class="circuit-node" cx="292" cy="120" r="5"/>
+        <circle class="circuit-node" cx="273" cy="103" r="5"/>
+        <!-- Orange seam -->
+        <path class="circuit-seam" d="M0 226 C88 264 236 270 360 224"/>
+        <path class="circuit-glow" d="M0 226 C88 264 236 270 360 224"/>
+      </svg>
+    </div>
+    <!-- Form -->
+    <div class="login-form">
+      <div class="login-title">Welcome back</div>
+      <div class="login-subtitle">Continue where you left off.</div>
+      <div class="login-field">
+        <svg fill="none" stroke="#667085" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <input type="text" placeholder="Email or student ID" disabled>
+      </div>
+      <div class="login-field">
+        <svg fill="none" stroke="#667085" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        <input type="password" placeholder="Password" disabled>
+        <svg fill="none" stroke="#667085" stroke-width="2" viewBox="0 0 24 24" style="width:21px;height:21px;cursor:pointer;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </div>
+      <button class="login-cta">Continue <svg width="21" height="21" fill="none" stroke="#101828" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14m0 0l-7-7m7 7l-7 7"/></svg></button>
+      <div class="login-link">Forgot password?</div>
+      <div class="login-create">
+        <span>New to Eduraa?</span>
+        <a>Create account</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 1: COMPETITIVE HOME
+═══════════════════════════════════════════════ -->
+<div class="phone" style="position:relative;">
+  <div class="phone-label">1 · Home</div>
+  <div class="screen">
+    <!-- Header -->
+    <div class="row between mb2">
+      <div class="row">
+        <div class="home-avatar">A</div>
+        <div>
+          <div class="home-greeting">Good morning</div>
+          <div class="home-name">Arjun</div>
+        </div>
+      </div>
+      <div class="home-bell">
+        <svg fill="none" stroke="#101828" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
+      </div>
+    </div>
+
+    <!-- Subjects -->
+    <div class="subject-card" onclick="">
+      <div class="icon-circle blue">P</div>
+      <div style="flex:1">
+        <div class="h3">Physics</div>
+        <div class="sub">10 chapters · 12th</div>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#3b82f6;">62%</div>
+    </div>
+    <div class="subject-card">
+      <div class="icon-circle green">C</div>
+      <div style="flex:1">
+        <div class="h3">Chemistry</div>
+        <div class="sub">12 chapters · 12th</div>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#10b981;">48%</div>
+    </div>
+    <div class="subject-card">
+      <div class="icon-circle violet">M</div>
+      <div style="flex:1">
+        <div class="h3">Mathematics</div>
+        <div class="sub">8 chapters · 11th</div>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#8b5cf6;">55%</div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div style="font-family:Georgia,serif;font-size:16px;font-weight:700;color:#101828;margin:20px 0 8px;">Quick actions</div>
+    <div class="quick-grid">
+      <div class="quick-item">
+        <div class="quick-icon" style="background:rgba(243,108,33,0.08);color:#f36c21;">📝</div>
+        Generate Paper
+      </div>
+      <div class="quick-item">
+        <div class="quick-icon" style="background:rgba(59,130,246,0.08);color:#3b82f6;">📋</div>
+        JEE PYQs
+      </div>
+      <div class="quick-item">
+        <div class="quick-icon" style="background:rgba(139,92,246,0.08);color:#8b5cf6;">🤖</div>
+        AI Tutor
+      </div>
+      <div class="quick-item">
+        <div class="quick-icon" style="background:rgba(16,185,129,0.08);color:#10b981;">📊</div>
+        Results
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 2: SUBJECT DETAIL
+═══════════════════════════════════════════════ -->
+<div class="phone" style="position:relative;">
+  <div class="phone-label">2 · Subject Detail</div>
+  <div class="screen">
+    <div class="row mb2">
+      <div class="back"><svg fill="none" stroke="#101828" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5m0 0l7 7m-7-7l7-7"/></svg></div>
+      <div class="icon-circle blue">P</div>
+      <div><div class="h1">Physics</div><div class="sub">CBSE</div></div>
+    </div>
+    <div class="toggle mb2">
+      <div class="toggle-chip">11th</div>
+      <div class="toggle-chip active">12th</div>
+    </div>
+    <div class="ch-row"><div class="ch-num blue-tint">01</div><div class="ch-name">Electric Charges and Fields</div><svg class="ch-chevron" fill="none" stroke="#94a3b8" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+    <div class="ch-row"><div class="ch-num blue-tint">02</div><div class="ch-name">Electrostatic Potential</div><svg class="ch-chevron" fill="none" stroke="#94a3b8" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+    <div class="ch-row"><div class="ch-num blue-tint">03</div><div class="ch-name">Current Electricity</div><svg class="ch-chevron" fill="none" stroke="#94a3b8" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+    <div class="ch-row"><div class="ch-num blue-tint">04</div><div class="ch-name">Moving Charges and Magnetism</div><svg class="ch-chevron" fill="none" stroke="#94a3b8" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+    <div class="ch-row"><div class="ch-num blue-tint">05</div><div class="ch-name">Magnetism and Matter</div><svg class="ch-chevron" fill="none" stroke="#94a3b8" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+    <div class="ch-row"><div class="ch-num blue-tint">06</div><div class="ch-name">Electromagnetic Induction</div><svg class="ch-chevron" fill="none" stroke="#94a3b8" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+    <div class="ch-row"><div class="ch-num blue-tint">07</div><div class="ch-name">Alternating Current</div><svg class="ch-chevron" fill="none" stroke="#94a3b8" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+    <div class="ch-row"><div class="ch-num blue-tint">08</div><div class="ch-name">Electromagnetic Waves</div><svg class="ch-chevron" fill="none" stroke="#94a3b8" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 3: CHAPTER WORKSPACE
+═══════════════════════════════════════════════ -->
+<div class="phone" style="position:relative;">
+  <div class="phone-label">3 · Chapter Workspace</div>
+  <div class="screen">
+    <div class="row mb" style="gap:10px;">
+      <div class="back"><svg fill="none" stroke="#101828" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5m0 0l7 7m-7-7l7-7"/></svg></div>
+      <div><div class="h2" style="font-size:16px;line-height:1.2;">Electric Charges and Fields</div><div class="sub">Physics · Ch 01</div></div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="ws-actions">
+      <div class="ws-action-btn ws-action-primary">▶ Start MCQ Drill</div>
+      <div class="ws-action-btn ws-action-secondary">💬 Ask AI</div>
+    </div>
+
+    <!-- Study tabs -->
+    <div class="study-tabs">
+      <div class="study-tab active">Formulas</div>
+      <div class="study-tab">Hacks</div>
+      <div class="study-tab">Notes</div>
+      <div class="study-tab">Tips</div>
+      <div class="study-tab">Diagrams</div>
+    </div>
+
+    <!-- Content -->
+    <div class="study-content">
+      <div class="formula-item">
+        <div class="formula-label">Coulomb's Law</div>
+        <div class="formula-eq">F = k · q₁q₂ / r²</div>
+      </div>
+      <div class="formula-item">
+        <div class="formula-label">Electric Field</div>
+        <div class="formula-eq">E = F / q = kQ / r²</div>
+      </div>
+      <div class="formula-item">
+        <div class="formula-label">Gauss's Law</div>
+        <div class="formula-eq">Φ = Q_enclosed / ε₀</div>
+      </div>
+      <div class="formula-item">
+        <div class="formula-label">Electric Dipole Moment</div>
+        <div class="formula-eq">p = q × 2a</div>
+      </div>
+      <div class="formula-item">
+        <div class="formula-label">Torque on Dipole</div>
+        <div class="formula-eq">τ = p × E sinθ</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 4: PYQ
+═══════════════════════════════════════════════ -->
+<div class="phone" style="position:relative;">
+  <div class="phone-label">4 · PYQ Papers</div>
+  <div class="screen">
+    <div class="row mb2">
+      <div class="back"><svg fill="none" stroke="#101828" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5m0 0l7 7m-7-7l7-7"/></svg></div>
+      <div><div class="h1">Previous Papers</div><div class="sub">JEE Mains & Advanced</div></div>
+    </div>
+    <div class="pyq-card">
+      <div class="pyq-year">JEE Mains 2024 — Session 1</div>
+      <div class="pyq-meta">January · Physics, Chemistry, Mathematics</div>
+      <div class="pyq-count">90 questions</div>
+    </div>
+    <div class="pyq-card">
+      <div class="pyq-year">JEE Mains 2024 — Session 2</div>
+      <div class="pyq-meta">April · Physics, Chemistry, Mathematics</div>
+      <div class="pyq-count">90 questions</div>
+    </div>
+    <div class="pyq-card">
+      <div class="pyq-year">JEE Advanced 2024 — Paper 1</div>
+      <div class="pyq-meta">May · Physics, Chemistry, Mathematics</div>
+      <div class="pyq-count">54 questions</div>
+    </div>
+    <div class="pyq-card">
+      <div class="pyq-year">JEE Advanced 2024 — Paper 2</div>
+      <div class="pyq-meta">May · Physics, Chemistry, Mathematics</div>
+      <div class="pyq-count">54 questions</div>
+    </div>
+    <div class="pyq-card">
+      <div class="pyq-year">JEE Mains 2023 — Session 1</div>
+      <div class="pyq-meta">January · Physics, Chemistry, Mathematics</div>
+      <div class="pyq-count">90 questions</div>
+    </div>
+    <div class="pyq-card">
+      <div class="pyq-year">JEE Mains 2023 — Session 2</div>
+      <div class="pyq-meta">April · Physics, Chemistry, Mathematics</div>
+      <div class="pyq-count">90 questions</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 5: GENERATE PAPER
+═══════════════════════════════════════════════ -->
+<div class="phone" style="position:relative;">
+  <div class="phone-label">5 · Generate Paper</div>
+  <div class="screen">
+    <div class="row mb2">
+      <div class="back"><svg fill="none" stroke="#101828" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5m0 0l7 7m-7-7l7-7"/></svg></div>
+      <div><div class="h1">Generate Paper</div><div class="sub">AI-powered blueprint</div></div>
+    </div>
+    <!-- Step indicator -->
+    <div class="step-bar">
+      <div class="step-dot done"></div>
+      <div class="step-dot active"></div>
+      <div class="step-dot pending"></div>
+    </div>
+
+    <div class="step-title">Step 2 · Question types</div>
+
+    <div class="form-row">
+      <div class="form-label">MCQ</div>
+      <div class="stepper">
+        <div class="stepper-btn">−</div>
+        <div class="stepper-val">20</div>
+        <div class="stepper-btn">+</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-label">Short Answer</div>
+      <div class="stepper">
+        <div class="stepper-btn">−</div>
+        <div class="stepper-val">10</div>
+        <div class="stepper-btn">+</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-label">Long Answer</div>
+      <div class="stepper">
+        <div class="stepper-btn">−</div>
+        <div class="stepper-val">5</div>
+        <div class="stepper-btn">+</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-label">Fill in Blanks</div>
+      <div class="stepper">
+        <div class="stepper-btn">−</div>
+        <div class="stepper-val">0</div>
+        <div class="stepper-btn">+</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-size:13px;color:#5c6a82;">Total questions</div>
+      <div style="font-family:Georgia,serif;font-size:18px;font-weight:700;color:#101828;">35</div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:13px;color:#5c6a82;">Total marks</div>
+      <div style="font-family:Georgia,serif;font-size:18px;font-weight:700;color:#101828;">80</div>
+    </div>
+
+    <div class="btn btn-primary" style="width:100%;">Continue to Settings →</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 6: AI TUTOR
+═══════════════════════════════════════════════ -->
+<div class="phone" style="position:relative;">
+  <div class="phone-label">6 · AI Tutor</div>
+  <div class="screen" style="padding-bottom:90px;">
+    <div class="tutor-bar">
+      <div class="back" style="width:36px;height:36px;border-radius:12px;">
+        <svg fill="none" stroke="#101828" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5m0 0l7 7m-7-7l7-7"/></svg>
+      </div>
+      <div style="flex:1">
+        <div style="font-family:Georgia,serif;font-size:16px;font-weight:700;color:#101828;">Eduraa AI</div>
+        <div class="row" style="gap:6px;"><div class="tutor-dot"></div><span style="font-size:11px;color:#5c6a82;">Online</span></div>
+      </div>
+    </div>
+
+    <div class="msg msg-ai">Hi Arjun! I'm your study companion. Ask me anything about Physics, Chemistry, or Mathematics.</div>
+    <div class="msg msg-user">Explain Gauss's law and when to use it</div>
+    <div class="msg msg-ai">
+      <strong>Gauss's Law</strong> states that the total electric flux through a closed surface equals the enclosed charge divided by ε₀.<br><br>
+      <strong>When to use it:</strong><br>
+      • Spherical symmetry (point charge, charged sphere)<br>
+      • Cylindrical symmetry (infinite wire, charged cylinder)<br>
+      • Planar symmetry (infinite sheet of charge)<br><br>
+      The key insight: pick a Gaussian surface where E is constant and perpendicular to the surface.
+    </div>
+    <div class="msg msg-user">Give me a practice problem</div>
+    <div class="msg msg-ai">
+      Here's one:<br><br>
+      A charge of +5 μC is placed at the centre of a cube. What is the flux through each face?<br><br>
+      <em>Hint: Use Gauss's law and symmetry.</em>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div class="suggestion-chip">Explain Coulomb's law</div>
+      <div class="suggestion-chip">What is electric flux?</div>
+    </div>
+
+    <div class="tutor-input">
+      <input type="text" placeholder="Ask anything..." disabled>
+      <div class="tutor-send">
+        <svg fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 7: RESULTS
+═══════════════════════════════════════════════ -->
+<div class="phone" style="position:relative;">
+  <div class="phone-label">7 · Results</div>
+  <div class="screen">
+    <div class="row between mb2">
+      <div class="h1">Results</div>
+    </div>
+
+    <!-- Score summary -->
+    <div class="card mb2" style="text-align:center;">
+      <div class="score-dial">
+        <div class="score-val">72</div>
+        <div class="score-pct">% avg</div>
+      </div>
+      <div class="row" style="justify-content:center;gap:24px;margin-top:4px;">
+        <div style="text-align:center;"><div style="font-size:16px;font-weight:700;color:#101828;">12</div><div style="font-size:11px;color:#5c6a82;">Submitted</div></div>
+        <div style="text-align:center;"><div style="font-size:16px;font-weight:700;color:#101828;">10</div><div style="font-size:11px;color:#5c6a82;">Graded</div></div>
+        <div style="text-align:center;"><div style="font-size:16px;font-weight:700;color:#f36c21;">2</div><div style="font-size:11px;color:#5c6a82;">Review</div></div>
+      </div>
+    </div>
+
+    <!-- Filter -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <div class="chip chip-active">All (12)</div>
+      <div class="chip chip-inactive">Graded (10)</div>
+      <div class="chip chip-inactive">Review (2)</div>
+    </div>
+
+    <!-- Result cards -->
+    <div class="result-card">
+      <div class="result-score" style="background:rgba(16,185,129,0.08);color:#10b981;">85%</div>
+      <div class="result-info">
+        <div class="result-title">Physics — Unit Test 3</div>
+        <div class="result-meta">2 days ago · 35 questions</div>
+      </div>
+      <div class="result-pill" style="background:rgba(16,185,129,0.08);color:#10b981;">Graded</div>
+    </div>
+    <div class="result-card">
+      <div class="result-score" style="background:rgba(16,185,129,0.08);color:#10b981;">78%</div>
+      <div class="result-info">
+        <div class="result-title">Chemistry — Organic Reactions</div>
+        <div class="result-meta">5 days ago · 40 questions</div>
+      </div>
+      <div class="result-pill" style="background:rgba(16,185,129,0.08);color:#10b981;">Graded</div>
+    </div>
+    <div class="result-card">
+      <div class="result-score" style="background:rgba(243,108,33,0.08);color:#f36c21;">62%</div>
+      <div class="result-info">
+        <div class="result-title">Math — Trigonometry Quiz</div>
+        <div class="result-meta">1 week ago · 30 questions</div>
+      </div>
+      <div class="result-pill" style="background:rgba(245,158,11,0.08);color:#b45309;">Review</div>
+    </div>
+    <div class="result-card">
+      <div class="result-score" style="background:rgba(16,185,129,0.08);color:#10b981;">91%</div>
+      <div class="result-info">
+        <div class="result-title">JEE PYQ Practice — Session 4</div>
+        <div class="result-meta">2 weeks ago · 90 questions</div>
+      </div>
+      <div class="result-pill" style="background:rgba(16,185,129,0.08);color:#10b981;">Graded</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 8: PROFILE
+═══════════════════════════════════════════════ -->
+<div class="phone" style="position:relative;">
+  <div class="phone-label">8 · Profile</div>
+  <div class="screen">
+    <div class="row between mb3">
+      <div class="h1">Profile</div>
+      <div class="btn btn-secondary" style="padding:8px 16px;font-size:12px;">Edit</div>
+    </div>
+
+    <div class="profile-avatar">A</div>
+    <div class="profile-name">Arjun Sharma</div>
+    <div class="profile-email">arjun.sharma@email.com <span class="verified">✓ Verified</span></div>
+
+    <div class="card mt" style="margin-top:20px;padding:0;overflow:hidden;">
+      <div class="profile-row">
+        <div class="profile-row-label">Exam</div>
+        <div class="profile-row-value">JEE Mains / Advanced</div>
+      </div>
+      <div class="profile-row">
+        <div class="profile-row-label">Board</div>
+        <div class="profile-row-value">CBSE</div>
+      </div>
+      <div class="profile-row">
+        <div class="profile-row-label">Standard</div>
+        <div class="profile-row-value">12th</div>
+      </div>
+      <div class="profile-row">
+        <div class="profile-row-label">Subjects</div>
+        <div class="profile-row-value">Physics, Chemistry, Math</div>
+      </div>
+      <div class="profile-row">
+        <div class="profile-row-label">Account</div>
+        <div class="profile-row-value">Competitive Learner</div>
+      </div>
+    </div>
+
+    <div class="btn btn-secondary" style="width:100%;margin-top:24px;color:#ef4444;border-color:#fca5a5;">Sign Out</div>
+  </div>
+</div>
+
+</body>
+</html>

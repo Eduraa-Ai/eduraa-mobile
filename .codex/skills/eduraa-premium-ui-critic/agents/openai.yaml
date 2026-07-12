@@ -1,0 +1,4 @@
+interface:
+  display_name: "Eduraa Premium UI Critic"
+  short_description: "Reject cheap UI until it meets the 2029 premium bar"
+  default_prompt: "Use $eduraa-premium-ui-critic to evaluate this rendered Eduraa mobile UI and return a strict pass or reject verdict."

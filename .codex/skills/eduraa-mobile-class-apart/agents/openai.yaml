@@ -1,0 +1,4 @@
+interface:
+  display_name: "Eduraa Mobile Class Apart"
+  short_description: "Create lovable, class-apart Eduraa mobile experiences"
+  default_prompt: "Use $eduraa-mobile-class-apart to design and deliver a distinctive 2026 Eduraa mobile experience."
