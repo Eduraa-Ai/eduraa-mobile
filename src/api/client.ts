@@ -52,6 +52,15 @@ export function setAccessToken(token: string | null) {
   inMemoryAccessToken = token
 }
 
+export async function getAccessToken() {
+  if (inMemoryAccessToken) return inMemoryAccessToken
+  try {
+    return await SecureStore.getItemAsync(TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
 const sharedClientConfig = {
   baseURL: `${API_BASE_URL}/api/v1`,
   timeout: 60000,

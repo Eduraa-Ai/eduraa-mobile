@@ -14,8 +14,15 @@ Thumbs.db
 # Logs
 *.log
 
-# Local design references and QA output (not part of the shipped app)
+# Local design references (not part of the shipped app)
 artifacts/
-test-artifacts/
 design-mocks/
 mockups/
+
+# Local visual validation artifacts (keep tracked fixtures, ignore captures)
+test-artifacts/**/*.png
+test-artifacts/**/*.jpg
+test-artifacts/**/*.jpeg
+test-artifacts/**/*.webp
+test-artifacts/**/*.gif
+test-artifacts/**/*.pdf

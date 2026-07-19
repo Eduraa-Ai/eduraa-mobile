@@ -195,7 +195,7 @@ function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
       <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <LearningStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
       <LearningStack.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
-      <LearningStack.Screen name="AIStudio" component={AIStudioScreen} options={{ title: 'AI Studio' }} />
+      <LearningStack.Screen name="AIStudio" component={AIStudioScreen} options={{ headerShown: false }} />
     </LearningStack.Navigator>
   )
 }
@@ -239,7 +239,7 @@ function StaffWorkspaceNavigator() {
       <StaffWorkspaceStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <StaffWorkspaceStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
       <StaffWorkspaceStack.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
-      <StaffWorkspaceStack.Screen name="StaffAIStudio" component={AIStudioScreen} options={{ title: 'AI Studio' }} />
+      <StaffWorkspaceStack.Screen name="StaffAIStudio" component={AIStudioScreen} options={{ headerShown: false }} />
       <StaffWorkspaceStack.Screen name="StaffGeneratePaper" component={GeneratePaperScreen} options={{ title: 'Generate paper' }} />
       <StaffWorkspaceStack.Screen name="StaffPapers" component={PapersScreen} options={{ title: 'Papers' }} />
       <StaffWorkspaceStack.Screen name="StaffResults" component={ResultsScreen} options={{ title: 'Checked papers' }} />

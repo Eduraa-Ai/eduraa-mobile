@@ -31,7 +31,7 @@ const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   StaffAIStudio: 'sparkles-outline',
 }
 
-const fullScreenNestedRoutes = new Set(['AttemptPaper', 'Quiz'])
+const fullScreenNestedRoutes = new Set(['AttemptPaper', 'Quiz', 'AIStudio', 'StaffAIStudio'])
 
 function isTabBarStyleHidden(tabBarStyle: unknown) {
   if (!tabBarStyle) return false
@@ -172,7 +172,11 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
     [navigation, scrollToIndex, state.index, state.routes, thumbX],
   )
 
-  if (isTabBarStyleHidden(focusedOptions?.tabBarStyle) || (nestedRouteName && fullScreenNestedRoutes.has(nestedRouteName))) {
+  if (
+    isTabBarStyleHidden(focusedOptions?.tabBarStyle) ||
+    fullScreenNestedRoutes.has(focusedRoute.name) ||
+    (nestedRouteName && fullScreenNestedRoutes.has(nestedRouteName))
+  ) {
     return null
   }
 
