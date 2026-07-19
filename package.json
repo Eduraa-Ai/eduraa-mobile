@@ -8,6 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "api-bridge": "node scripts/dev-api-bridge.cjs",
     "test:models": "node scripts/run-model-tests.cjs"
   },
   "dependencies": {
