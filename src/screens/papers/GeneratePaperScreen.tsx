@@ -437,7 +437,10 @@ export default function GeneratePaperScreen() {
     [aiSyllabus, subjectId]
   )
   const activeChapters = chapterSource === 'ai' ? aiChapters : chapters
-  const selectedChapters = activeChapters.filter((chapter) => chapterIds.includes(chapter.id))
+  const selectedChapters = useMemo(
+    () => activeChapters.filter((chapter) => chapterIds.includes(chapter.id)),
+    [activeChapters, chapterIds],
+  )
   const isCompetitiveAi = isCompetitive && chapterSource === 'ai'
   const visibleQuestionRows = isCompetitiveAi ? QUESTION_ROWS.filter((row) => row.key === 'mcq') : QUESTION_ROWS
   const derivedSubtopics = useMemo(() => {
@@ -501,7 +504,11 @@ export default function GeneratePaperScreen() {
   }, [subjectId])
 
   useEffect(() => {
-    setSubtopicNames((current) => current.filter((name) => derivedSubtopics.includes(name)))
+    setSubtopicNames((current) => {
+      const next = current.filter((name) => derivedSubtopics.includes(name))
+      const unchanged = next.length === current.length && next.every((name, index) => name === current[index])
+      return unchanged ? current : next
+    })
   }, [derivedSubtopics])
 
   useEffect(() => {

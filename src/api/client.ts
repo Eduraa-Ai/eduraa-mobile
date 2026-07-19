@@ -159,9 +159,15 @@ apiClient.interceptors.response.use(
         const token = await refreshAccessToken()
         originalRequest.headers.Authorization = `Bearer ${token}`
         return apiClient.request(originalRequest as AxiosRequestConfig)
-      } catch {
-        await clearAccessToken()
-        logoutCallback?.()
+      } catch (refreshError) {
+        // Preserve the session when refresh could not reach the server. Only
+        // an explicit auth rejection proves that the stored session is stale.
+        const refreshStatus = axios.isAxiosError(refreshError) ? refreshError.response?.status : undefined
+        if (refreshStatus === 400 || refreshStatus === 401 || refreshStatus === 403) {
+          await clearAccessToken()
+          logoutCallback?.()
+        }
+        return Promise.reject(refreshError)
       }
     } else if (error.response?.status === 401 && !isAuthEndpoint(originalRequest?.url)) {
       await clearAccessToken()

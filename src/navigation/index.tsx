@@ -24,11 +24,13 @@ import AttemptPaperScreen from '../screens/papers/AttemptPaperScreen'
 import QuizScreen from '../screens/papers/QuizScreen'
 import ResultsScreen from '../screens/results/ResultsScreen'
 import ResultDetailScreen from '../screens/results/ResultDetailScreen'
+import QuestionEvidenceScreen from '../screens/results/QuestionEvidenceScreen'
 import LearningHomeScreen from '../screens/learning/LearningHomeScreen'
 import CompetitiveExamScreen from '../screens/learning/CompetitiveExamScreen'
 import CompetitiveSubjectScreen from '../screens/learning/CompetitiveSubjectScreen'
 import CompetitiveChapterScreen from '../screens/learning/CompetitiveChapterScreen'
 import AgenticLearningScreen from '../screens/learning/AgenticLearningScreen'
+import AgenticSubjectScreen from '../screens/learning/AgenticSubjectScreen'
 import AgenticTopicScreen from '../screens/learning/AgenticTopicScreen'
 import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
@@ -59,6 +61,7 @@ export type PapersStackParamList = {
 export type ResultsStackParamList = {
   ResultsList: undefined
   ResultDetail: { submissionId?: string; checkedPaperId?: string }
+  QuestionEvidence: { checkedPaperId: string; questionId?: string; questionIndex?: number }
 }
 
 export type LearningStackParamList = {
@@ -67,7 +70,8 @@ export type LearningStackParamList = {
   CompetitiveSubject: { subjectName: string }
   CompetitiveChapter: { subjectName: string; chapterKey: string }
   AgenticLearning: undefined
-  AgenticTopic: { topicId: string }
+  AgenticSubject: { subjectId: string }
+  AgenticTopic: { topicId: string; topicName?: string; subjectName?: string }
   PreviousPapers: undefined
   Feature: { featureId: string }
   Approvals: undefined
@@ -89,6 +93,7 @@ export type StaffWorkspaceStackParamList = {
   StaffPapers: undefined
   StaffResults: undefined
   ResultDetail: { submissionId?: string; checkedPaperId?: string }
+  QuestionEvidence: { checkedPaperId: string; questionId?: string; questionIndex?: number }
 }
 
 export type ProfileStackParamList = {
@@ -167,21 +172,23 @@ function PapersNavigator() {
 function ResultsNavigator() {
   return (
     <ResultsStack.Navigator screenOptions={stackScreenOptions}>
-      <ResultsStack.Screen name="ResultsList" component={ResultsScreen} options={{ title: 'Results' }} />
-      <ResultsStack.Screen name="ResultDetail" component={ResultDetailScreen} options={{ title: 'Result detail' }} />
+      <ResultsStack.Screen name="ResultsList" component={ResultsScreen} options={{ headerShown: false }} />
+      <ResultsStack.Screen name="ResultDetail" component={ResultDetailScreen} options={{ headerShown: false }} />
+      <ResultsStack.Screen name="QuestionEvidence" component={QuestionEvidenceScreen} options={{ headerShown: false }} />
     </ResultsStack.Navigator>
   )
 }
 
 function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
   return (
-    <LearningStack.Navigator initialRouteName={competitive ? 'CompetitiveExam' : 'LearningHome'} screenOptions={stackScreenOptions}>
+    <LearningStack.Navigator initialRouteName="AgenticLearning" screenOptions={stackScreenOptions}>
       <LearningStack.Screen name="LearningHome" component={LearningHomeScreen} options={{ title: 'Learning' }} />
       <LearningStack.Screen name="CompetitiveExam" component={CompetitiveExamScreen} options={{ title: 'JEE resources' }} />
       <LearningStack.Screen name="CompetitiveSubject" component={CompetitiveSubjectScreen} options={{ title: 'Competitive subject' }} />
       <LearningStack.Screen name="CompetitiveChapter" component={CompetitiveChapterScreen} options={{ title: 'Chapter workspace' }} />
-      <LearningStack.Screen name="AgenticLearning" component={AgenticLearningScreen} options={{ title: 'Agentic Learning' }} />
-      <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ title: 'Concept lesson' }} />
+      <LearningStack.Screen name="AgenticLearning" component={AgenticLearningScreen} options={{ headerShown: false }} />
+      <LearningStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} options={{ headerShown: false }} />
+      <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="PreviousPapers" component={PreviousPapersScreen} options={{ title: 'Previous papers' }} />
       <LearningStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <LearningStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
@@ -236,7 +243,8 @@ function StaffWorkspaceNavigator() {
       <StaffWorkspaceStack.Screen name="StaffGeneratePaper" component={GeneratePaperScreen} options={{ title: 'Generate paper' }} />
       <StaffWorkspaceStack.Screen name="StaffPapers" component={PapersScreen} options={{ title: 'Papers' }} />
       <StaffWorkspaceStack.Screen name="StaffResults" component={ResultsScreen} options={{ title: 'Checked papers' }} />
-      <StaffWorkspaceStack.Screen name="ResultDetail" component={ResultDetailScreen} options={{ title: 'Result detail' }} />
+      <StaffWorkspaceStack.Screen name="ResultDetail" component={ResultDetailScreen} options={{ headerShown: false }} />
+      <StaffWorkspaceStack.Screen name="QuestionEvidence" component={QuestionEvidenceScreen} options={{ headerShown: false }} />
     </StaffWorkspaceStack.Navigator>
   )
 }

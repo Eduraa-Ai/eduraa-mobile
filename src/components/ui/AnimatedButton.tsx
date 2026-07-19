@@ -33,6 +33,9 @@ export function AnimatedButton({ label, onPress, icon, loading = false, disabled
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
       <Pressable
         disabled={disabled || loading}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled: disabled || loading, busy: loading }}
         onPress={onPress}
         onPressIn={() => animateTo(motion.press.scale)}
         onPressOut={() => animateTo(1)}

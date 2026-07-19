@@ -9,6 +9,8 @@ interface ErrorStateProps {
   message?: string
   actionLabel?: string
   onAction?: () => void
+  loading?: boolean
+  kind?: 'error' | 'offline'
   style?: ViewStyle
 }
 
@@ -17,16 +19,19 @@ export function ErrorState({
   message = 'Try again in a moment.',
   actionLabel = 'Retry',
   onAction,
+  loading = false,
+  kind = 'error',
   style,
 }: ErrorStateProps) {
+  const isOffline = kind === 'offline'
   return (
-    <View style={[styles.root, style]}>
+    <View style={[styles.root, isOffline && styles.offlineRoot, style]} accessibilityRole="alert">
       <View style={styles.icon}>
-        <Ionicons name="alert-circle" size={24} color={colors.danger} />
+        <Ionicons name={isOffline ? 'cloud-offline-outline' : 'alert-circle'} size={24} color={isOffline ? colors.warning : colors.danger} />
       </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
-      {onAction ? <AnimatedButton label={actionLabel} variant="secondary" onPress={onAction} style={styles.action} /> : null}
+      {onAction ? <AnimatedButton label={loading ? 'Reconnecting…' : actionLabel} loading={loading} variant="secondary" onPress={onAction} style={styles.action} /> : null}
     </View>
   )
 }
@@ -40,6 +45,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSurface,
     borderWidth: 1,
     borderColor: colors.dangerBorder,
+  },
+  offlineRoot: {
+    backgroundColor: colors.warningSurface,
+    borderColor: colors.warningBorder,
   },
   icon: {
     width: 48,

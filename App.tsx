@@ -4,27 +4,49 @@
 
 import React, { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import NetInfo from '@react-native-community/netinfo'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { StyleSheet, View, ActivityIndicator, Platform } from 'react-native'
+import { AppState, StyleSheet, View, ActivityIndicator, Platform } from 'react-native'
 import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope'
 import { SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk'
 import RootNavigator from './src/navigation'
 import { useAuthStore } from './src/stores/authStore'
 import { authApi } from './src/api/auth'
+import { isDefinitiveAuthFailure, queryRetryDelay, shouldRetryQuery } from './src/api/queryReliability'
+
+onlineManager.setEventListener((setOnline) => NetInfo.addEventListener((state) => {
+  setOnline(state.isConnected !== false && state.isInternetReachable !== false)
+}))
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      networkMode: 'online',
+      retry: shouldRetryQuery,
+      retryDelay: queryRetryDelay,
+      refetchOnReconnect: 'always',
+      refetchOnWindowFocus: true,
       staleTime: 1000 * 60 * 5, // 5 minutes
+    },
+    mutations: {
+      networkMode: 'online',
+      retry: false,
     },
   },
 })
 
 function AppContent() {
   const { setAuth, logout } = useAuthStore()
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return
+    const subscription = AppState.addEventListener('change', (status) => {
+      focusManager.setFocused(status === 'active')
+    })
+    return () => subscription.remove()
+  }, [])
 
   // On mount: load token from SecureStore, then validate with /auth/me
   useEffect(() => {
@@ -40,9 +62,10 @@ function AppContent() {
           const latestToken = useAuthStore.getState().token || token
           // Reconstruct minimal auth state with the validated user
           await setAuth({ access_token: latestToken, token_type: 'bearer', user })
-        } catch {
-          // Token is invalid or expired
-          await logout()
+        } catch (error) {
+          // A temporary outage must not destroy a valid saved session. The
+          // response interceptor also performs one refresh attempt for 401s.
+          if (isDefinitiveAuthFailure(error)) await logout()
         }
       }
     }

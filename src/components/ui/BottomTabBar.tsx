@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -70,6 +70,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const { width: windowWidth } = useWindowDimensions()
   const focusedRoute = state.routes[state.index]
   const focusedOptions = focusedRoute ? descriptors[focusedRoute.key]?.options : undefined
   const nestedRouteName = focusedRoute ? getNestedFocusedRouteName(focusedRoute) : null
@@ -80,6 +81,7 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   const [viewportWidth, setViewportWidth] = useState(0)
 
   const contentWidth = Math.max(ITEM_SIZE, state.routes.length * ITEM_SIZE + Math.max(0, state.routes.length - 1) * ITEM_GAP + 1)
+  const shellWidth = Math.min(430, Math.max(ITEM_SIZE, windowWidth - spacing[5] * 2))
 
   const scrollToIndex = useCallback((index: number, animated = true) => {
     if (!viewportWidth) return
@@ -176,7 +178,7 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.barShell}>
+      <View style={[styles.barShell, { width: shellWidth, minWidth: shellWidth, maxWidth: shellWidth }]}>
         <LinearGradient
           pointerEvents="none"
           colors={['rgba(255,255,255,0.92)', 'rgba(255,247,237,0.72)', 'rgba(255,255,255,0.86)']}
@@ -253,15 +255,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    width: '100%',
+    alignSelf: 'stretch',
     bottom: 0,
     paddingHorizontal: spacing[5],
     paddingBottom: spacing[4],
     alignItems: 'center',
   },
   barShell: {
-    width: '100%',
-    maxWidth: 430,
-    alignSelf: 'center',
+    alignSelf: 'stretch',
+    flexShrink: 0,
     minHeight: 58,
     borderRadius: radius.full,
     backgroundColor: 'rgba(255,255,255,0.86)',
