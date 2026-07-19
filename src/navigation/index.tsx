@@ -1,9 +1,10 @@
 import React from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { AnimatedButton, AnimatedCard, AppScreen, BottomTabBar, GradientHeroCard } from '../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, AuthLogoMark, BottomTabBar, GradientHeroCard } from '../components/ui'
 import { useAuthStore } from '../stores/authStore'
 import { colors } from '../theme/colors'
 import { fonts } from '../theme/fonts'
@@ -34,7 +35,6 @@ import AgenticSubjectScreen from '../screens/learning/AgenticSubjectScreen'
 import AgenticTopicScreen from '../screens/learning/AgenticTopicScreen'
 import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
-import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
 import AttendanceScreen from '../screens/workspace/AttendanceScreen'
 import ScanUploadScreen from '../screens/workspace/ScanUploadScreen'
@@ -73,7 +73,6 @@ export type LearningStackParamList = {
   AgenticSubject: { subjectId: string }
   AgenticTopic: { topicId: string; topicName?: string; subjectName?: string }
   PreviousPapers: undefined
-  Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
   ScanUpload: undefined
@@ -83,7 +82,6 @@ export type LearningStackParamList = {
 
 export type StaffWorkspaceStackParamList = {
   StaffWorkspace: undefined
-  Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
   ScanUpload: undefined
@@ -112,10 +110,7 @@ export type StaffTabParamList = {
   StaffHome: undefined
   StaffApprovals: undefined
   StaffAttendance: undefined
-  StaffScanUpload: undefined
-  StaffExams: undefined
   StaffPapers: undefined
-  StaffResults: undefined
   StaffAIStudio: undefined
 }
 
@@ -190,7 +185,6 @@ function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
       <LearningStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="PreviousPapers" component={PreviousPapersScreen} options={{ title: 'Previous papers' }} />
-      <LearningStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <LearningStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <LearningStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
@@ -234,7 +228,6 @@ function StaffWorkspaceNavigator() {
   return (
     <StaffWorkspaceStack.Navigator screenOptions={stackScreenOptions}>
       <StaffWorkspaceStack.Screen name="StaffWorkspace" component={WorkspaceScreen} options={{ title: 'Workspace' }} />
-      <StaffWorkspaceStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <StaffWorkspaceStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <StaffWorkspaceStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <StaffWorkspaceStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
@@ -260,10 +253,7 @@ function StaffTabs() {
       <StaffTab.Screen name="StaffHome" component={StaffWorkspaceNavigator} options={{ title: 'Workspace' }} />
       <StaffTab.Screen name="StaffApprovals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <StaffTab.Screen name="StaffAttendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
-      <StaffTab.Screen name="StaffScanUpload" component={ScanUploadScreen} options={{ title: 'Scan' }} />
-      <StaffTab.Screen name="StaffExams" component={ExamsScreen} options={{ title: 'Exams' }} />
       <StaffTab.Screen name="StaffPapers" component={PapersNavigator} options={{ title: 'Papers' }} />
-      <StaffTab.Screen name="StaffResults" component={ResultsNavigator} options={{ title: 'Results' }} />
       <StaffTab.Screen name="StaffAIStudio" component={AIStudioScreen} options={{ title: 'AI Studio' }} />
     </StaffTab.Navigator>
   )
@@ -291,14 +281,47 @@ function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
   return <StaffTabs />
 }
 
-export default function RootNavigator() {
-  const { isAuthenticated, isLoading, user } = useAuthStore()
+export default function RootNavigator({ onRetrySession }: { onRetrySession?: () => void }) {
+  const { isAuthenticated, isLoading, sessionRestoreError, token, user } = useAuthStore()
 
-  if (isLoading) {
+  if (isLoading && !(token && !user)) {
     return (
       <View style={styles.loadingRoot}>
         <ActivityIndicator color={colors.accent} />
         <Text style={styles.loadingText}>Loading Eduraa</Text>
+      </View>
+    )
+  }
+
+  if (token && !user && (sessionRestoreError || isLoading)) {
+    return (
+      <View style={styles.recoveryRoot}>
+        <View style={styles.recoveryContent}>
+          <View style={styles.recoveryBrand}>
+            <AuthLogoMark size={50} />
+            <View>
+              <Text style={styles.recoveryBrandName}>EDURAA</Text>
+              <Text style={styles.recoveryBrandLine}>INTELLIGENCE FOR SERIOUS LEARNING</Text>
+            </View>
+          </View>
+
+          <Text style={styles.recoveryEyebrow}>{isLoading ? 'VERIFYING SAVED SESSION' : 'YOUR PLACE IS HELD'}</Text>
+          <Text style={styles.recoveryTitle}>{isLoading ? 'Finding your place in Eduraa.' : 'Connection paused. Your progress isn’t.'}</Text>
+          <Text style={styles.recoveryCopy}>{isLoading ? 'We’re securely reconnecting this device to your account.' : sessionRestoreError}</Text>
+
+          <View style={styles.recoveryStatus}>
+            <View style={styles.recoveryStatusIcon}>
+              {isLoading ? <ActivityIndicator color={colors.accent} /> : <Ionicons name="cloud-offline-outline" size={20} color={colors.accent} />}
+            </View>
+            <View style={styles.recoveryStatusCopy}>
+              <Text style={styles.recoveryStatusTitle}>{isLoading ? 'Checking your session' : 'Waiting for Eduraa'}</Text>
+              <Text style={styles.recoveryStatusBody}>{isLoading ? 'This usually takes only a moment. Keep Eduraa open while we verify access.' : 'Check your connection, then retry. We won’t send you back to sign in for a temporary outage.'}</Text>
+            </View>
+          </View>
+
+          <AnimatedButton label={isLoading ? 'Checking connection' : 'Try connection again'} loading={isLoading} onPress={() => onRetrySession?.()} style={styles.recoveryAction} />
+          <Text style={styles.recoveryFootnote}>Your saved session stays on this device.</Text>
+        </View>
       </View>
     )
   }
@@ -323,6 +346,103 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontFamily: fonts.medium,
     fontSize: 13,
+  },
+  recoveryRoot: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[8],
+    backgroundColor: colors.canvasWarm,
+  },
+  recoveryContent: {
+    width: '100%',
+    maxWidth: 390,
+    alignSelf: 'center',
+  },
+  recoveryBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  recoveryBrandName: {
+    color: colors.nav,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    letterSpacing: 3,
+  },
+  recoveryBrandLine: {
+    marginTop: 2,
+    color: colors.accentStrong,
+    fontFamily: fonts.bold,
+    fontSize: 7,
+    letterSpacing: 0.8,
+  },
+  recoveryEyebrow: {
+    marginTop: spacing[10],
+    color: colors.accent,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.2,
+  },
+  recoveryTitle: {
+    maxWidth: 360,
+    marginTop: spacing[3],
+    color: colors.nav,
+    fontFamily: fonts.displaySemibold,
+    fontSize: 34,
+    lineHeight: 40,
+    letterSpacing: -0.8,
+  },
+  recoveryCopy: {
+    maxWidth: 350,
+    marginTop: spacing[3],
+    color: colors.textMuted,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  recoveryStatus: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+    marginTop: spacing[7],
+    paddingTop: spacing[5],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderStrong,
+  },
+  recoveryStatusIcon: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: colors.accentSurface,
+  },
+  recoveryStatusCopy: {
+    flex: 1,
+  },
+  recoveryStatusTitle: {
+    color: colors.nav,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+  },
+  recoveryStatusBody: {
+    marginTop: spacing[1],
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  recoveryAction: {
+    width: '100%',
+    marginTop: spacing[7],
+  },
+  recoveryFootnote: {
+    marginTop: spacing[3],
+    color: colors.textSoft,
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    textAlign: 'center',
   },
   roleGateContent: {
     justifyContent: 'center',

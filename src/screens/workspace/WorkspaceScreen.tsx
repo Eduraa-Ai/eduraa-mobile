@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { AnimatedCard, AppScreen, GradientHeroCard, SelectableChip } from '../../components/ui'
+import { AppScreen } from '../../components/ui'
 import { b2cApi } from '../../api/b2c'
 import { mobileControls, MobileControl, roleCanSeeControl } from '../../data/mobileControlCatalog'
 import { useAuthStore } from '../../stores/authStore'
-import { colors, radius, shadows, spacing, typography } from '../../theme'
+import { colors, radius, spacing, typography } from '../../theme'
 
 function roleLabel(role?: string) {
   return role ? role.replace(/_/g, ' ') : 'workspace'
@@ -38,35 +38,28 @@ function isJeeProfile(user: ReturnType<typeof useAuthStore.getState>['user'], pr
   return haystack.includes('jee')
 }
 
-function statusTone(status: MobileControl['nativeStatus']) {
-  if (status === 'native') return colors.success
-  if (status === 'partial') return colors.warning
-  return colors.textMuted
-}
-
-function statusLabel(status: MobileControl['nativeStatus']) {
-  if (status === 'native') return 'Ready'
-  if (status === 'partial') return 'Building'
-  return 'Mobile'
-}
-
-function ControlCard({ control, onPress }: { control: MobileControl; onPress: () => void }) {
-  const tone = statusTone(control.nativeStatus)
+function WorkflowRow({ control, index, first, last, onPress }: { control: MobileControl; index: number; first: boolean; last: boolean; onPress: () => void }) {
   const iconName = control.icon as keyof typeof Ionicons.glyphMap
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.controlCard, pressed && styles.pressed]}>
-      <View style={styles.controlTop}>
-        <View style={styles.controlIcon}>
-          <Ionicons name={iconName in Ionicons.glyphMap ? iconName : 'ellipse'} size={18} color={colors.accent} />
-        </View>
-        <View style={[styles.statusPill, { backgroundColor: `${tone}14` }]}>
-          <Text style={[styles.statusText, { color: tone }]}>{statusLabel(control.nativeStatus)}</Text>
-        </View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${control.label}. ${control.description}`}
+      style={({ pressed }) => [styles.workflowRow, first && styles.workflowRowFirst, last && styles.workflowRowLast, pressed && styles.pressed]}
+    >
+      <View style={styles.workflowIndex}>
+        <Text style={styles.workflowIndexText}>{String(index + 1).padStart(2, '0')}</Text>
       </View>
-      <Text style={styles.controlTitle}>{control.label}</Text>
-      <Text style={styles.controlBody}>{control.description}</Text>
-      <Text style={styles.mobileHint}>Tap to open in mobile</Text>
+      <View style={styles.workflowIcon}>
+        <Ionicons name={iconName in Ionicons.glyphMap ? iconName : 'ellipse'} size={18} color={colors.accent} />
+      </View>
+      <View style={styles.workflowCopy}>
+        {first ? <Text style={styles.workflowFirstLabel}>ROLE START</Text> : null}
+        <Text style={styles.workflowTitle}>{control.label}</Text>
+        <Text style={styles.workflowBody} numberOfLines={2}>{control.description}</Text>
+      </View>
+      <Ionicons name="arrow-forward" size={18} color={colors.textSoft} />
     </Pressable>
   )
 }
@@ -87,8 +80,10 @@ export default function WorkspaceScreen() {
     const jee = isJeeProfile(user, b2cQuery.data)
 
     return mobileControls.filter((control) => {
-      if (control.hiddenOnWeb) return false
-      if (!roleCanSeeControl(user.role, control)) return false
+      // Never surface unfinished snapshot/template destinations. Every item
+      // listed here opens a dedicated screen backed by its real API.
+      if (control.nativeStatus === 'web-only' || control.id === 'dashboard') return false
+      if (control.hiddenOnWeb || !roleCanSeeControl(user.role, control)) return false
       if (control.requiresClassTeacher) {
         const isClassTeacher = Boolean(user.class_teacher_opt_in && user.class_teacher_standard && user.class_teacher_division)
         if (!isClassTeacher) return false
@@ -99,264 +94,134 @@ export default function WorkspaceScreen() {
     })
   }, [b2cQuery.data, user])
 
-  const nativeCount = controls.filter((control) => control.nativeStatus === 'native').length
-  const partialCount = controls.filter((control) => control.nativeStatus === 'partial').length
-
   const openControl = (control: MobileControl) => {
+    const parent = navigation.getParent?.()
+    const parentRoutes: string[] = parent?.getState?.().routeNames ?? []
+
     if (control.id === 'approvals') {
-      const parent = navigation.getParent?.()
-      if (parent?.getState?.().routeNames?.includes('StaffApprovals')) {
-        parent.navigate('StaffApprovals')
-        return
-      }
-      navigation.navigate('Approvals')
+      if (parentRoutes.includes('StaffApprovals')) parent.navigate('StaffApprovals')
+      else navigation.navigate('Approvals')
       return
     }
-
     if (control.id === 'attendance') {
-      const parent = navigation.getParent?.()
-      if (parent?.getState?.().routeNames?.includes('StaffAttendance')) {
-        parent.navigate('StaffAttendance')
-        return
-      }
-      if (parent?.getState?.().routeNames?.includes('Attendance')) {
-        parent.navigate('Attendance')
-        return
-      }
-      navigation.navigate('Attendance')
+      if (parentRoutes.includes('StaffAttendance')) parent.navigate('StaffAttendance')
+      else navigation.navigate('Attendance')
       return
     }
-
     if (control.id === 'scan-upload') {
-      const parent = navigation.getParent?.()
-      if (parent?.getState?.().routeNames?.includes('StaffScanUpload')) {
-        parent.navigate('StaffScanUpload')
-        return
-      }
-      if (parent?.getState?.().routeNames?.includes('ScanUpload')) {
-        parent.navigate('ScanUpload')
-        return
-      }
       navigation.navigate('ScanUpload')
       return
     }
-
     if (control.id === 'exams' || control.id === 'student-exams') {
-      const parent = navigation.getParent?.()
-      if (parent?.getState?.().routeNames?.includes('StaffExams')) {
-        parent.navigate('StaffExams')
-        return
-      }
-      if (parent?.getState?.().routeNames?.includes('Exams')) {
-        parent.navigate('Exams')
-        return
-      }
       navigation.navigate('Exams')
       return
     }
 
-    if (control.target.kind === 'tab' && control.nativeStatus !== 'web-only') {
-      const parent = navigation.getParent?.()
-      if (parent) {
-        const parentRouteNames = parent.getState?.().routeNames ?? []
-        const isStaffTabs = parentRouteNames.includes('StaffHome')
-        if (isStaffTabs && control.target.tab === 'AIStudio') {
-          parent.navigate('StaffAIStudio')
-          return
-        }
-        if (isStaffTabs && control.target.tab === 'Papers' && control.target.screen === 'GeneratePaper') {
-          navigation.navigate('StaffGeneratePaper')
-          return
-        }
-        if (isStaffTabs && control.target.tab === 'Papers') {
-          navigation.navigate('StaffPapers')
-          return
-        }
-        if (isStaffTabs && control.target.tab === 'Results') {
-          navigation.navigate('StaffResults')
-          return
-        }
-        if (isStaffTabs && control.target.tab === 'Home') {
-          parent.navigate('StaffHome')
-          return
-        }
-        if (isStaffTabs) {
-          navigation.navigate('Feature', { featureId: control.id })
-          return
-        }
-        parent.navigate(control.target.tab, control.target.screen ? { screen: control.target.screen, params: control.target.params } : undefined)
+    if (control.target.kind === 'tab') {
+      const isStaffTabs = parentRoutes.includes('StaffHome')
+      if (isStaffTabs) {
+        if (control.target.tab === 'AIStudio') navigation.navigate('StaffAIStudio')
+        else if (control.target.tab === 'Papers' && control.target.screen === 'GeneratePaper') navigation.navigate('StaffGeneratePaper')
+        else if (control.target.tab === 'Papers') navigation.navigate('StaffPapers')
+        else if (control.target.tab === 'Results') navigation.navigate('StaffResults')
+        else if (control.target.tab === 'Home') parent.navigate('StaffHome')
         return
       }
-      if (control.target.tab === 'AIStudio') {
-        navigation.navigate('StaffAIStudio')
-        return
-      }
-      if (control.target.tab === 'Papers' && control.target.screen === 'GeneratePaper') {
-        navigation.navigate('StaffGeneratePaper')
-        return
-      }
-      if (control.target.tab === 'Papers') {
-        navigation.navigate('StaffPapers')
-        return
-      }
-      if (control.target.tab === 'Results') {
-        navigation.navigate('StaffResults')
-        return
-      }
-      return
-    }
 
-    navigation.navigate('Feature', { featureId: control.id })
+      if (parent) {
+        parent.navigate(control.target.tab, control.target.screen ? { screen: control.target.screen, params: control.target.params } : undefined)
+      }
+    }
   }
+
+  const preferredId = user?.role === 'principal' ? 'approvals' : 'exams'
+  const focusControl = controls.find((control) => control.id === preferredId) ?? controls[0]
+  const orderedControls = focusControl
+    ? [focusControl, ...controls.filter((control) => control.id !== focusControl.id)]
+    : controls
+  const firstName = user?.display_name?.trim().split(/\s+/)[0]
 
   return (
     <AppScreen contentStyle={styles.screen}>
-      <GradientHeroCard
-        eyebrow="CONTROL CENTER"
-        title={`${roleLabel(user?.role)} controls`}
-        subtitle="Role-aware mobile controls for the same workflows available after login."
-      />
-
-      <AnimatedCard style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryMetric}>
-            <Text style={styles.summaryValue}>{controls.length}</Text>
-            <Text style={styles.summaryLabel}>Visible</Text>
-          </View>
-          <View style={styles.summaryMetric}>
-            <Text style={styles.summaryValue}>{nativeCount}</Text>
-            <Text style={styles.summaryLabel}>Native</Text>
-          </View>
-          <View style={styles.summaryMetric}>
-            <Text style={styles.summaryValue}>{partialCount}</Text>
-            <Text style={styles.summaryLabel}>Partial</Text>
-          </View>
+      <View style={styles.identityRow}>
+        <Image source={require('../../../assets/eduraa-book-brain.png')} style={styles.logo} resizeMode="cover" />
+        <View style={styles.identityCopy}>
+          <Text style={styles.identityName}>EDURAA</Text>
+          <Text style={styles.identityRole}>{roleLabel(user?.role)}</Text>
         </View>
-        {user?.role === 'b2c_student' && b2cQuery.isLoading ? (
-          <View style={styles.inlineLoading}>
-            <ActivityIndicator color={colors.accent} />
-            <Text style={styles.inlineLoadingText}>Checking JEE/competitive filters</Text>
-          </View>
-        ) : null}
-      </AnimatedCard>
-
-      <View style={styles.chipRow}>
-        <SelectableChip label="Website controls" selected />
-        <SelectableChip label={roleLabel(user?.role)} selected={false} />
+        <View style={styles.livePill}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveText}>Live</Text>
+        </View>
       </View>
 
-      {(['core', 'learning', 'operations', 'admin', 'profile', 'advanced'] as const).map((section) => {
-        const sectionControls = controls.filter((control) => control.section === section)
-        if (!sectionControls.length) return null
+      <View style={styles.intro}>
+        <Text style={styles.eyebrow}>TODAY’S DESK</Text>
+        <Text style={styles.title}>{firstName ? `${firstName}, choose your next move.` : 'Choose your next move.'}</Text>
+        <Text style={styles.subtitle}>Your role-ready tools, connected to Eduraa data and kept in one focused place.</Text>
+      </View>
 
-        return (
-          <View key={section} style={styles.section}>
-            <Text style={styles.sectionTitle}>{section}</Text>
-            {sectionControls.map((control) => (
-              <ControlCard key={control.id} control={control} onPress={() => openControl(control)} />
+      {user?.role === 'b2c_student' && b2cQuery.isLoading ? (
+        <View style={styles.inlineLoading}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.inlineLoadingText}>Personalizing your workspace</Text>
+        </View>
+      ) : null}
+
+      {orderedControls.length ? (
+        <View style={styles.workflowSection}>
+          <View style={styles.workflowHeader}>
+            <Text style={styles.workflowHeading}>Live workflows</Text>
+            <Text style={styles.workflowMeta}>{orderedControls.length} ready</Text>
+          </View>
+          <View style={styles.workflowList}>
+            {orderedControls.map((control, index) => (
+              <WorkflowRow
+                key={control.id}
+                control={control}
+                index={index}
+                first={index === 0}
+                last={index === orderedControls.length - 1}
+                onPress={() => openControl(control)}
+              />
             ))}
           </View>
-        )
-      })}
+        </View>
+      ) : null}
     </AppScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    paddingBottom: spacing[20],
-  },
-  summaryCard: {
-    gap: spacing[4],
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: spacing[3],
-  },
-  summaryMetric: {
-    flex: 1,
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
-    padding: spacing[3],
-  },
-  summaryValue: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 22,
-  },
-  summaryLabel: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-  },
-  inlineLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-  },
-  inlineLoadingText: {
-    ...typography.roles.label,
-    color: colors.textMuted,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[2],
-  },
-  section: {
-    gap: spacing[3],
-  },
-  sectionTitle: {
-    ...typography.roles.eyebrow,
-    color: colors.accent,
-  },
-  controlCard: {
-    borderRadius: radius.card,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing[4],
-    gap: spacing[3],
-    ...shadows.sm,
-  },
-  controlTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  controlIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
-  },
-  statusPill: {
-    borderRadius: radius.full,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-  },
-  statusText: {
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-  },
-  controlTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 18,
-  },
-  controlBody: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  mobileHint: {
-    color: colors.textSoft,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-  },
-  pressed: {
-    opacity: 0.78,
-  },
+  screen: { paddingBottom: spacing[20] + 48, gap: spacing[5] },
+  identityRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  logo: { width: 44, height: 44, borderRadius: 17 },
+  identityCopy: { flex: 1 },
+  identityName: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12, letterSpacing: 2.8 },
+  identityRole: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, textTransform: 'capitalize' },
+  livePill: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing[3], borderRadius: radius.full, backgroundColor: colors.successSurface },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+  liveText: { color: colors.success, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  intro: { gap: spacing[2], marginTop: -spacing[1] },
+  eyebrow: { color: colors.accent, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.3 },
+  title: { maxWidth: 350, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 28, lineHeight: 34, letterSpacing: -0.6 },
+  subtitle: { maxWidth: 355, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14, lineHeight: 21 },
+  inlineLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  inlineLoadingText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
+  workflowSection: { gap: spacing[3] },
+  workflowHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  workflowHeading: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 20 },
+  workflowMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  workflowList: { overflow: 'hidden', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.borderStrong },
+  workflowRow: { minHeight: 102, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+  workflowRowFirst: { minHeight: 124, borderLeftWidth: 4, borderLeftColor: colors.accent, paddingLeft: spacing[3], backgroundColor: colors.accentSurface },
+  workflowRowLast: { borderBottomWidth: 0 },
+  workflowIndex: { width: 24 },
+  workflowIndexText: { color: colors.textSoft, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  workflowIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.accentSurface },
+  workflowCopy: { flex: 1 },
+  workflowFirstLabel: { marginBottom: spacing[1], color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.1 },
+  workflowTitle: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 15 },
+  workflowBody: { marginTop: spacing[1], color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
+  pressed: { opacity: 0.7, backgroundColor: colors.accentSurface },
 })

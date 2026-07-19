@@ -1,11 +1,11 @@
 /**
  * Eduraa Mobile - Axios API Client
- * Mirrors frontend auth behavior with bearer tokens and refresh retry.
+ * Platform-aware API client with bearer-token authentication.
  */
 
-import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
-import * as SecureStore from 'expo-secure-store'
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { Platform } from 'react-native'
+import { readStoredAccessToken } from '../auth/authStorage'
 
 type ApiTarget = 'local' | 'prod'
 
@@ -25,11 +25,36 @@ const getWebLocalApiUrl = () => {
   return `${window.location.protocol}//${window.location.hostname}:${LOCAL_API_PORT}`
 }
 
-const resolveApiBaseUrl = () => {
-  const explicitUrl = process.env.EXPO_PUBLIC_API_URL?.trim()
-  if (explicitUrl) return explicitUrl.replace(/\/$/, '')
+const normalizeUrl = (value?: string) => value?.trim().replace(/\/$/, '') || undefined
 
+const isLoopbackUrl = (value: string) => {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase()
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  } catch {
+    return false
+  }
+}
+
+const resolveApiBaseUrl = () => {
   const target = normalizeApiTarget(process.env.EXPO_PUBLIC_API_TARGET)
+  const platformUrl = normalizeUrl(
+    Platform.OS === 'web'
+      ? process.env.EXPO_PUBLIC_WEB_API_URL
+      : process.env.EXPO_PUBLIC_NATIVE_API_URL
+  )
+  const legacyUniversalUrl = normalizeUrl(process.env.EXPO_PUBLIC_API_URL)
+  const explicitUrl = platformUrl ?? legacyUniversalUrl
+
+  if (explicitUrl) {
+    // A loopback URL in a shared .env points at the phone itself in Expo Go.
+    // Ignore it for production-native runs so a web-only bridge cannot break
+    // physical devices or emulators.
+    if (!(Platform.OS !== 'web' && target === 'prod' && isLoopbackUrl(explicitUrl))) {
+      return explicitUrl
+    }
+  }
+
   if (target === 'prod') return PROD_API_BASE_URL
 
   if (Platform.OS === 'web') return getWebLocalApiUrl()
@@ -44,7 +69,6 @@ const resolveApiBaseUrl = () => {
 
 export const API_TARGET = normalizeApiTarget(process.env.EXPO_PUBLIC_API_TARGET)
 export const API_BASE_URL = resolveApiBaseUrl()
-export const TOKEN_KEY = 'eduraa_access_token'
 
 var inMemoryAccessToken: string | null = null
 
@@ -54,11 +78,7 @@ export function setAccessToken(token: string | null) {
 
 export async function getAccessToken() {
   if (inMemoryAccessToken) return inMemoryAccessToken
-  try {
-    return await SecureStore.getItemAsync(TOKEN_KEY)
-  } catch {
-    return null
-  }
+  return readStoredAccessToken()
 }
 
 const sharedClientConfig = {
@@ -71,7 +91,6 @@ const sharedClientConfig = {
 }
 
 const apiClient = axios.create(sharedClientConfig)
-const refreshClient = axios.create(sharedClientConfig)
 
 if (__DEV__) {
   console.info(`[Eduraa API] target=${API_TARGET} base=${API_BASE_URL}`)
@@ -80,7 +99,7 @@ if (__DEV__) {
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     try {
-      const token = inMemoryAccessToken ?? (await SecureStore.getItemAsync(TOKEN_KEY))
+      const token = inMemoryAccessToken ?? (await readStoredAccessToken())
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`
       }
@@ -94,92 +113,26 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-type AuthRefreshPayload = {
-  access_token: string
-}
-
-type RetryableRequestConfig = InternalAxiosRequestConfig & {
-  _retry?: boolean
-}
-
 let logoutCallback: (() => void) | null = null
-let refreshTokenCallback: ((token: string) => Promise<void> | void) | null = null
-let refreshPromise: Promise<string> | null = null
 
 export function registerLogoutCallback(cb: () => void) {
   logoutCallback = cb
-}
-
-export function registerRefreshTokenCallback(cb: (token: string) => Promise<void> | void) {
-  refreshTokenCallback = cb
-}
-
-async function persistAccessToken(token: string) {
-  inMemoryAccessToken = token
-  try {
-    await SecureStore.setItemAsync(TOKEN_KEY, token)
-  } catch {
-    // SecureStore may be unavailable on web; the in-memory token still covers this session.
-  }
-  await refreshTokenCallback?.(token)
-}
-
-async function clearAccessToken() {
-  inMemoryAccessToken = null
-  try {
-    await SecureStore.deleteItemAsync(TOKEN_KEY)
-  } catch {
-    // Ignore storage cleanup failures on unsupported platforms.
-  }
 }
 
 function isAuthEndpoint(url?: string) {
   return Boolean(url?.includes('/auth/login') || url?.includes('/auth/refresh') || url?.includes('/auth/logout'))
 }
 
-async function refreshAccessToken() {
-  if (!refreshPromise) {
-    refreshPromise = refreshClient
-      .post<AuthRefreshPayload>('/auth/refresh')
-      .then(async (response) => {
-        const token = response.data.access_token
-        if (!token) {
-          throw new Error('Refresh response did not include an access token.')
-        }
-        await persistAccessToken(token)
-        return token
-      })
-      .finally(() => {
-        refreshPromise = null
-      })
-  }
-
-  return refreshPromise
-}
-
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as RetryableRequestConfig | undefined
+    const originalRequest = error.config
 
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isAuthEndpoint(originalRequest.url)) {
-      originalRequest._retry = true
-      try {
-        const token = await refreshAccessToken()
-        originalRequest.headers.Authorization = `Bearer ${token}`
-        return apiClient.request(originalRequest as AxiosRequestConfig)
-      } catch (refreshError) {
-        // Preserve the session when refresh could not reach the server. Only
-        // an explicit auth rejection proves that the stored session is stale.
-        const refreshStatus = axios.isAxiosError(refreshError) ? refreshError.response?.status : undefined
-        if (refreshStatus === 400 || refreshStatus === 401 || refreshStatus === 403) {
-          await clearAccessToken()
-          logoutCallback?.()
-        }
-        return Promise.reject(refreshError)
-      }
-    } else if (error.response?.status === 401 && !isAuthEndpoint(originalRequest?.url)) {
-      await clearAccessToken()
+    // The backend currently issues access tokens only; it has no refresh
+    // endpoint. Do not call a nonexistent route or preserve a proven-expired
+    // session. Network failures have no status and intentionally keep auth.
+    if (error.response?.status === 401 && !isAuthEndpoint(originalRequest?.url)) {
+      setAccessToken(null)
       logoutCallback?.()
     }
 

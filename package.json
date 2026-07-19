@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "expo start",
+    "start": "node scripts/start-web.cjs",
     "expo-go": "expo start --go --tunnel --clear",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
+    "web": "node scripts/start-web.cjs --web",
     "api-bridge": "node scripts/dev-api-bridge.cjs",
     "test:models": "node scripts/run-model-tests.cjs"
   },

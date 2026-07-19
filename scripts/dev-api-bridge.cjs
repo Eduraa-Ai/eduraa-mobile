@@ -4,21 +4,29 @@ const https = require('https')
 const upstream = new URL(
   'https://eduraa-ai-dev-cin-api.gentleforest-0ad6efdc.centralindia.azurecontainerapps.io'
 )
-const allowedOrigins = new Set([
-  'http://localhost:8081',
-  'http://127.0.0.1:8081',
-])
+const isAllowedOrigin = (origin) => {
+  if (!origin) return false
+  try {
+    const parsed = new URL(origin)
+    return (
+      parsed.protocol === 'http:' &&
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+    )
+  } catch {
+    return false
+  }
+}
 
 const applyCors = (request, response) => {
   const origin = request.headers.origin
-  if (origin && allowedOrigins.has(origin)) {
+  if (origin && isAllowedOrigin(origin)) {
     response.setHeader('Access-Control-Allow-Origin', origin)
     response.setHeader('Access-Control-Allow-Credentials', 'true')
     response.setHeader('Vary', 'Origin')
   }
 }
 
-const server = http.createServer((request, response) => {
+const createBridgeServer = () => http.createServer((request, response) => {
   applyCors(request, response)
 
   if (request.method === 'OPTIONS') {
@@ -72,6 +80,21 @@ const server = http.createServer((request, response) => {
   request.pipe(upstreamRequest)
 })
 
-server.listen(8001, () => {
-  console.log('Eduraa production API bridge listening on http://localhost:8001')
+const startBridge = ({ port = 8001 } = {}) => new Promise((resolve, reject) => {
+  const server = createBridgeServer()
+  server.once('error', reject)
+  server.listen(port, '127.0.0.1', () => {
+    server.off('error', reject)
+    console.log(`Eduraa production API bridge listening on http://localhost:${port}`)
+    resolve(server)
+  })
 })
+
+module.exports = { createBridgeServer, startBridge }
+
+if (require.main === module) {
+  startBridge().catch((error) => {
+    console.error(`Could not start the Eduraa API bridge: ${error.message}`)
+    process.exitCode = 1
+  })
+}

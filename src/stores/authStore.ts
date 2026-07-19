@@ -1,11 +1,11 @@
 /**
  * Eduraa Mobile - Auth Store (Zustand)
- * Mirrors frontend auth behavior using SecureStore for native persistence.
+ * Cross-platform persisted authentication and session restoration state.
  */
 
 import { create } from 'zustand'
-import * as SecureStore from 'expo-secure-store'
-import { TOKEN_KEY, registerLogoutCallback, registerRefreshTokenCallback, setAccessToken } from '../api/client'
+import { registerLogoutCallback, setAccessToken } from '../api/client'
+import { clearPersistedAuth, readPersistedAuth, writePersistedAuth } from '../auth/authStorage'
 import type { AccountMinimal, AuthToken } from '../types'
 
 interface AuthState {
@@ -13,21 +13,17 @@ interface AuthState {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  sessionRestoreError: string | null
   setAuth: (authToken: AuthToken) => Promise<void>
   logout: () => Promise<void>
-  loadFromStorage: () => Promise<void>
+  loadFromStorage: () => Promise<{ token: string | null; user: AccountMinimal | null }>
+  beginSessionRestore: () => void
+  finishSessionRestore: (error?: string | null) => void
 }
 
 export const useAuthStore = create<AuthState>((set, get) => {
   registerLogoutCallback(() => {
     void get().logout()
-  })
-  registerRefreshTokenCallback((token) => {
-    set((state) => ({
-      token,
-      isAuthenticated: state.isAuthenticated || Boolean(state.user),
-      isLoading: false,
-    }))
   })
 
   return {
@@ -35,12 +31,13 @@ export const useAuthStore = create<AuthState>((set, get) => {
     token: null,
     isAuthenticated: false,
     isLoading: true,
+    sessionRestoreError: null,
 
     setAuth: async (authToken: AuthToken) => {
       try {
-        await SecureStore.setItemAsync(TOKEN_KEY, authToken.access_token)
+        await writePersistedAuth(authToken.access_token, authToken.user)
       } catch {
-        // SecureStore is not always available in the web preview.
+        // Keep the live session usable even if device storage is unavailable.
       }
 
       setAccessToken(authToken.access_token)
@@ -49,15 +46,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
         token: authToken.access_token,
         isAuthenticated: true,
         isLoading: false,
+        sessionRestoreError: null,
       })
     },
 
     logout: async () => {
-      try {
-        await SecureStore.deleteItemAsync(TOKEN_KEY)
-      } catch {
-        // Ignore storage cleanup failures on unsupported platforms.
-      }
+      await clearPersistedAuth()
 
       setAccessToken(null)
       set({
@@ -65,23 +59,48 @@ export const useAuthStore = create<AuthState>((set, get) => {
         token: null,
         isAuthenticated: false,
         isLoading: false,
+        sessionRestoreError: null,
       })
     },
 
     loadFromStorage: async () => {
-      try {
-        const token = await SecureStore.getItemAsync(TOKEN_KEY)
-        if (token) {
-          setAccessToken(token)
-          set({ token, isLoading: false })
-          return
-        }
-      } catch {
-        // Fall through to the unauthenticated state.
+      const persisted = await readPersistedAuth()
+      setAccessToken(persisted.token)
+
+      if (persisted.token) {
+        // Keep the navigation gate closed while /auth/me validates the token.
+        // A cached user is retained so a temporary outage can safely restore
+        // the correct role-based shell instead of showing the login template.
+        set({
+          token: persisted.token,
+          user: persisted.user,
+          isAuthenticated: Boolean(persisted.user),
+          isLoading: true,
+          sessionRestoreError: null,
+        })
+      } else {
+        set({
+          token: null,
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          sessionRestoreError: null,
+        })
       }
 
-      setAccessToken(null)
-      set({ isLoading: false })
+      return persisted
+    },
+
+    beginSessionRestore: () => {
+      set({ isLoading: true, sessionRestoreError: null })
+    },
+
+    finishSessionRestore: (error = null) => {
+      set((state) => ({
+        isAuthenticated: Boolean(state.token && state.user),
+        isLoading: false,
+        sessionRestoreError: error,
+      }))
     },
   }
 })
