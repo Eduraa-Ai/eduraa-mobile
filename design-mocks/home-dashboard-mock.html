@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eduraa Home Dashboard Mock</title>
+    <style>
+      :root {
+        --canvas: #e9eef2;
+        --paper: #fffaf2;
+        --card: #ffffff;
+        --ink: #101828;
+        --navy: #111827;
+        --muted: #667085;
+        --soft: #98a2b3;
+        --line: #eadfce;
+        --orange: #f97316;
+        --orange-dark: #c2410c;
+        --orange-soft: #fff7ed;
+        --blue: #2f80ed;
+        --blue-soft: #e7f0ff;
+        --gold: #ffbf33;
+        --gold-soft: #fff2cc;
+        --success: #2e7d4a;
+        --success-soft: #edf8f1;
+        --shadow: 0 18px 42px rgba(17, 24, 39, 0.13);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 28px;
+        background:
+          linear-gradient(135deg, rgba(249, 115, 22, 0.16), transparent 36%),
+          linear-gradient(315deg, rgba(255, 191, 51, 0.16), transparent 42%),
+          var(--canvas);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .phone {
+        width: 390px;
+        height: 844px;
+        overflow: hidden;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+        border-radius: 38px;
+        background: var(--paper);
+        box-shadow: 0 34px 90px rgba(17, 24, 39, 0.26);
+      }
+
+      .status {
+        height: 24px;
+      }
+
+      .shell {
+        height: calc(100% - 24px);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .content {
+        flex: 1;
+        overflow-x: hidden;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px 16px 88px;
+      }
+
+      .content::-webkit-scrollbar {
+        width: 0;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+      }
+
+      .logo {
+        width: 44px;
+        height: 44px;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+        border-radius: 17px;
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        background: white;
+        box-shadow: 0 10px 22px rgba(17, 24, 39, 0.12);
+      }
+
+      .logo img {
+        width: 44px;
+        height: 44px;
+        object-fit: cover;
+        display: block;
+      }
+
+      h1 {
+        font-size: 20px;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .meta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .icon-btn {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.74);
+        color: var(--ink);
+        font-size: 15px;
+        font-weight: 950;
+      }
+
+      .hero {
+        position: relative;
+        min-height: 228px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        background:
+          linear-gradient(90deg, var(--orange) 0 5px, transparent 5px),
+          linear-gradient(135deg, #ffffff 0%, #fffaf2 52%, #fff2cc 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .hero-copy {
+        position: relative;
+        z-index: 2;
+        padding: 16px 16px 0;
+      }
+
+      .eyebrow {
+        color: var(--orange-dark);
+        font-size: 10px;
+        font-weight: 950;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .hero h2 {
+        max-width: 252px;
+        margin-top: 7px;
+        color: var(--ink);
+        font-size: 25px;
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      .hero p {
+        max-width: 250px;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.38;
+      }
+
+      .route-stage {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: 12px;
+        height: 94px;
+      }
+
+      .route-stage svg {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        width: 100%;
+        height: 68px;
+      }
+
+      .node {
+        position: absolute;
+        width: 56px;
+        height: 56px;
+        display: grid;
+        place-items: center;
+        border: 4px solid rgba(255, 255, 255, 0.96);
+        border-radius: 21px;
+        box-shadow: 0 12px 20px rgba(17, 24, 39, 0.14);
+        font-size: 10px;
+        font-weight: 950;
+        text-align: center;
+      }
+
+      .node.one {
+        left: 0;
+        top: 13px;
+        background: white;
+        color: var(--navy);
+      }
+
+      .node.two {
+        left: 120px;
+        top: 0;
+        background: var(--orange);
+        color: white;
+      }
+
+      .node.three {
+        right: 0;
+        top: 16px;
+        background: var(--blue);
+        color: white;
+      }
+
+      .route-label {
+        position: absolute;
+        left: 65px;
+        right: 65px;
+        bottom: 0;
+        min-height: 50px;
+        display: grid;
+        align-content: center;
+        padding: 8px 12px;
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+      }
+
+      .route-label strong {
+        display: -webkit-box;
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 12px;
+        line-height: 1.18;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .route-label span {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .metric {
+        min-height: 78px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: white;
+        box-shadow: 0 10px 26px rgba(17, 24, 39, 0.06);
+      }
+
+      .metric-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .metric-label {
+        color: var(--muted);
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .metric-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--orange);
+      }
+
+      .metric strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 19px;
+        line-height: 1;
+      }
+
+      .metric span {
+        display: block;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 760;
+        line-height: 1.2;
+      }
+
+      .section-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 2px;
+      }
+
+      .section-row strong {
+        font-size: 15px;
+      }
+
+      .section-row span {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .plan-card {
+        min-height: 152px;
+        display: grid;
+        grid-template-columns: 46px 1fr;
+        gap: 11px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 25px;
+        background: white;
+        box-shadow: 0 10px 26px rgba(17, 24, 39, 0.06);
+      }
+
+      .plan-index {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border-radius: 15px;
+        background: var(--orange-soft);
+        color: var(--orange-dark);
+        font-size: 11px;
+        font-weight: 950;
+      }
+
+      .plan-copy {
+        display: grid;
+        align-content: center;
+        gap: 7px;
+      }
+
+      .plan-copy h3 {
+        font-size: 17px;
+        line-height: 1.14;
+      }
+
+      .plan-copy p {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.38;
+      }
+
+      .step-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 2px;
+      }
+
+      .step-pill {
+        height: 25px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 8px;
+        border-radius: 999px;
+        background: var(--orange-soft);
+        color: var(--orange-dark);
+        font-size: 10px;
+        font-weight: 900;
+      }
+
+      .cta-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .btn {
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 0 13px;
+        font-size: 12px;
+        font-weight: 950;
+        white-space: nowrap;
+      }
+
+      .btn.primary {
+        flex: 1;
+        background: var(--navy);
+        color: white;
+      }
+
+      .btn.ghost {
+        width: 92px;
+        border: 1px solid var(--line);
+        color: var(--ink);
+        background: white;
+      }
+
+      .quick-list {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .quick-row {
+        height: 137px;
+        min-height: 137px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 19px;
+        background: white;
+        box-shadow: 0 10px 24px rgba(17, 24, 39, 0.07);
+      }
+
+      .quick-card-head {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .quick-icon {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 13px;
+        background: var(--orange-soft);
+        color: var(--orange-dark);
+        font-size: 11px;
+        font-weight: 950;
+      }
+
+      .quick-icon svg {
+        width: 17px;
+        height: 17px;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+      }
+
+      .quick-copy {
+        min-width: 0;
+      }
+
+      .quick-kicker {
+        margin-bottom: 5px;
+        color: var(--orange-dark);
+        font-size: 8px;
+        font-weight: 950;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .quick-copy strong {
+        display: -webkit-box;
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 13px;
+        line-height: 1.08;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .quick-body {
+        display: -webkit-box;
+        margin-top: 6px;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 10.5px;
+        line-height: 1.22;
+        text-overflow: ellipsis;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .quick-chevron {
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        color: #8090a6;
+        font-size: 22px;
+        font-weight: 850;
+      }
+
+      .bottom-nav {
+        height: 78px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 16px 11px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        background: rgba(255, 250, 242, 0.98);
+        border-top: 1px solid var(--line);
+      }
+
+      .bottom-nav::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+
+      .tab {
+        position: relative;
+        flex: 0 0 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff7ed;
+        color: #475569;
+        box-shadow: 0 8px 18px rgba(17, 24, 39, 0.06);
+      }
+
+      .tab-mark {
+        width: 22px;
+        height: 22px;
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+
+      .tab-mark svg {
+        width: 20px;
+        height: 20px;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+      }
+
+      .tab-label {
+        display: none;
+        color: inherit;
+        font-size: 12px;
+        font-weight: 950;
+      }
+
+      .tab.active {
+        flex-basis: 82px;
+        justify-content: flex-start;
+        padding: 0 13px;
+        color: white;
+        background: var(--navy);
+        border-color: rgba(17, 24, 39, 0.96);
+        box-shadow: 0 14px 30px rgba(17, 24, 39, 0.22);
+      }
+
+      .tab.active .tab-label {
+        display: block;
+      }
+
+      .tab.active::before {
+        content: "";
+        position: absolute;
+        top: 5px;
+        left: 14px;
+        width: 24px;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--orange);
+      }
+    </style>
+  </head>
+  <body>
+    <section class="phone">
+      <div class="status"></div>
+      <main class="shell">
+        <div class="content">
+          <header class="topbar">
+            <div class="brand">
+              <div class="logo">
+                <img src="./assets/eduraa-book-brain.png" alt="Eduraa AI" />
+              </div>
+              <div>
+                <h1>Home</h1>
+                <div class="meta">JEE + school workspace</div>
+              </div>
+            </div>
+            <div class="icon-btn">?</div>
+          </header>
+
+          <section class="hero">
+            <div class="hero-copy">
+              <div class="eyebrow">Today's plan</div>
+              <h2>Continue your learning path.</h2>
+              <p>Start with one weak concept, then practice from the same pattern.</p>
+            </div>
+            <div class="route-stage">
+              <svg viewBox="0 0 324 76" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M30 44 C82 7, 138 10, 170 35 C210 63, 256 59, 298 33" fill="none" stroke="#e5eaf0" stroke-width="12" stroke-linecap="round" />
+                <path d="M30 44 C82 7, 138 10, 170 35" fill="none" stroke="#f97316" stroke-width="12" stroke-linecap="round" />
+                <path d="M30 44 C82 7, 138 10, 170 35 C210 63, 256 59, 298 33" fill="none" stroke="rgba(255,255,255,0.72)" stroke-width="3" stroke-linecap="round" stroke-dasharray="7 12" />
+              </svg>
+              <div class="node one">Review</div>
+              <div class="node two">Learn</div>
+              <div class="node three">Practice</div>
+              <div class="route-label">
+                <strong>Electrostatics field lines</strong>
+                <span>35 min route &middot; 12 PYQs</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="metrics">
+            <div class="metric">
+              <div class="metric-top">
+                <div class="metric-label">Signal</div>
+                <div class="metric-dot"></div>
+              </div>
+              <strong>68</strong>
+              <span>learning health</span>
+            </div>
+            <div class="metric">
+              <div class="metric-top">
+                <div class="metric-label">Due</div>
+                <div class="metric-dot" style="background: var(--blue);"></div>
+              </div>
+              <strong>2</strong>
+              <span>papers waiting</span>
+            </div>
+            <div class="metric">
+              <div class="metric-top">
+                <div class="metric-label">Ready</div>
+                <div class="metric-dot" style="background: var(--success);"></div>
+              </div>
+              <strong>1</strong>
+              <span>checked result</span>
+            </div>
+          </section>
+
+          <div class="section-row">
+            <strong>Next best action</strong>
+            <span>35 min</span>
+          </div>
+
+          <section class="plan-card">
+            <div class="plan-index">01</div>
+            <div class="plan-copy">
+              <h3>Repair weak concept</h3>
+              <p>Electrostatics field lines is the most useful repair from your latest paper.</p>
+              <div class="step-row">
+                <div class="step-pill">8 min recap</div>
+                <div class="step-pill">12 PYQs</div>
+              </div>
+              <div class="cta-row">
+                <div class="btn primary">Start learning</div>
+                <div class="btn ghost">Result</div>
+              </div>
+            </div>
+          </section>
+
+          <div class="section-row">
+            <strong>Next actions</strong>
+            <span>High-value routes for today.</span>
+          </div>
+
+          <section class="quick-list">
+            <div class="quick-row">
+              <div class="quick-card-head">
+                <div class="quick-icon">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M13 2 5 13h6l-1 9 8-12h-6l1-8z" />
+                  </svg>
+                </div>
+                <div class="quick-chevron">›</div>
+              </div>
+              <div class="quick-copy">
+                <div class="quick-kicker">AI action</div>
+                <strong>Create a focus paper</strong>
+                <div class="quick-body">Generate practice from weak areas</div>
+              </div>
+            </div>
+            <div class="quick-row">
+              <div class="quick-card-head">
+                <div class="quick-icon" style="background: #f5f3ff; color: #7c3aed;">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                    <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z" />
+                    <path d="M5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14z" />
+                  </svg>
+                </div>
+                <div class="quick-chevron">›</div>
+              </div>
+              <div class="quick-copy">
+                <div class="quick-kicker">Learning</div>
+                <strong>Agentic Learning</strong>
+                <div class="quick-body">Open weak concepts and lessons</div>
+              </div>
+            </div>
+            <div class="quick-row">
+              <div class="quick-card-head">
+                <div class="quick-icon" style="background: var(--blue-soft); color: var(--blue);">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16z" />
+                    <path d="M8 7h8" />
+                    <path d="M8 11h8" />
+                    <path d="M8 15h5" />
+                    <path d="M4 6v15" />
+                  </svg>
+                </div>
+                <div class="quick-chevron">›</div>
+              </div>
+              <div class="quick-copy">
+                <div class="quick-kicker">PYQ</div>
+                <strong>JEE previous papers</strong>
+                <div class="quick-body">Browse PYQs and start paper practice</div>
+              </div>
+            </div>
+            <div class="quick-row">
+              <div class="quick-card-head">
+                <div class="quick-icon" style="background: var(--success-soft); color: var(--success);">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="m8.5 11.5-2 8 5.5-3 5.5 3-2-8" />
+                    <path d="m10.5 8 1.1 1.1L14 6.8" />
+                  </svg>
+                </div>
+                <div class="quick-chevron">›</div>
+              </div>
+              <div class="quick-copy">
+                <div class="quick-kicker" style="color: var(--success);">Results</div>
+                <strong>Review checked results</strong>
+                <div class="quick-body">See marks, feedback, and manual review status</div>
+              </div>
+            </div>
+            <div class="quick-row">
+              <div class="quick-card-head">
+                <div class="quick-icon" style="background: #f5f3ff; color: #7c3aed;">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                    <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z" />
+                  </svg>
+                </div>
+                <div class="quick-chevron">›</div>
+              </div>
+              <div class="quick-copy">
+                <div class="quick-kicker">Tutor</div>
+                <strong>Ask Eduraa AI</strong>
+                <div class="quick-body">Explain mistakes and plan your next study block</div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <nav class="bottom-nav" aria-label="Primary navigation">
+          <div class="tab active" aria-label="Home">
+            <div class="tab-mark">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m3 10 9-7 9 7" />
+                <path d="M5 10v10h14V10" />
+                <path d="M9 20v-6h6v6" />
+              </svg>
+            </div>
+            <span class="tab-label">Home</span>
+          </div>
+          <div class="tab" aria-label="Learn">
+            <div class="tab-mark">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16z" />
+                <path d="M8 7h8" />
+                <path d="M8 11h8" />
+                <path d="M8 15h5" />
+              </svg>
+            </div>
+            <span class="tab-label">Learn</span>
+          </div>
+          <div class="tab" aria-label="Papers">
+            <div class="tab-mark">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                <path d="M14 3v5h5" />
+                <path d="M9 13h6" />
+                <path d="M9 17h4" />
+              </svg>
+            </div>
+            <span class="tab-label">Papers</span>
+          </div>
+          <div class="tab" aria-label="Results">
+            <div class="tab-mark">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 19V5" />
+                <path d="M8 19v-7" />
+                <path d="M13 19V9" />
+                <path d="M18 19V6" />
+                <path d="M3 19h18" />
+              </svg>
+            </div>
+            <span class="tab-label">Results</span>
+          </div>
+          <div class="tab" aria-label="Profile">
+            <div class="tab-mark">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 21a8 8 0 0 0-16 0" />
+                <circle cx="12" cy="8" r="4" />
+              </svg>
+            </div>
+            <span class="tab-label">Profile</span>
+          </div>
+        </nav>
+      </main>
+    </section>
+  </body>
+</html>

@@ -9,8 +9,10 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
+import { isLearnerRole } from '../../auth/roles'
 import { AuthLogoMark } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
+import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
 import type { GradingResultItem } from '../../types'
 import {
@@ -118,6 +120,8 @@ export default function ResultDetailScreen() {
   const navigation = useNavigation<Nav>()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
+  const user = useAuthStore((state) => state.user)
+  const isStaff = Boolean(user && !isLearnerRole(user.role))
   const id = params.checkedPaperId || params.submissionId || ''
   const focusedOnce = useRef(false)
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
@@ -138,6 +142,10 @@ export default function ResultDetailScreen() {
     questionId: item.question_id,
     questionIndex: index,
   })
+  const openPaperWorkspace = () => {
+    if (isStaff) navigation.getParent()?.navigate('StaffPapers')
+    else navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })
+  }
 
   const intro = (
     <View style={styles.pageIntro}>
@@ -221,16 +229,16 @@ export default function ResultDetailScreen() {
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Start a focused repair practice"
-              onPress={() => navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })}
+              accessibilityLabel={isStaff ? 'Open paper workspace' : 'Start a focused repair practice'}
+              onPress={openPaperWorkspace}
               style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
             >
-              <Ionicons name="play-outline" size={17} color={colors.white} />
-              <Text style={styles.primaryActionText}>Start a focused repair</Text>
+              <Ionicons name={isStaff ? 'documents-outline' : 'play-outline'} size={17} color={colors.white} />
+              <Text style={styles.primaryActionText}>{isStaff ? 'Open paper workspace' : 'Start a focused repair'}</Text>
             </Pressable>
 
             <View style={styles.breakdownHeader}>
-              <View><Text style={styles.breakdownTitle}>Question breakdown</Text><Text style={styles.breakdownHint}>Open a row to connect feedback, evidence, and review.</Text></View>
+              <View><Text style={styles.breakdownTitle}>Question breakdown</Text><Text style={styles.breakdownHint}>{isStaff ? 'Open a row to connect feedback and source evidence.' : 'Open a row to connect feedback, evidence, and review.'}</Text></View>
               <Text style={styles.breakdownCount}>View all {report.questions.length}</Text>
             </View>
 

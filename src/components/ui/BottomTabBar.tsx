@@ -24,7 +24,10 @@ const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   StaffHome: 'grid-outline',
   StaffApprovals: 'checkmark-done-circle-outline',
   StaffAttendance: 'today-outline',
+  StaffScanUpload: 'scan-outline',
+  StaffExams: 'calendar-outline',
   StaffPapers: 'document-text-outline',
+  StaffResults: 'bar-chart-outline',
   StaffAIStudio: 'sparkles-outline',
 }
 

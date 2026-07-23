@@ -3,9 +3,9 @@
  * Platform-aware API client with bearer-token authentication.
  */
 
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
+import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 import { Platform } from 'react-native'
-import { readStoredAccessToken } from '../auth/authStorage'
+import { clearStoredAccessToken, readStoredAccessToken, writeStoredAccessToken } from '../auth/authStorage'
 
 type ApiTarget = 'local' | 'prod'
 
@@ -91,6 +91,7 @@ const sharedClientConfig = {
 }
 
 const apiClient = axios.create(sharedClientConfig)
+const refreshClient = axios.create(sharedClientConfig)
 
 if (__DEV__) {
   console.info(`[Eduraa API] target=${API_TARGET} base=${API_BASE_URL}`)
@@ -114,25 +115,84 @@ apiClient.interceptors.request.use(
 )
 
 let logoutCallback: (() => void) | null = null
+let refreshTokenCallback: ((token: string) => void) | null = null
+let refreshPromise: Promise<string> | null = null
+
+type AuthRefreshPayload = {
+  access_token: string
+}
+
+type RetryableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
+}
 
 export function registerLogoutCallback(cb: () => void) {
   logoutCallback = cb
+}
+
+export function registerRefreshTokenCallback(cb: (token: string) => void) {
+  refreshTokenCallback = cb
 }
 
 function isAuthEndpoint(url?: string) {
   return Boolean(url?.includes('/auth/login') || url?.includes('/auth/refresh') || url?.includes('/auth/logout'))
 }
 
+async function persistRefreshedAccessToken(token: string) {
+  setAccessToken(token)
+  try {
+    await writeStoredAccessToken(token)
+  } catch {
+    // The live session remains valid if device storage is temporarily unavailable.
+  }
+  refreshTokenCallback?.(token)
+}
+
+async function clearExpiredAccessToken() {
+  setAccessToken(null)
+  await clearStoredAccessToken()
+}
+
+async function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = refreshClient
+      .post<AuthRefreshPayload>('/auth/refresh')
+      .then(async (response) => {
+        const token = response.data.access_token
+        if (!token) throw new Error('Refresh response did not include an access token.')
+        await persistRefreshedAccessToken(token)
+        return token
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+
+  return refreshPromise
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config
+    const originalRequest = error.config as RetryableRequestConfig | undefined
 
-    // The backend currently issues access tokens only; it has no refresh
-    // endpoint. Do not call a nonexistent route or preserve a proven-expired
-    // session. Network failures have no status and intentionally keep auth.
-    if (error.response?.status === 401 && !isAuthEndpoint(originalRequest?.url)) {
-      setAccessToken(null)
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthEndpoint(originalRequest.url)
+    ) {
+      originalRequest._retry = true
+      try {
+        const token = await refreshAccessToken()
+        originalRequest.headers.Authorization = `Bearer ${token}`
+        return apiClient.request(originalRequest as AxiosRequestConfig)
+      } catch {
+        await clearExpiredAccessToken()
+        logoutCallback?.()
+      }
+    } else if (error.response?.status === 401 && !isAuthEndpoint(originalRequest?.url)) {
+      await clearExpiredAccessToken()
       logoutCallback?.()
     }
 

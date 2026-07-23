@@ -80,9 +80,6 @@ export default function WorkspaceScreen() {
     const jee = isJeeProfile(user, b2cQuery.data)
 
     return mobileControls.filter((control) => {
-      // Never surface unfinished snapshot/template destinations. Every item
-      // listed here opens a dedicated screen backed by its real API.
-      if (control.nativeStatus === 'web-only' || control.id === 'dashboard') return false
       if (control.hiddenOnWeb || !roleCanSeeControl(user.role, control)) return false
       if (control.requiresClassTeacher) {
         const isClassTeacher = Boolean(user.class_teacher_opt_in && user.class_teacher_standard && user.class_teacher_division)
@@ -109,11 +106,13 @@ export default function WorkspaceScreen() {
       return
     }
     if (control.id === 'scan-upload') {
-      navigation.navigate('ScanUpload')
+      if (parentRoutes.includes('StaffScanUpload')) parent.navigate('StaffScanUpload')
+      else navigation.navigate('ScanUpload')
       return
     }
     if (control.id === 'exams' || control.id === 'student-exams') {
-      navigation.navigate('Exams')
+      if (parentRoutes.includes('StaffExams')) parent.navigate('StaffExams')
+      else navigation.navigate('Exams')
       return
     }
 
@@ -130,8 +129,11 @@ export default function WorkspaceScreen() {
 
       if (parent) {
         parent.navigate(control.target.tab, control.target.screen ? { screen: control.target.screen, params: control.target.params } : undefined)
+        return
       }
     }
+
+    navigation.navigate('Feature', { featureId: control.id })
   }
 
   const preferredId = user?.role === 'principal' ? 'approvals' : 'exams'

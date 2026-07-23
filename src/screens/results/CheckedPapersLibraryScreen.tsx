@@ -18,7 +18,9 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import Svg, { Circle } from 'react-native-svg'
 import { checkedPapersApi } from '../../api/checkedPapers'
+import { isLearnerRole } from '../../auth/roles'
 import { AppScreen, AnimatedButton, AuthLogoMark, ErrorState } from '../../components/ui'
+import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
 import type { CheckedPaper } from '../../types'
 import {
@@ -334,6 +336,8 @@ function FilterSheet({
 
 export default function CheckedPapersLibraryScreen() {
   const navigation = useNavigation<any>()
+  const user = useAuthStore((state) => state.user)
+  const isStaff = Boolean(user && !isLearnerRole(user.role))
   const { width } = useWindowDimensions()
   const compact = width < 380
   const [query, setQuery] = useState('')
@@ -544,7 +548,7 @@ export default function CheckedPapersLibraryScreen() {
           title="No checked papers yet"
           body="Completed and checked papers will appear here as soon as Eduraa has a result to show."
           actionLabel="Open papers"
-          onAction={() => navigation.getParent()?.navigate('Papers')}
+          onAction={() => navigation.getParent()?.navigate(isStaff ? 'StaffPapers' : 'Papers')}
         />
       )
     }

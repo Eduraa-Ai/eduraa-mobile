@@ -35,6 +35,7 @@ import AgenticSubjectScreen from '../screens/learning/AgenticSubjectScreen'
 import AgenticTopicScreen from '../screens/learning/AgenticTopicScreen'
 import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
+import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
 import AttendanceScreen from '../screens/workspace/AttendanceScreen'
 import ScanUploadScreen from '../screens/workspace/ScanUploadScreen'
@@ -73,6 +74,7 @@ export type LearningStackParamList = {
   AgenticSubject: { subjectId: string }
   AgenticTopic: { topicId: string; topicName?: string; subjectName?: string }
   PreviousPapers: undefined
+  Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
   ScanUpload: undefined
@@ -82,6 +84,7 @@ export type LearningStackParamList = {
 
 export type StaffWorkspaceStackParamList = {
   StaffWorkspace: undefined
+  Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
   ScanUpload: undefined
@@ -110,7 +113,10 @@ export type StaffTabParamList = {
   StaffHome: undefined
   StaffApprovals: undefined
   StaffAttendance: undefined
+  StaffScanUpload: undefined
+  StaffExams: undefined
   StaffPapers: undefined
+  StaffResults: undefined
   StaffAIStudio: undefined
 }
 
@@ -176,7 +182,7 @@ function ResultsNavigator() {
 
 function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
   return (
-    <LearningStack.Navigator initialRouteName="AgenticLearning" screenOptions={stackScreenOptions}>
+    <LearningStack.Navigator initialRouteName={competitive ? 'CompetitiveExam' : 'LearningHome'} screenOptions={stackScreenOptions}>
       <LearningStack.Screen name="LearningHome" component={LearningHomeScreen} options={{ title: 'Learning' }} />
       <LearningStack.Screen name="CompetitiveExam" component={CompetitiveExamScreen} options={{ title: 'JEE resources' }} />
       <LearningStack.Screen name="CompetitiveSubject" component={CompetitiveSubjectScreen} options={{ title: 'Competitive subject' }} />
@@ -185,6 +191,7 @@ function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
       <LearningStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="PreviousPapers" component={PreviousPapersScreen} options={{ title: 'Previous papers' }} />
+      <LearningStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <LearningStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <LearningStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
@@ -228,6 +235,7 @@ function StaffWorkspaceNavigator() {
   return (
     <StaffWorkspaceStack.Navigator screenOptions={stackScreenOptions}>
       <StaffWorkspaceStack.Screen name="StaffWorkspace" component={WorkspaceScreen} options={{ title: 'Workspace' }} />
+      <StaffWorkspaceStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <StaffWorkspaceStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <StaffWorkspaceStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <StaffWorkspaceStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
@@ -253,7 +261,10 @@ function StaffTabs() {
       <StaffTab.Screen name="StaffHome" component={StaffWorkspaceNavigator} options={{ title: 'Workspace' }} />
       <StaffTab.Screen name="StaffApprovals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <StaffTab.Screen name="StaffAttendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
+      <StaffTab.Screen name="StaffScanUpload" component={ScanUploadScreen} options={{ title: 'Scan' }} />
+      <StaffTab.Screen name="StaffExams" component={ExamsScreen} options={{ title: 'Exams' }} />
       <StaffTab.Screen name="StaffPapers" component={PapersNavigator} options={{ title: 'Papers' }} />
+      <StaffTab.Screen name="StaffResults" component={ResultsNavigator} options={{ title: 'Results' }} />
       <StaffTab.Screen name="StaffAIStudio" component={AIStudioScreen} options={{ title: 'AI Studio' }} />
     </StaffTab.Navigator>
   )

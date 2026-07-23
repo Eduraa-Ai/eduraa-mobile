@@ -14,6 +14,8 @@ const models = [
   'src/screens/results/checkedPapersLibraryModel.ts',
   'src/screens/results/checkedPaperDetailModel.ts',
   'src/screens/learning/agenticLearningModel.ts',
+  'src/utils/protectedDocumentModel.ts',
+  'src/auth/roles.ts',
 ]
 
 const suites = [
@@ -28,6 +30,13 @@ const suites = [
   {
     file: 'scripts/agentic-learning-model.test.cjs',
     env: { AGENTIC_LEARNING_MODEL_PATH: path.join(outDir, 'screens/learning/agenticLearningModel.js') },
+  },
+  {
+    file: 'scripts/checked-paper-access.test.cjs',
+    env: {
+      PROTECTED_DOCUMENT_MODEL_PATH: path.join(outDir, 'utils/protectedDocumentModel.js'),
+      AUTH_ROLES_PATH: path.join(outDir, 'auth/roles.js'),
+    },
   },
 ]
 

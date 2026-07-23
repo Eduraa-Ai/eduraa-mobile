@@ -11,15 +11,10 @@ node_modules
 .DS_Store
 Thumbs.db
 
-# Logs
+# Local runtime logs
 *.log
 
-# Local design references (not part of the shipped app)
-artifacts/
-design-mocks/
-mockups/
-
-# Local visual validation artifacts (keep tracked fixtures, ignore captures)
+# Local visual validation artifacts
 test-artifacts/**/*.png
 test-artifacts/**/*.jpg
 test-artifacts/**/*.jpeg

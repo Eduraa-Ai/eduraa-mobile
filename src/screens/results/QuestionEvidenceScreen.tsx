@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -8,9 +8,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
+import { isLearnerRole } from '../../auth/roles'
 import { AuthLogoMark } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
+import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
+import { openProtectedDocument } from '../../utils/openProtectedDocument'
 import {
   findEvidenceQuestion,
   questionStatus,
@@ -41,10 +44,13 @@ export default function QuestionEvidenceScreen() {
   const queryClient = useQueryClient()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
+  const user = useAuthStore((state) => state.user)
+  const isStaff = Boolean(user && !isLearnerRole(user.role))
   const compact = width < 380
   const [activeTab, setActiveTab] = useState<QuestionEvidenceTab>('feedback')
   const [reviewNote, setReviewNote] = useState('')
   const [scanError, setScanError] = useState<string | null>(null)
+  const [isOpeningScan, setIsOpeningScan] = useState(false)
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['checked-paper', params.checkedPaperId],
     queryFn: () => checkedPapersApi.getById(params.checkedPaperId),
@@ -53,10 +59,13 @@ export default function QuestionEvidenceScreen() {
   const evidence = useMemo(() => data ? findEvidenceQuestion(data, params.questionId, params.questionIndex) : null, [data, params.questionId, params.questionIndex])
 
   const reviewMutation = useMutation({
-    mutationFn: () => checkedPapersApi.requestManualReview(params.checkedPaperId, {
-      note: reviewNote.trim() || null,
-      question_id: evidence?.item.question_id || params.questionId || null,
-    }),
+    mutationFn: () => {
+      if (isStaff) throw new Error('Manual review requests are available to learners only.')
+      return checkedPapersApi.requestManualReview(params.checkedPaperId, {
+        note: reviewNote.trim() || null,
+        question_id: evidence?.item.question_id || params.questionId || null,
+      })
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['checked-paper', params.checkedPaperId] }),
@@ -69,7 +78,7 @@ export default function QuestionEvidenceScreen() {
     <View style={styles.pageIntro}>
       <Text style={styles.pageOverline}>CHECKED PAPERS · ASSESSMENT INTELLIGENCE</Text>
       <Text style={styles.pageTitle}>Question evidence</Text>
-      <Text style={styles.pageSubtitle}>Feedback, the original scan, and review stay in one focused sheet.</Text>
+      <Text style={styles.pageSubtitle}>{isStaff ? 'Feedback and source evidence stay in one focused sheet.' : 'Feedback, the original scan, and review stay in one focused sheet.'}</Text>
     </View>
   )
 
@@ -99,21 +108,27 @@ export default function QuestionEvidenceScreen() {
   const recommendation = readableMathText(item.recommendation) || feedback
   const reviewSent = data.manual_review_requested || reviewMutation.isSuccess
   const canSubmitReview = reviewNote.trim().length > 0 && !reviewMutation.isPending
+  const tabs = isStaff ? TAB_CONFIG.filter((tab) => tab.key !== 'review') : TAB_CONFIG
+
+  const openPaperWorkspace = () => {
+    if (isStaff) navigation.getParent()?.navigate('StaffPapers')
+    else navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })
+  }
 
   const openScan = async () => {
     setScanError(null)
+    setIsOpeningScan(true)
     try {
-      const supported = await Linking.canOpenURL(data.scanned_pdf_url)
-      if (!supported) throw new Error('Unsupported scan link')
-      await Linking.openURL(data.scanned_pdf_url)
+      await openProtectedDocument(data.scanned_pdf_url, `checked-paper-${data.id}`)
     } catch {
       setScanError('The original file could not be opened on this device. The captured evidence remains visible below.')
+    } finally {
+      setIsOpeningScan(false)
     }
   }
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
-      {intro}
       <View style={styles.detailSurface}>
         <LinearGradient colors={['#07152d', '#0b1932']} style={styles.navyHeader}>
           <View style={styles.identityRow}>
@@ -130,14 +145,14 @@ export default function QuestionEvidenceScreen() {
           <View style={styles.hero}>
             <Text style={styles.heroKicker}>{isStrong ? 'Evidence-led reinforcement' : 'Evidence-led feedback'}</Text>
             <Text style={styles.heroTitle}>{isStrong ? <>See exactly what{`\n`}you did well.</> : <>See exactly where{`\n`}the marks slipped.</>}</Text>
-            <Text style={styles.heroSubtitle}>{isStrong ? 'Your response and evaluator evidence show what is worth repeating.' : 'Your response, evaluator evidence, and review request remain connected.'}</Text>
+            <Text style={styles.heroSubtitle}>{isStrong ? 'Your response and evaluator evidence show what is worth repeating.' : isStaff ? 'The response and evaluator evidence remain connected for review.' : 'Your response, evaluator evidence, and review request remain connected.'}</Text>
           </View>
         </LinearGradient>
 
         <View style={styles.detailSheet}>
           <View style={styles.grabber} />
           <View accessibilityRole="tablist" style={styles.tabs}>
-            {TAB_CONFIG.map((tab) => {
+            {tabs.map((tab) => {
               const selected = activeTab === tab.key
               return <Pressable key={tab.key} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => setActiveTab(tab.key)} style={styles.tab}><Text style={[styles.tabText, selected && styles.tabTextActive]}>{tab.label}</Text>{selected ? <View style={styles.tabIndicator} /> : null}</Pressable>
             })}
@@ -151,32 +166,35 @@ export default function QuestionEvidenceScreen() {
                   <Text style={[styles.questionText, compact && styles.questionTextCompact]}>{questionText}</Text>
                   <Text style={styles.chapterText}>{data.subject_name || 'Checked paper'}</Text>
                 </View>
-                <View style={[styles.answerCompare, styles.responseBlock]}><Text style={styles.compareTitle}>Your approach</Text><Text style={styles.compareText} numberOfLines={3}>{response}</Text></View>
-                <View style={[styles.answerCompare, styles.expectedBlock]}><Text style={styles.compareTitle}>What earns full marks</Text><Text style={styles.compareText} numberOfLines={3}>{expected}</Text></View>
+                <View style={[styles.answerCompare, styles.responseBlock]}><Text style={styles.compareTitle}>Your approach</Text><Text style={styles.compareText}>{response}</Text></View>
+                <View style={[styles.answerCompare, styles.expectedBlock]}><Text style={styles.compareTitle}>What earns full marks</Text><Text style={styles.compareText}>{expected}</Text></View>
                 <View style={styles.coachNote}>
                   <View style={styles.coachMark}><Text style={styles.coachMarkText}>AI</Text></View>
                   <View style={styles.coachCopy}><Text style={styles.coachTitle}>{recommendation}</Text><Text style={styles.coachText}>{feedback}</Text></View>
                 </View>
-                <Pressable accessibilityRole="button" onPress={() => navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })} style={styles.primaryAction}><Ionicons name="play-outline" size={16} color={colors.white} /><Text style={styles.primaryActionText}>Practice this concept</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={openPaperWorkspace} style={styles.primaryAction}><Ionicons name={isStaff ? 'documents-outline' : 'play-outline'} size={16} color={colors.white} /><Text style={styles.primaryActionText}>{isStaff ? 'Open paper workspace' : 'Practice this concept'}</Text></Pressable>
               </View>
             ) : null}
 
             {activeTab === 'scan' ? (
               <View style={styles.panel}>
-                <View style={styles.scanUnavailable}>
-                  <View style={styles.scanUnavailableIcon}><Ionicons name="document-outline" size={25} color={colors.accentStrong} /></View>
-                  <Text style={styles.scanUnavailableTitle}>Original scan preview unavailable</Text>
-                  <Text style={styles.scanUnavailableText}>Open the original checked-paper file to inspect the source page.</Text>
+                <View style={styles.scanPreview}>
+                  <View style={styles.scanPaper}>
+                    <Text style={styles.scanLabel}>Answer transcription</Text>
+                    <Text style={styles.scanResponse}>{response}</Text>
+                    <View style={styles.scanLine} />
+                    <View style={[styles.scanLine, { width: '72%' }]} />
+                    {!isStrong ? <View style={styles.teacherRing}><Text style={styles.teacherRingText}>?</Text></View> : null}
+                  </View>
                 </View>
-                <View style={styles.responseEvidence}><Text style={styles.scanLabel}>Captured response text</Text><Text style={styles.scanResponse}>{response}</Text></View>
-                <Text style={styles.scanMeta}>The original checked-paper file remains the source of truth. Captured response text comes from the grading API.</Text>
+                <Text style={styles.scanMeta}>Readable transcription from the grading capture, not the original scan. Open the source file below to inspect the submitted page.</Text>
                 {scanError ? <Text style={styles.errorText}>{scanError}</Text> : null}
-                <Pressable accessibilityRole="button" onPress={() => void openScan()} style={styles.secondaryAction}><Ionicons name="expand-outline" size={16} color={colors.nav} /><Text style={styles.secondaryActionText}>Open original file</Text></Pressable>
+                <Pressable accessibilityRole="button" accessibilityState={{ disabled: isOpeningScan }} disabled={isOpeningScan} onPress={() => void openScan()} style={[styles.secondaryAction, isOpeningScan && styles.disabled]}>{isOpeningScan ? <ActivityIndicator color={colors.nav} /> : <Ionicons name="expand-outline" size={16} color={colors.nav} />}<Text style={styles.secondaryActionText}>{isOpeningScan ? 'Preparing original file' : 'Open original file'}</Text></Pressable>
                 <View style={styles.coachNote}><View style={styles.coachMark}><Text style={styles.coachMarkText}>AI</Text></View><View style={styles.coachCopy}><Text style={styles.coachTitle}>Evidence stays connected.</Text><Text style={styles.coachText}>{feedback}</Text></View></View>
               </View>
             ) : null}
 
-            {activeTab === 'review' ? (
+            {activeTab === 'review' && !isStaff ? (
               <View style={styles.panel}>
                 <View style={styles.reviewState}><Ionicons name={reviewSent ? 'checkmark-circle' : 'shield-checkmark-outline'} size={25} color={reviewSent ? colors.success : colors.accentStrong} /><View style={styles.reviewCopy}><Text style={styles.reviewTitle}>{reviewSent ? 'Teacher review requested' : 'Eligible for teacher review'}</Text><Text style={styles.reviewText}>{reviewSent ? 'This checked paper is now in the review queue.' : 'Your scan and AI feedback will be attached automatically.'}</Text></View></View>
                 {!reviewSent ? <><Text style={styles.reviewLabel}>Why should this answer be reconsidered?</Text><TextInput accessibilityLabel="Teacher review note" value={reviewNote} onChangeText={setReviewNote} placeholder="Explain what should be reviewed" placeholderTextColor={colors.textSoft} multiline style={styles.reviewInput} /><Text style={styles.helperText}>Add a reason before sending. The original score remains visible until review is complete.</Text>{reviewMutation.isError ? <Text style={styles.errorText}>The request could not be sent. Check the connection and try again.</Text> : null}<Pressable accessibilityRole="button" accessibilityState={{ disabled: !canSubmitReview }} disabled={!canSubmitReview} onPress={() => reviewMutation.mutate()} style={[styles.primaryAction, !canSubmitReview && styles.disabled]}>{reviewMutation.isPending ? <ActivityIndicator color={colors.white} /> : <><Ionicons name="send-outline" size={16} color={colors.white} /><Text style={styles.primaryActionText}>Send for teacher review</Text></>}</Pressable></> : null}

@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand'
-import { registerLogoutCallback, setAccessToken } from '../api/client'
+import { registerLogoutCallback, registerRefreshTokenCallback, setAccessToken } from '../api/client'
 import { clearPersistedAuth, readPersistedAuth, writePersistedAuth } from '../auth/authStorage'
 import type { AccountMinimal, AuthToken } from '../types'
 
@@ -24,6 +24,12 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => {
   registerLogoutCallback(() => {
     void get().logout()
+  })
+  registerRefreshTokenCallback((token) => {
+    set((state) => ({
+      token,
+      isAuthenticated: Boolean(token && state.user),
+    }))
   })
 
   return {

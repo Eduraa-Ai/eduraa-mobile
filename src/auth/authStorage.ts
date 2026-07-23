@@ -52,6 +52,18 @@ export async function readStoredAccessToken() {
   }
 }
 
+export async function writeStoredAccessToken(token: string) {
+  await storage.setItem(TOKEN_KEY, token)
+}
+
+export async function clearStoredAccessToken() {
+  try {
+    await storage.removeItem(TOKEN_KEY)
+  } catch {
+    // Storage cleanup is best-effort; the in-memory session is cleared too.
+  }
+}
+
 export async function readPersistedAuth(): Promise<PersistedAuth> {
   try {
     const [token, rawUser] = await Promise.all([
