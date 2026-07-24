@@ -82,7 +82,7 @@ export default function QuestionEvidenceScreen() {
     </View>
   )
 
-  if (isLoading || isError || !data || !evidence) {
+  if (!data || !evidence) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
         {intro}

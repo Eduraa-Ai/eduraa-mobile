@@ -124,7 +124,7 @@ export default function ResultDetailScreen() {
   const isStaff = Boolean(user && !isLearnerRole(user.role))
   const id = params.checkedPaperId || params.submissionId || ''
   const focusedOnce = useRef(false)
-  const { data, isLoading, isError, isFetching, refetch } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['checked-paper', id],
     queryFn: () => checkedPapersApi.getById(id),
     enabled: Boolean(id),
@@ -155,7 +155,7 @@ export default function ResultDetailScreen() {
     </View>
   )
 
-  if (!id || isLoading || isError || !data || !report) {
+  if (!id || !data || !report) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
         {intro}
