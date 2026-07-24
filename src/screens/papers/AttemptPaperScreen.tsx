@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react'
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Image,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, KeyboardAvoidingView,
   TextInput, Platform
 } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRoute, useNavigation } from '@react-navigation/native'
@@ -13,11 +14,13 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { PapersStackParamList } from '../../navigation'
 import { papersApi } from '../../api/papers'
+import { useAuthStore } from '../../stores/authStore'
 import apiClient, { API_BASE_URL, TOKEN_KEY } from '../../api/client'
 import { colors } from '../../theme/colors'
 import { spacing, radius, shadows } from '../../theme/spacing'
 import { typography } from '../../theme/typography'
 import type { AnswerEntry, MatchColumnsOptions, MCQOption, QuestionInPaper } from '../../types'
+import { ErrorState } from '../../components/ui'
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, 'AttemptPaper'>
 type Route = RouteProp<PapersStackParamList, 'AttemptPaper'>
@@ -27,6 +30,28 @@ type SubmitOutcome = {
   message: string
   submissionId?: string
   scoreText?: string
+}
+
+type AttemptDraft = {
+  attemptId: string
+  answers: Record<string, string>
+  flagged: Record<string, boolean>
+}
+
+function toStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.entries(value).reduce<Record<string, string>>((result, [key, item]) => {
+    if (typeof item === 'string') result[key] = item
+    return result
+  }, {})
+}
+
+function toBooleanRecord(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.entries(value).reduce<Record<string, boolean>>((result, [key, item]) => {
+    if (typeof item === 'boolean') result[key] = item
+    return result
+  }, {})
 }
 
 function resolveAssetUrl(url?: string | null) {
@@ -272,6 +297,7 @@ export default function AttemptPaperScreen() {
   const navigation = useNavigation<Nav>()
   const { params } = useRoute<Route>()
   const insets = useSafeAreaInsets()
+  const userId = useAuthStore((state) => state.user?.id)
 
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [flagged, setFlagged] = useState<Record<string, boolean>>({})
@@ -279,9 +305,12 @@ export default function AttemptPaperScreen() {
   const [submitHoldProgress, setSubmitHoldProgress] = useState(0)
   const [submitOutcome, setSubmitOutcome] = useState<SubmitOutcome | null>(null)
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
-  const [startTime] = useState(Date.now())
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const [isDraftReady, setIsDraftReady] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const submitHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const draftWriteRef = useRef<Promise<void>>(Promise.resolve())
+  const didAutoSubmitRef = useRef(false)
+  const draftKey = `eduraa-attempt-draft:${userId ?? 'unknown'}:${params.paperId}:${params.examId ?? 'practice'}`
 
   useLayoutEffect(() => {
     const parent = navigation.getParent()
@@ -309,24 +338,95 @@ export default function AttemptPaperScreen() {
 
   useEffect(() => resetSubmitHold, [resetSubmitHold])
 
-  const { data: paper, isLoading } = useQuery({
+  const paperQuery = useQuery({
     queryKey: ['paper', params.paperId],
     queryFn: () => papersApi.getById(params.paperId),
   })
+  const paper = paperQuery.data
+
+  const attemptQuery = useQuery({
+    queryKey: ['paper-attempt', params.paperId, params.examId],
+    enabled: Boolean(paper && userId),
+    staleTime: Infinity,
+    queryFn: async () => {
+      const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
+      const inProgress = attempts.items.find((attempt) => attempt.grading_status === 'in_progress')
+      return inProgress ?? papersApi.createAttempt(params.paperId, { exam_id: params.examId, reason: 'student_attempt' })
+    },
+  })
+  const activeAttempt = attemptQuery.data
+  const serverAnswers = useMemo(
+    () => (activeAttempt?.answers ?? []).reduce<Record<string, string>>((result, answer) => {
+      result[answer.question_id] = answer.response
+      return result
+    }, {}),
+    [activeAttempt],
+  )
+  const attemptStartedAt = useMemo(() => {
+    const parsed = Date.parse(activeAttempt?.started_at || activeAttempt?.created_at || '')
+    return Number.isFinite(parsed) ? parsed : null
+  }, [activeAttempt?.created_at, activeAttempt?.started_at])
+  const attemptDeadline = useMemo(
+    () => paper?.duration_minutes && attemptStartedAt ? attemptStartedAt + paper.duration_minutes * 60_000 : null,
+    [attemptStartedAt, paper?.duration_minutes],
+  )
+
+  const queueDraftWrite = useCallback((operation: () => Promise<void>) => {
+    draftWriteRef.current = draftWriteRef.current
+      .catch(() => undefined)
+      .then(operation)
+      .catch(() => undefined)
+    return draftWriteRef.current
+  }, [])
+
+  useEffect(() => {
+    if (!activeAttempt?.id) return
+    let active = true
+    setIsDraftReady(false)
+    didAutoSubmitRef.current = false
+    setAnswers(serverAnswers)
+    setFlagged({})
+
+    void AsyncStorage.getItem(draftKey)
+      .then((raw) => {
+        if (!active || !raw) return
+        const draft = JSON.parse(raw) as Partial<AttemptDraft>
+        if (draft.attemptId !== activeAttempt.id) return
+        setAnswers({ ...serverAnswers, ...toStringRecord(draft.answers) })
+        setFlagged(toBooleanRecord(draft.flagged))
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setIsDraftReady(true)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [activeAttempt?.id, draftKey, serverAnswers])
+
+  const persistDraft = useCallback((nextAnswers = answers, nextFlagged = flagged) => {
+    if (!isDraftReady || !activeAttempt?.id) return Promise.resolve()
+    const draft: AttemptDraft = { attemptId: activeAttempt.id, answers: nextAnswers, flagged: nextFlagged }
+    return queueDraftWrite(() => AsyncStorage.setItem(draftKey, JSON.stringify(draft)))
+  }, [activeAttempt?.id, answers, draftKey, flagged, isDraftReady, queueDraftWrite])
+
+  useEffect(() => {
+    void persistDraft()
+  }, [persistDraft])
 
   const submitMutation = useMutation({
     mutationFn: (answerList: AnswerEntry[]) =>
       papersApi.submit(params.paperId, {
         answers: answerList,
+        attempt_id: activeAttempt?.id,
         exam_id: params.examId,
-        time_taken_seconds: Math.floor((Date.now() - startTime) / 1000),
+        time_taken_seconds: attemptStartedAt ? Math.max(0, Math.floor((Date.now() - attemptStartedAt) / 1000)) : undefined,
         mode: 'standard',
-      }),
+    }),
     onSuccess: (data) => {
-      // Detect if backend silently returned an existing submission
-      // (backend returns existing submission if already submitted for this paper)
-      const submissionAge = Date.now() - new Date(data.created_at).getTime()
-      const isExistingSubmission = submissionAge > 10_000 // older than 10s = already existed
+      void queueDraftWrite(() => AsyncStorage.removeItem(draftKey))
+      const isExistingSubmission = Boolean(activeAttempt?.id && data.id !== activeAttempt.id)
       const gradingStatus = String((data as { grading_status?: string }).grading_status || '').toLowerCase()
       const isChecking = gradingStatus === 'submitted' || gradingStatus === 'checking'
       const scoreText = data.total_score != null && data.max_score ? `${data.total_score} / ${data.max_score}` : undefined
@@ -335,7 +435,7 @@ export default function AttemptPaperScreen() {
         setSubmitOutcome({
           kind: 'existing',
           title: 'Already submitted',
-          message: 'This paper already has a recorded submission. Each paper can only be attempted once.',
+          message: 'This attempt was already submitted from another session. Its recorded result is ready to view.',
           submissionId: data.id,
           scoreText,
         })
@@ -360,8 +460,12 @@ export default function AttemptPaperScreen() {
       // On 500, check if submission was actually saved (backend may fail during grading but save answers)
       if (status === 500) {
         try {
-          const existing = await papersApi.getSubmission(params.paperId)
-          if (existing?.id) {
+          const existing = await papersApi.getSubmission(params.paperId, {
+            exam_id: params.examId,
+            attempt_id: activeAttempt?.id,
+          })
+          if (existing?.id && existing.id === activeAttempt?.id) {
+            void queueDraftWrite(() => AsyncStorage.removeItem(draftKey))
             setSubmitOutcome({
               kind: 'saved',
               title: 'Paper submitted',
@@ -400,41 +504,39 @@ export default function AttemptPaperScreen() {
     },
   })
 
-  // Timer setup
-  useEffect(() => {
-    if (paper?.duration_minutes) {
-      setTimeLeft(paper.duration_minutes * 60)
-    }
-  }, [paper])
-
-  useEffect(() => {
-    if (timeLeft === null) return
-    if (timeLeft <= 0) {
-      handleSubmit(true)
-      return
-    }
-    timerRef.current = setInterval(() => setTimeLeft((t) => (t ?? 0) - 1), 1000)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [timeLeft])
-
-  function doSubmit() {
+  const doSubmit = useCallback(() => {
+    if (!paper || !activeAttempt?.id || submitMutation.isPending) return
     clearSubmitHoldTimer()
     setSubmitHoldProgress(0)
     setSubmitReviewOpen(false)
-    const answerList: AnswerEntry[] = (paper?.questions || []).map((q) => ({
+    const answerList: AnswerEntry[] = paper.questions.map((q) => ({
       question_id: q.id,
       response: answers[q.id] || '',
     }))
     submitMutation.mutate(answerList)
-  }
+  }, [activeAttempt?.id, answers, clearSubmitHoldTimer, paper, submitMutation])
 
-  const handleSubmit = useCallback((autoSubmit = false) => {
-    if (!autoSubmit) {
-      setSubmitReviewOpen(true)
-    } else {
+  useEffect(() => {
+    if (!attemptDeadline || submitMutation.isPending || submitOutcome) return
+    const updateTimeLeft = () => setTimeLeft(Math.max(0, Math.ceil((attemptDeadline - Date.now()) / 1000)))
+    updateTimeLeft()
+    timerRef.current = setInterval(updateTimeLeft, 1000)
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [attemptDeadline, submitMutation.isPending, submitOutcome])
+
+  useEffect(() => {
+    if (timeLeft === null || timeLeft > 0 || submitMutation.isPending || submitOutcome) return
+    if (!didAutoSubmitRef.current) {
+      didAutoSubmitRef.current = true
       doSubmit()
     }
-  }, [answers, paper])
+  }, [doSubmit, submitMutation.isPending, submitOutcome, timeLeft])
+
+  const handleSubmit = useCallback(() => setSubmitReviewOpen(true), [])
+
+  const handleExit = useCallback(() => {
+    void persistDraft().finally(() => navigation.goBack())
+  }, [navigation, persistDraft])
 
   const startSubmitHold = () => {
     if (!submitReviewOpen || submitMutation.isPending || submitHoldTimerRef.current) return
@@ -470,13 +572,29 @@ export default function AttemptPaperScreen() {
     return `${m}:${s}`
   }
 
-  if (isLoading || !paper) {
+  if (paperQuery.isLoading || attemptQuery.isLoading) {
     return (
       <View style={styles.center}>
         <View style={styles.loadingMark}>
           <Ionicons name="document-text-outline" size={22} color={colors.accent} />
         </View>
-        <Text style={styles.loadingText}>Loading exam workspace</Text>
+        <Text style={styles.loadingText}>Preparing your attempt</Text>
+      </View>
+    )
+  }
+
+  if (paperQuery.isError || attemptQuery.isError || !paper || !activeAttempt) {
+    return (
+      <View style={styles.center}>
+        <ErrorState
+          title="Could not open this attempt"
+          message="Your saved answers are safe. Check your connection, then try again."
+          onAction={() => {
+            void paperQuery.refetch()
+            void attemptQuery.refetch()
+          }}
+          style={styles.loadError}
+        />
       </View>
     )
   }
@@ -489,7 +607,7 @@ export default function AttemptPaperScreen() {
   const holdSecondsLeft = Math.max(0, Math.ceil(((100 - submitHoldProgress) / 100) * (HOLD_DURATION_MS / 1000)))
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <LinearGradient
         colors={[colors.slate[950], colors.slate[900], '#1d130f']}
         start={{ x: 0, y: 0 }}
@@ -497,7 +615,14 @@ export default function AttemptPaperScreen() {
         style={[styles.header, { paddingTop: insets.top + spacing[3] }]}
       >
         <View style={styles.headerTop}>
-          <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.goBack()} style={styles.exitButton}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleExit}
+            style={styles.exitButton}
+            accessibilityRole="button"
+            accessibilityLabel="Save progress and leave attempt"
+            accessibilityHint="Your unfinished answers will be restored when you return."
+          >
             <Ionicons name="close" size={18} color="rgba(255,255,255,0.78)" />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
@@ -509,7 +634,7 @@ export default function AttemptPaperScreen() {
           {timeLeft !== null ? (
             <View style={[styles.timer, timeLeft < 300 && styles.timerWarning]}>
               <Ionicons name="time-outline" size={14} color={timeLeft < 300 ? colors.white : colors.accent} />
-              <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
+              <Text accessibilityLiveRegion="polite" style={styles.timerText}>{formatTime(timeLeft)}</Text>
             </View>
           ) : null}
         </View>
@@ -561,6 +686,9 @@ export default function AttemptPaperScreen() {
                 activeOpacity={0.85}
                 onPress={() => setFlagged((current) => ({ ...current, [q.id]: !current[q.id] }))}
                 style={[styles.flagButton, flagged[q.id] && styles.flagButtonActive]}
+                accessibilityRole="button"
+                accessibilityLabel={`${flagged[q.id] ? 'Remove' : 'Flag'} question ${index + 1} for review`}
+                accessibilityState={{ selected: Boolean(flagged[q.id]) }}
               >
                 <Ionicons name={flagged[q.id] ? 'flag' : 'flag-outline'} size={15} color={flagged[q.id] ? colors.warning : colors.textMuted} />
               </TouchableOpacity>
@@ -577,6 +705,9 @@ export default function AttemptPaperScreen() {
                     key={opt.id}
                     style={[styles.mcqOption, answers[q.id] === opt.id && styles.mcqOptionSelected]}
                     onPress={() => setAnswers((prev) => ({ ...prev, [q.id]: opt.id }))}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: answers[q.id] === opt.id }}
+                    accessibilityLabel={`Question ${index + 1}, option ${String.fromCharCode(65 + i)}: ${readableMathText(opt.text)}`}
                   >
                     <Text style={[styles.mcqLabel, answers[q.id] === opt.id && styles.mcqLabelSelected]}>
                       {String.fromCharCode(65 + i)}
@@ -597,6 +728,9 @@ export default function AttemptPaperScreen() {
                     key={val}
                     style={[styles.tfBtn, answers[q.id] === val && styles.tfBtnSelected]}
                     onPress={() => setAnswers((prev) => ({ ...prev, [q.id]: val }))}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: answers[q.id] === val }}
+                    accessibilityLabel={`Question ${index + 1}, ${val}`}
                   >
                     <Text style={[styles.tfText, answers[q.id] === val && styles.tfTextSelected]}>{val}</Text>
                   </TouchableOpacity>
@@ -612,6 +746,7 @@ export default function AttemptPaperScreen() {
                 multiline
                 value={answers[q.id] || ''}
                 onChangeText={(text) => setAnswers((prev) => ({ ...prev, [q.id]: text }))}
+                accessibilityLabel={`Answer for question ${index + 1}`}
               />
             )}
 
@@ -631,6 +766,7 @@ export default function AttemptPaperScreen() {
                   placeholderTextColor={colors.subtle}
                   value={answers[q.id] || ''}
                   onChangeText={(text) => setAnswers((prev) => ({ ...prev, [q.id]: text }))}
+                  accessibilityLabel={`Matches for question ${index + 1}`}
                 />
               </View>
             ) : null}
@@ -646,8 +782,10 @@ export default function AttemptPaperScreen() {
         <TouchableOpacity
           activeOpacity={0.9}
           style={[styles.submitBtn, submitMutation.isPending && styles.submitBtnDisabled]}
-          onPress={() => handleSubmit()}
+          onPress={handleSubmit}
           disabled={submitMutation.isPending}
+          accessibilityRole="button"
+          accessibilityLabel="Review and submit paper"
         >
           <Text style={styles.submitBtnText}>{submitMutation.isPending ? 'Submitting' : 'Submit'}</Text>
           <Ionicons name="send" size={15} color={colors.white} />
@@ -681,7 +819,13 @@ export default function AttemptPaperScreen() {
               </View>
             </View>
             <View style={styles.submitActions}>
-              <TouchableOpacity activeOpacity={0.85} onPress={() => setSubmitReviewOpen(false)} style={styles.submitCancelButton}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setSubmitReviewOpen(false)}
+                style={styles.submitCancelButton}
+                accessibilityRole="button"
+                accessibilityLabel="Continue attempting paper"
+              >
                 <Text style={styles.submitCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -692,6 +836,13 @@ export default function AttemptPaperScreen() {
                 delayLongPress={80}
                 disabled={submitMutation.isPending}
                 style={[styles.submitConfirmButton, submitMutation.isPending && styles.submitBtnDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel="Submit paper"
+                accessibilityHint="Hold for three seconds to submit. Screen-reader users can activate this button normally."
+                accessibilityActions={[{ name: 'activate', label: 'Submit paper' }]}
+                onAccessibilityAction={({ nativeEvent }) => {
+                  if (nativeEvent.actionName === 'activate') doSubmit()
+                }}
               >
                 <View pointerEvents="none" style={[styles.submitHoldFill, { width: `${submitHoldProgress}%` }]} />
                 <Text style={styles.submitConfirmText}>
@@ -734,7 +885,7 @@ export default function AttemptPaperScreen() {
             <View style={styles.submitActions}>
               {submitOutcome.kind === 'error' ? (
                 <>
-                  <TouchableOpacity activeOpacity={0.85} onPress={() => setSubmitOutcome(null)} style={styles.submitCancelButton}>
+                  <TouchableOpacity activeOpacity={0.85} onPress={() => setSubmitOutcome(null)} style={styles.submitCancelButton} accessibilityRole="button" accessibilityLabel="Close submission error">
                     <Text style={styles.submitCancelText}>Close</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -744,6 +895,8 @@ export default function AttemptPaperScreen() {
                       setSubmitReviewOpen(true)
                     }}
                     style={styles.submitConfirmButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Try submitting again"
                   >
                     <Text style={styles.submitConfirmText}>Try again</Text>
                     <Ionicons name="refresh" size={15} color={colors.white} />
@@ -751,10 +904,10 @@ export default function AttemptPaperScreen() {
                 </>
               ) : (
                 <>
-                  <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('PapersList')} style={styles.submitCancelButton}>
+                  <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('PapersList')} style={styles.submitCancelButton} accessibilityRole="button" accessibilityLabel="Return to papers">
                     <Text style={styles.submitCancelText}>Papers</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity activeOpacity={0.9} onPress={openSubmittedResult} style={styles.submitConfirmButton}>
+                  <TouchableOpacity activeOpacity={0.9} onPress={openSubmittedResult} style={styles.submitConfirmButton} accessibilityRole="button" accessibilityLabel="View results">
                     <Text style={styles.submitConfirmText}>View results</Text>
                     <Ionicons name="bar-chart" size={15} color={colors.white} />
                   </TouchableOpacity>
@@ -764,13 +917,14 @@ export default function AttemptPaperScreen() {
           </View>
         </View>
       ) : null}
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[3], backgroundColor: colors.background },
+  loadError: { alignSelf: 'stretch', marginHorizontal: spacing[5] },
   loadingMark: {
     width: 52,
     height: 52,

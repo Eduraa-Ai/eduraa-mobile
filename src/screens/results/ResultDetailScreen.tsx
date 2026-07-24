@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { ResultsStackParamList } from '../../navigation'
 import { checkedPapersApi } from '../../api/checkedPapers'
+import { presentPdf } from '../../utils/pdfDownload'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import type { GradingResultItem } from '../../types'
 
@@ -329,6 +330,13 @@ export default function ResultDetailScreen() {
     },
   })
 
+  const downloadMutation = useMutation({
+    mutationFn: async () => {
+      const pdf = await checkedPapersApi.downloadPdf(id)
+      await presentPdf(pdf)
+    },
+  })
+
   const fadeAnim = useRef(new Animated.Value(0)).current
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 360, useNativeDriver: true }).start()
@@ -407,7 +415,28 @@ export default function ResultDetailScreen() {
             <Text style={styles.topKicker}>Result detail</Text>
             <Text style={styles.topTitle} numberOfLines={1}>{title}</Text>
           </View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => downloadMutation.mutate()}
+            style={styles.downloadButton}
+            disabled={downloadMutation.isPending}
+            accessibilityRole="button"
+            accessibilityLabel="Download checked paper PDF"
+            accessibilityState={{ disabled: downloadMutation.isPending }}
+          >
+            {downloadMutation.isPending ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <Ionicons name="download-outline" size={18} color={colors.accent} />
+            )}
+          </TouchableOpacity>
         </View>
+        {downloadMutation.isError ? (
+          <View style={styles.downloadError}>
+            <Ionicons name="cloud-offline-outline" size={15} color={colors.danger} />
+            <Text style={styles.downloadErrorText}>PDF unavailable right now. Tap download to retry.</Text>
+          </View>
+        ) : null}
 
         <LinearGradient colors={[colors.slate[950], colors.slate[900], '#24140f']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
           <View style={styles.heroHeader}>
@@ -793,6 +822,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.xs,
+  },
+  downloadButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentSurface,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+  },
+  downloadError: {
+    minHeight: 42,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    backgroundColor: colors.dangerBg,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  downloadErrorText: {
+    flex: 1,
+    color: colors.danger,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 17,
   },
   topCopy: {
     flex: 1,
