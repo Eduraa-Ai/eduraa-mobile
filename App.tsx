@@ -2,58 +2,97 @@
  * Eduraa Mobile — Root App
  */
 
-import React, { useEffect } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 import { StatusBar } from 'expo-status-bar'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import NetInfo from '@react-native-community/netinfo'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { StyleSheet, View, ActivityIndicator, Platform } from 'react-native'
+import { AppState, StyleSheet, View, ActivityIndicator, Platform } from 'react-native'
 import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope'
 import { SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk'
 import RootNavigator from './src/navigation'
 import { useAuthStore } from './src/stores/authStore'
 import { authApi } from './src/api/auth'
+import { isDefinitiveAuthFailure, queryRetryDelay, shouldRetryQuery } from './src/api/queryReliability'
+
+onlineManager.setEventListener((setOnline) => NetInfo.addEventListener((state) => {
+  setOnline(state.isConnected !== false && state.isInternetReachable !== false)
+}))
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      networkMode: 'online',
+      retry: shouldRetryQuery,
+      retryDelay: queryRetryDelay,
+      refetchOnReconnect: 'always',
+      refetchOnWindowFocus: true,
       staleTime: 1000 * 60 * 5, // 5 minutes
+    },
+    mutations: {
+      networkMode: 'online',
+      retry: false,
     },
   },
 })
 
 function AppContent() {
-  const { setAuth, logout } = useAuthStore()
+  const { setAuth, logout, finishSessionRestore } = useAuthStore()
+  const userId = useAuthStore((state) => state.user?.id ?? null)
+  const previousUserId = useRef<string | null | undefined>(undefined)
 
-  // On mount: load token from SecureStore, then validate with /auth/me
   useEffect(() => {
-    const init = async () => {
-      // loadFromStorage returns the token it found
-      const store = useAuthStore.getState()
-      await store.loadFromStorage()
-      // Read token directly from store after loading
-      const { token } = useAuthStore.getState()
-      if (token) {
-        try {
-          const user = await authApi.me()
-          const latestToken = useAuthStore.getState().token || token
-          // Reconstruct minimal auth state with the validated user
-          await setAuth({ access_token: latestToken, token_type: 'bearer', user })
-        } catch {
-          // Token is invalid or expired
-          await logout()
-        }
-      }
+    if (Platform.OS === 'web') return
+    const subscription = AppState.addEventListener('change', (status) => {
+      focusManager.setFocused(status === 'active')
+    })
+    return () => subscription.remove()
+  }, [])
+
+  useEffect(() => {
+    if (previousUserId.current !== undefined && previousUserId.current !== userId) {
+      queryClient.clear()
     }
-    void init()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    previousUserId.current = userId
+  }, [userId])
+
+  const restoreSession = useCallback(async () => {
+    const store = useAuthStore.getState()
+    store.beginSessionRestore()
+    const { token, user: cachedUser } = await store.loadFromStorage()
+    if (!token) return
+
+    try {
+      const user = await authApi.me()
+      const latestToken = useAuthStore.getState().token || token
+      await setAuth({ access_token: latestToken, token_type: 'bearer', user })
+    } catch (error) {
+      if (isDefinitiveAuthFailure(error)) {
+        await logout()
+        return
+      }
+
+      // Cached identity is enough to restore the correct role-aware shell
+      // during a temporary outage. Legacy sessions without cached identity
+      // get a clear retry state instead of a misleading login page.
+      finishSessionRestore(
+        cachedUser
+          ? null
+          : 'We found your saved session, but Eduraa could not verify it yet.'
+      )
+    }
+  }, [finishSessionRestore, logout, setAuth])
+
+  useEffect(() => {
+    void restoreSession()
+  }, [restoreSession])
 
   return (
     <>
       <StatusBar style="auto" />
       <WebPreviewShell>
-        <RootNavigator />
+        <RootNavigator onRetrySession={() => void restoreSession()} />
       </WebPreviewShell>
     </>
   )

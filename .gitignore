@@ -7,6 +7,13 @@ node_modules
 .env.production.local
 .env.development
 
+# OS / editor noise
+.DS_Store
+Thumbs.db
+
+# Local runtime logs
+*.log
+
 # Local visual validation artifacts
 test-artifacts/**/*.png
 test-artifacts/**/*.jpg

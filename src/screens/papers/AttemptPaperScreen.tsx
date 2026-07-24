@@ -3,7 +3,6 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, Image,
   TextInput, Platform
 } from 'react-native'
-import * as SecureStore from 'expo-secure-store'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRoute, useNavigation } from '@react-navigation/native'
@@ -13,7 +12,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { PapersStackParamList } from '../../navigation'
 import { papersApi } from '../../api/papers'
-import apiClient, { API_BASE_URL, TOKEN_KEY } from '../../api/client'
+import apiClient, { API_BASE_URL, getAccessToken } from '../../api/client'
 import { colors } from '../../theme/colors'
 import { spacing, radius, shadows } from '../../theme/spacing'
 import { typography } from '../../theme/typography'
@@ -201,7 +200,7 @@ function AuthenticatedQuestionImage({ uri, alt }: { uri: string; alt?: string | 
 
   useEffect(() => {
     let active = true
-    SecureStore.getItemAsync(TOKEN_KEY)
+    getAccessToken()
       .then((value) => {
         if (active) setToken(value)
       })
