@@ -61,11 +61,12 @@ type OrbitChoiceProps = {
   scale: number
   positionStyle: { left?: number; top?: number; right?: number; bottom?: number }
   selected: boolean
+  disabled: boolean
   onPressIn: () => void
   onPress: () => void
 }
 
-function OrbitChoice({ tone, titleLines, descriptionLines, scale, positionStyle, selected, onPressIn, onPress }: OrbitChoiceProps) {
+function OrbitChoice({ tone, titleLines, descriptionLines, scale, positionStyle, selected, disabled, onPressIn, onPress }: OrbitChoiceProps) {
   const dark = tone === 'planet'
   const diameter = PLANET_D * scale
 
@@ -73,15 +74,17 @@ function OrbitChoice({ tone, titleLines, descriptionLines, scale, positionStyle,
     <Pressable
       onPressIn={onPressIn}
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={`${titleLines.join(' ')}. ${descriptionLines.join(' ')}`}
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
       style={({ pressed }) => [
         styles.planet,
         dark ? styles.planetDark : styles.planetCream,
         { width: diameter, height: diameter, borderRadius: diameter / 2, ...positionStyle },
         (pressed || selected) && (dark ? styles.planetDarkActive : styles.planetCreamActive),
         (pressed || selected) && styles.planetSelected,
+        disabled && !selected && styles.planetDisabled,
       ]}
     >
       <Text style={[styles.planetTitle, { color: dark ? '#ffffff' : NAVY, fontSize: Math.round(17 * scale), lineHeight: Math.round(19 * scale) }]}>
@@ -103,17 +106,31 @@ export default function RegisterScreen() {
   const navigation = useNavigation<Nav>()
   const insets = useSafeAreaInsets()
   const [selectedPath, setSelectedPath] = useState<'individual' | 'institution' | null>(null)
+  const [isNavigating, setIsNavigating] = useState(false)
   const [mapWidth, setMapWidth] = useState(0)
+  const navigateTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearPendingNavigation = React.useCallback(() => {
+    if (navigateTimeout.current) {
+      clearTimeout(navigateTimeout.current)
+      navigateTimeout.current = null
+    }
+  }, [])
 
   useFocusEffect(
     React.useCallback(() => {
       setSelectedPath(null)
-    }, []),
+      setIsNavigating(false)
+      return clearPendingNavigation
+    }, [clearPendingNavigation]),
   )
 
   const selectAndNavigate = (path: 'individual' | 'institution') => {
+    if (navigateTimeout.current) return
     setSelectedPath(path)
-    setTimeout(() => {
+    setIsNavigating(true)
+    navigateTimeout.current = setTimeout(() => {
+      navigateTimeout.current = null
       navigation.navigate(path === 'individual' ? 'RegisterIndividual' : 'RegisterSchool')
     }, 420)
   }
@@ -202,6 +219,7 @@ export default function RegisterScreen() {
                 scale={scale}
                 positionStyle={{ left: 4 * scale, top: 38 * scale }}
                 selected={selectedPath === 'individual'}
+                disabled={isNavigating}
                 onPressIn={() => setSelectedPath('individual')}
                 onPress={() => selectAndNavigate('individual')}
               />
@@ -212,6 +230,7 @@ export default function RegisterScreen() {
                 scale={scale}
                 positionStyle={{ right: 1 * scale, bottom: 35 * scale }}
                 selected={selectedPath === 'institution'}
+                disabled={isNavigating}
                 onPressIn={() => setSelectedPath('institution')}
                 onPress={() => selectAndNavigate('institution')}
               />
@@ -283,6 +302,7 @@ const styles = StyleSheet.create({
   planetDarkActive: { borderColor: ORANGE, backgroundColor: '#152c4d' },
   planetCreamActive: { borderColor: ORANGE, shadowOpacity: 0.3 },
   planetSelected: { transform: [{ scale: 1.035 }], shadowOpacity: 0.3 },
+  planetDisabled: { opacity: 0.45 },
   planetTitle: { fontFamily: serif, fontWeight: '600', textAlign: 'center' },
   planetDescription: { marginTop: 8, fontFamily: typography.fonts.bodyMedium, textAlign: 'center' },
   planetArrow: { position: 'absolute', right: 12, bottom: 14 },
