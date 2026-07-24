@@ -204,7 +204,11 @@ function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
 function ProfileNavigator() {
   return (
     <ProfileStack.Navigator screenOptions={stackScreenOptions}>
-      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <ProfileStack.Screen
+        name="ProfileMain"
+        component={ProfileScreen}
+        options={{ title: 'Profile', headerShown: false }}
+      />
     </ProfileStack.Navigator>
   )
 }
