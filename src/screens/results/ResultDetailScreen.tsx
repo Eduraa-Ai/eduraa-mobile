@@ -6,7 +6,7 @@ import Svg, { Circle } from 'react-native-svg'
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { isLearnerRole } from '../../auth/roles'
@@ -15,6 +15,7 @@ import type { ResultsStackParamList } from '../../navigation'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
 import type { GradingResultItem } from '../../types'
+import { presentPdf } from '../../utils/pdfDownload'
 import {
   buildCheckedPaperReport,
   checkedPaperTitle,
@@ -146,6 +147,12 @@ export default function ResultDetailScreen() {
     if (isStaff) navigation.getParent()?.navigate('StaffPapers')
     else navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })
   }
+  const downloadMutation = useMutation({
+    mutationFn: async () => {
+      const pdf = await checkedPapersApi.downloadPdf(id)
+      await presentPdf(pdf)
+    },
+  })
 
   const intro = (
     <View style={styles.pageIntro}>
@@ -227,15 +234,35 @@ export default function ResultDetailScreen() {
               <DistributionMetric label="Missed" value={report.missed} tone={colors.danger} />
             </View>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={isStaff ? 'Open paper workspace' : 'Start a focused repair practice'}
-              onPress={openPaperWorkspace}
-              style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
-            >
-              <Ionicons name={isStaff ? 'documents-outline' : 'play-outline'} size={17} color={colors.white} />
-              <Text style={styles.primaryActionText}>{isStaff ? 'Open paper workspace' : 'Start a focused repair'}</Text>
-            </Pressable>
+            <View style={styles.actionRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={isStaff ? 'Open paper workspace' : 'Start a focused repair practice'}
+                onPress={openPaperWorkspace}
+                style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
+              >
+                <Ionicons name={isStaff ? 'documents-outline' : 'play-outline'} size={17} color={colors.white} />
+                <Text style={styles.primaryActionText}>{isStaff ? 'Open paper workspace' : 'Start a focused repair'}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Share performance report PDF"
+                accessibilityState={{ disabled: downloadMutation.isPending }}
+                disabled={downloadMutation.isPending}
+                onPress={() => downloadMutation.mutate()}
+                style={({ pressed }) => [styles.pdfAction, pressed && styles.pressed, downloadMutation.isPending && styles.actionDisabled]}
+              >
+                {downloadMutation.isPending
+                  ? <ActivityIndicator size="small" color={colors.accentStrong} />
+                  : <Ionicons name="share-outline" size={18} color={colors.accentStrong} />}
+              </Pressable>
+            </View>
+            {downloadMutation.isError ? (
+              <View style={styles.downloadError} accessibilityLiveRegion="polite">
+                <Ionicons name="cloud-offline-outline" size={15} color={colors.danger} />
+                <Text style={styles.downloadErrorText}>The PDF could not open. Your report is safe—tap share to retry.</Text>
+              </View>
+            ) : null}
 
             <View style={styles.breakdownHeader}>
               <View><Text style={styles.breakdownTitle}>Question breakdown</Text><Text style={styles.breakdownHint}>{isStaff ? 'Open a row to connect feedback and source evidence.' : 'Open a row to connect feedback, evidence, and review.'}</Text></View>
@@ -300,8 +327,13 @@ const styles = StyleSheet.create({
   metricRail: { width: 20, height: 2, borderRadius: 1, marginBottom: spacing[2] },
   distributionValue: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 16, lineHeight: 18 },
   distributionLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 0.7, textTransform: 'uppercase', marginTop: 2 },
-  primaryAction: { minHeight: 44, borderRadius: 14, backgroundColor: '#07152d', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
+  actionRow: { flexDirection: 'row', gap: spacing[2] },
+  primaryAction: { flex: 1, minHeight: 44, borderRadius: 14, backgroundColor: '#07152d', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   primaryActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
+  pdfAction: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#f5c4a7', backgroundColor: colors.accentSurface },
+  actionDisabled: { opacity: 0.62 },
+  downloadError: { minHeight: 44, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: colors.dangerSurface, borderWidth: 1, borderColor: colors.dangerBorder },
+  downloadErrorText: { flex: 1, color: colors.danger, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 14 },
   breakdownHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing[3], marginTop: spacing[1] },
   breakdownTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
   breakdownHint: { maxWidth: 250, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 8, lineHeight: 11, marginTop: 1 },

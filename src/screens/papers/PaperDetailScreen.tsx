@@ -14,9 +14,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { useRoute, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RouteProp } from '@react-navigation/native'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import type { PapersStackParamList } from '../../navigation'
 import { papersApi } from '../../api/papers'
+import { presentPdf } from '../../utils/pdfDownload'
 import { colors } from '../../theme/colors'
 import { spacing, radius, shadows } from '../../theme/spacing'
 
@@ -49,6 +50,13 @@ export default function PaperDetailScreen() {
     enabled: !!paper,
     retry: false,
     throwOnError: false,
+  })
+
+  const downloadMutation = useMutation({
+    mutationFn: async () => {
+      const pdf = await papersApi.downloadPdf(params.paperId)
+      await presentPdf(pdf)
+    },
   })
 
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -163,6 +171,31 @@ export default function PaperDetailScreen() {
             <Text style={styles.secondaryBtnText}>Interactive Quiz</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          style={styles.downloadBtn}
+          onPress={() => downloadMutation.mutate()}
+          activeOpacity={0.82}
+          disabled={downloadMutation.isPending}
+          accessibilityRole="button"
+          accessibilityLabel="Download paper PDF"
+          accessibilityState={{ disabled: downloadMutation.isPending }}
+        >
+          {downloadMutation.isPending ? (
+            <ActivityIndicator size="small" color={colors.text} />
+          ) : (
+            <Ionicons name="download-outline" size={18} color={colors.text} />
+          )}
+          <View style={styles.downloadCopy}>
+            <Text style={styles.downloadTitle}>
+              {downloadMutation.isPending ? 'Preparing PDF…' : 'Download paper PDF'}
+            </Text>
+            <Text style={styles.downloadMeta}>Question paper only · answers stay hidden</Text>
+          </View>
+          {!downloadMutation.isPending ? <Ionicons name="chevron-forward" size={17} color={colors.textSoft} /> : null}
+        </TouchableOpacity>
+        {downloadMutation.isError ? (
+          <Text style={styles.downloadError}>Could not download this paper. Check your connection and try again.</Text>
+        ) : null}
 
         {/* Questions */}
         <Text style={styles.sectionLabel}>Questions  ·  {paper.questions.length}</Text>
@@ -296,6 +329,36 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   secondaryBtnText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
+  downloadBtn: {
+    minHeight: 58,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  downloadCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  downloadTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  downloadMeta: {
+    color: colors.textSoft,
+    fontSize: 11,
+  },
+  downloadError: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 17,
+  },
 
   sectionLabel: {
     fontSize: 11,

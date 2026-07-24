@@ -60,7 +60,7 @@ export type PapersStackParamList = {
   GeneratePaper: undefined
   PaperDetail: { paperId: string }
   AttemptPaper: { paperId: string; examId?: string }
-  Quiz: { paperId: string }
+  Quiz: { paperId: string; examId?: string }
 }
 
 export type ResultsStackParamList = {
