@@ -302,7 +302,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen
         name="ProfileMain"
         component={ProfileScreen}
-        options={{ title: "Profile" }}
+        options={{ headerShown: false }}
       />
     </ProfileStack.Navigator>
   );
