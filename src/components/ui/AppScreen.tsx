@@ -2,7 +2,7 @@ import React, { ReactNode } from 'react'
 import { ScrollView, ScrollViewProps, StyleSheet, View, ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { colors, gradients, spacing } from '../../theme'
+import { colors, gradients, layout, spacing } from '../../theme'
 
 interface AppScreenProps extends ScrollViewProps {
   children: ReactNode
@@ -11,9 +11,10 @@ interface AppScreenProps extends ScrollViewProps {
   padded?: boolean
   tone?: 'default' | 'auth'
   ambient?: boolean
+  protectedChrome?: boolean
 }
 
-export function AppScreen({ children, scroll = true, contentStyle, padded = true, tone = 'default', ambient = true, ...props }: AppScreenProps) {
+export function AppScreen({ children, scroll = true, contentStyle, padded = true, tone = 'default', ambient = true, protectedChrome = false, style, ...props }: AppScreenProps) {
   const insets = useSafeAreaInsets()
 
   const content = (
@@ -35,8 +36,8 @@ export function AppScreen({ children, scroll = true, contentStyle, padded = true
           styles.inner,
           padded && styles.padded,
           {
-            paddingTop: insets.top + spacing[4],
-            paddingBottom: insets.bottom + spacing[6],
+            paddingTop: protectedChrome ? spacing[4] : insets.top + spacing[4],
+            paddingBottom: protectedChrome ? spacing[6] : insets.bottom + spacing[6],
           },
           contentStyle,
         ]}
@@ -47,11 +48,21 @@ export function AppScreen({ children, scroll = true, contentStyle, padded = true
   )
 
   if (!scroll) {
-    return <View style={styles.root}>{content}</View>
+    return <View style={[styles.root, style]}>{content}</View>
   }
 
   return (
-    <ScrollView style={[styles.root, tone === 'auth' && styles.authRoot]} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} {...props}>
+    <ScrollView
+      style={[
+        styles.root,
+        tone === 'auth' && styles.authRoot,
+        protectedChrome && { marginTop: insets.top, marginBottom: layout.bottomTabHeight + insets.bottom },
+        style,
+      ]}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.scrollContent}
+      {...props}
+    >
       {content}
     </ScrollView>
   )

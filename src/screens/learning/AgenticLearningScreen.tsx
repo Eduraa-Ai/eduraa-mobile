@@ -1,366 +1,248 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectableChip } from '../../components/ui'
-import { agenticLearningApi, AgenticLearningSubjectBucket, AgenticLearningSubtopicCard } from '../../api/agenticLearning'
+import Svg, { Circle } from 'react-native-svg'
+import { agenticLearningApi, AgenticLearningSubjectBucket } from '../../api/agenticLearning'
+import { AppScreen, ErrorState } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
+import { AgenticHeader, AgenticIntro, AgenticSectionHeader, AgenticSurface } from './AgenticLearningFrame'
+import { clampPercent, priorityAction, totalOpenConcepts, weakestSubject } from './agenticLearningModel'
 
-function masteryColor(value: number) {
+function masteryTone(value: number) {
   if (value >= 75) return colors.success
   if (value >= 45) return colors.warning
   return colors.danger
 }
 
-function statusLabel(status: string) {
-  return status.replace(/_/g, ' ')
-}
-
-function SubjectCard({ subject, active, onPress }: { subject: AgenticLearningSubjectBucket; active: boolean; onPress: () => void }) {
-  const tone = masteryColor(subject.average_mastery)
+function ReadinessRing({ value }: { value: number }) {
+  const size = 74
+  const stroke = 7
+  const ringRadius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * ringRadius
+  const progress = clampPercent(value)
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.subjectCard, active && styles.subjectCardActive, pressed && styles.pressed]}>
-      <View style={styles.subjectTop}>
-        <Text style={styles.subjectName} numberOfLines={1}>{subject.subject_name}</Text>
-        <Text style={[styles.masteryText, { color: tone }]}>{Math.round(subject.average_mastery)}%</Text>
+    <View style={styles.ringWrap} accessibilityLabel={`${progress} percent ready`}>
+      <Svg width={size} height={size}>
+        <Circle cx={size / 2} cy={size / 2} r={ringRadius} stroke="rgba(255,255,255,0.14)" strokeWidth={stroke} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={ringRadius}
+          stroke="#FBBF24"
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={circumference - (progress / 100) * circumference}
+          rotation="-90"
+          origin={`${size / 2}, ${size / 2}`}
+        />
+      </Svg>
+      <View style={styles.ringCopy}>
+        <Text style={styles.ringValue}>{progress}</Text>
+        <Text style={styles.ringLabel}>ready</Text>
       </View>
-      <Text style={styles.subjectMeta}>{subject.unresolved_count} open / {subject.total_subtopics} tracked</Text>
-      {subject.top_weak_topic ? <Text style={styles.subjectWeak} numberOfLines={1}>{subject.top_weak_topic}</Text> : null}
+    </View>
+  )
+}
+
+function SubjectCard({ subject, onPress }: { subject: AgenticLearningSubjectBucket; onPress: () => void }) {
+  const mastery = clampPercent(subject.average_mastery)
+  const tone = masteryTone(mastery)
+  const active = subject.unresolved_count > 0
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${subject.subject_name}, ${mastery} percent mastery, ${subject.unresolved_count} open concepts`}
+      accessibilityHint="Opens ranked subtopics for this subject."
+      onPress={onPress}
+      style={({ pressed }) => [styles.subjectCard, active && styles.subjectCardActive, pressed && styles.pressed]}
+    >
+      <View style={styles.subjectTop}>
+        <Text style={styles.subjectName}>{subject.subject_name}</Text>
+        <Text style={[styles.subjectMastery, { color: tone }]}>{mastery}%</Text>
+      </View>
+      <Text style={styles.subjectMeta}>{subject.unresolved_count} open · {subject.total_subtopics} tracked</Text>
+      {subject.top_weak_topic ? (
+        <View style={styles.weakRow}>
+          <Ionicons name="warning" size={12} color={colors.warning} />
+          <Text style={styles.weakText} numberOfLines={1}>{subject.top_weak_topic}</Text>
+        </View>
+      ) : null}
       <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${Math.max(8, Math.min(100, subject.average_mastery))}%`, backgroundColor: tone }]} />
+        <View style={[styles.progressFill, { width: `${mastery}%`, backgroundColor: tone }]} />
       </View>
     </Pressable>
   )
 }
 
-function TopicCard({ topic, onPress }: { topic: AgenticLearningSubtopicCard; onPress: () => void }) {
-  const tone = masteryColor(topic.mastery_score)
-
+function HubSkeleton() {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.topicCard, pressed && styles.pressed]}>
-      <View style={styles.topicTop}>
-        <View style={styles.topicCopy}>
-          <Text style={styles.topicKicker}>{topic.chapter_title || topic.branch || 'Concept'}</Text>
-          <Text style={styles.topicTitle}>{topic.topic_name}</Text>
-        </View>
-        <View style={[styles.statusPill, { backgroundColor: `${tone}14` }]}>
-          <Text style={[styles.statusText, { color: tone }]}>{statusLabel(topic.status)}</Text>
-        </View>
-      </View>
-      <Text style={styles.topicSummary}>{topic.summary}</Text>
-      <View style={styles.topicFooter}>
-        <Text style={styles.topicFooterText}>{Math.round(topic.mastery_score)}% mastery</Text>
-        {topic.pyq_frequency != null ? <Text style={styles.topicFooterText}>{topic.pyq_frequency} PYQs</Text> : null}
-        {topic.read_time_minutes ? <Text style={styles.topicFooterText}>{topic.read_time_minutes} min</Text> : null}
-      </View>
-    </Pressable>
+    <View style={styles.skeletonStack}>
+      <View style={styles.skeletonHero} />
+      {[0, 1, 2].map((item) => <View key={item} style={styles.skeletonRow} />)}
+    </View>
   )
 }
 
 export default function AgenticLearningScreen() {
   const navigation = useNavigation<any>()
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null)
-
-  const subjectsQuery = useQuery({
-    queryKey: ['agentic-subjects'],
-    queryFn: agenticLearningApi.getSubjects,
-  })
-
-  const quickActionsQuery = useQuery({
-    queryKey: ['agentic-quick-actions'],
-    queryFn: agenticLearningApi.getQuickActions,
-  })
+  const subjectsQuery = useQuery({ queryKey: ['agentic-subjects'], queryFn: agenticLearningApi.getSubjects })
+  const quickActionsQuery = useQuery({ queryKey: ['agentic-quick-actions'], queryFn: agenticLearningApi.getQuickActions })
 
   const subjects = subjectsQuery.data ?? []
-  const selectedSubject = useMemo(
-    () => subjects.find((subject) => subject.subject_id === selectedSubjectId) ?? subjects[0],
-    [selectedSubjectId, subjects],
-  )
+  const quickAction = priorityAction(quickActionsQuery.data ?? [])
+  const prioritySubject = subjects.find((subject) => subject.subject_id === quickAction?.target_subject_id) ?? weakestSubject(subjects)
+  const openCount = totalOpenConcepts(subjects)
+  const priorityTitle = quickAction?.label || prioritySubject?.top_weak_topic || 'Your next repair will appear here'
+  const priorityDescription = quickAction?.description || (prioritySubject ? `Weakest current signal in ${prioritySubject.subject_name}.` : 'Complete an attempt to unlock a focused repair.')
+  const priorityReady = clampPercent(prioritySubject?.average_mastery)
 
-  useEffect(() => {
-    if (!selectedSubjectId && subjects[0]) {
-      setSelectedSubjectId(subjects[0].subject_id)
+  const openPriority = () => {
+    if (quickAction?.target_topic_id) {
+      navigation.navigate('AgenticTopic', {
+        topicId: quickAction.target_topic_id,
+        topicName: priorityTitle,
+        subjectName: prioritySubject?.subject_name,
+      })
+      return
     }
-  }, [selectedSubjectId, subjects])
-
-  const subtopicsQuery = useQuery({
-    queryKey: ['agentic-subtopics', selectedSubject?.subject_id],
-    queryFn: () => agenticLearningApi.getSubtopics(selectedSubject!.subject_id),
-    enabled: Boolean(selectedSubject?.subject_id),
-  })
-
-  if (subjectsQuery.isLoading) {
-    return (
-      <AppScreen scroll={false} contentStyle={styles.center}>
-        <ActivityIndicator color={colors.accent} />
-        <Text style={styles.loadingText}>Loading Agentic Learning</Text>
-      </AppScreen>
-    )
+    if (prioritySubject) navigation.navigate('AgenticSubject', { subjectId: prioritySubject.subject_id })
   }
-
-  if (subjectsQuery.isError) {
-    return (
-      <AppScreen scroll={false} contentStyle={styles.center}>
-        <ErrorState
-          title="Agentic Learning is unavailable"
-          message="This student account could not load the learning graph yet."
-          onAction={() => void subjectsQuery.refetch()}
-        />
-      </AppScreen>
-    )
-  }
-
-  const quickActions = quickActionsQuery.data ?? []
-  const subtopics = subtopicsQuery.data ?? []
-  const openCount = subjects.reduce((sum, subject) => sum + subject.unresolved_count, 0)
 
   return (
-    <AppScreen contentStyle={styles.screen}>
-      <GradientHeroCard
-        eyebrow="AGENTIC LEARNING"
-        title={openCount > 0 ? `${openCount} concepts need work` : 'Concept graph is stable'}
-        subtitle="Study the exact topic cards created from attempts, checked work, and repeated mistake patterns."
+    <AppScreen protectedChrome contentStyle={styles.screen} refreshControl={undefined}>
+      <AgenticHeader meta="JEE Mains + Advanced" pill="Learn" onBack={() => navigation.navigate('LearningHome')} />
+      <AgenticIntro
+        kicker="Agentic learning"
+        title={subjectsQuery.isLoading ? 'Building your learning map' : openCount > 0 ? `${openCount} concepts need work` : 'Your concept map is steady'}
+        subtitle="Topic cards built from your attempts, checked papers, and repeated mistakes."
       />
 
-      {quickActions.length > 0 ? (
-        <AnimatedCard style={styles.actionCard}>
-          <Text style={styles.sectionKicker}>Quick actions</Text>
-          {quickActions.slice(0, 3).map((action) => (
-            <Pressable
-              key={action.id}
-              onPress={() => {
-                if (action.target_topic_id) navigation.navigate('AgenticTopic', { topicId: action.target_topic_id })
-                else if (action.target_subject_id) setSelectedSubjectId(action.target_subject_id)
-              }}
-              style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-            >
-              <View style={styles.actionIcon}>
-                <Ionicons name="flash" size={15} color={colors.accent} />
-              </View>
-              <View style={styles.actionCopy}>
-                <Text style={styles.actionTitle}>{action.label}</Text>
-                {action.description ? <Text style={styles.actionBody}>{action.description}</Text> : null}
-              </View>
-              <Ionicons name="chevron-forward" size={17} color={colors.textSoft} />
-            </Pressable>
-          ))}
-        </AnimatedCard>
+      {subjectsQuery.isLoading ? <HubSkeleton /> : null}
+
+      {subjectsQuery.isError ? (
+        <ErrorState
+          title="Learning map unavailable"
+          message="Your existing progress is safe. Retry when the learning signal is available."
+          onAction={() => void Promise.all([subjectsQuery.refetch(), quickActionsQuery.refetch()])}
+        />
       ) : null}
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Subjects</Text>
-        <Text style={styles.sectionSubtitle}>Pick the bucket to inspect.</Text>
-      </View>
-
-      <View style={styles.subjectList}>
-        {subjects.map((subject) => (
-          <SubjectCard
-            key={subject.subject_id}
-            subject={subject}
-            active={subject.subject_id === selectedSubject?.subject_id}
-            onPress={() => setSelectedSubjectId(subject.subject_id)}
-          />
-        ))}
-      </View>
-
-      {selectedSubject ? (
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{selectedSubject.subject_name}</Text>
-          <Text style={styles.sectionSubtitle}>{selectedSubject.total_subtopics} tracked subtopics.</Text>
-        </View>
+      {!subjectsQuery.isLoading && !subjectsQuery.isError && subjects.length === 0 ? (
+        <AgenticSurface style={styles.emptySurface}>
+          <View style={styles.emptyIcon}><Ionicons name="sparkles-outline" size={22} color={colors.accentStrong} /></View>
+          <Text style={styles.emptyTitle}>Your first concept card is taking shape.</Text>
+          <Text style={styles.emptyBody}>Complete a paper or checked attempt and Agentic Learning will turn the evidence into a focused lesson.</Text>
+        </AgenticSurface>
       ) : null}
 
-      {subtopicsQuery.isLoading ? <ActivityIndicator color={colors.accent} /> : null}
+      {!subjectsQuery.isLoading && !subjectsQuery.isError && subjects.length > 0 ? (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Priority repair, ${priorityTitle}, ${priorityReady} percent ready`}
+            accessibilityHint="Opens the most urgent concept repair."
+            disabled={!quickAction?.target_topic_id && !prioritySubject}
+            onPress={openPriority}
+            style={({ pressed }) => [styles.priorityCard, pressed && styles.priorityPressed]}
+          >
+            <View style={styles.priorityCopy}>
+              <Text style={styles.priorityKicker}>Priority repair</Text>
+              <Text style={styles.priorityTitle}>{priorityTitle}</Text>
+              <Text style={styles.priorityBody} numberOfLines={2}>{priorityDescription}</Text>
+            </View>
+            <ReadinessRing value={priorityReady} />
+          </Pressable>
 
-      {!subtopicsQuery.isLoading && subtopics.length === 0 ? (
-        <AnimatedCard style={styles.emptyCard}>
-          <SelectableChip label="No weak subtopics yet" selected />
-          <Text style={styles.emptyText}>Once this student has attempts or checked papers, Agentic Learning will surface the exact concepts to study.</Text>
-        </AnimatedCard>
+          <AgenticSectionHeader title="Subjects" meta="Pick a bucket" />
+          <View style={styles.subjectList}>
+            {subjects.map((subject) => (
+              <SubjectCard
+                key={subject.subject_id}
+                subject={subject}
+                onPress={() => navigation.navigate('AgenticSubject', { subjectId: subject.subject_id })}
+              />
+            ))}
+          </View>
+        </>
       ) : null}
-
-      {subtopics.map((topic) => (
-        <TopicCard key={topic.topic_id} topic={topic} onPress={() => navigation.navigate('AgenticTopic', { topicId: topic.topic_id })} />
-      ))}
     </AppScreen>
   )
 }
 
 const styles = StyleSheet.create({
   screen: {
-    paddingBottom: spacing[20],
-  },
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  actionCard: {
     gap: spacing[3],
+    paddingBottom: spacing[6],
+    backgroundColor: '#FBF6EC',
   },
-  sectionKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.accent,
-  },
-  actionRow: {
+  priorityCard: {
+    minHeight: 112,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
+    borderRadius: radius.xl,
+    backgroundColor: '#07152D',
     padding: spacing[3],
+    ...shadows.md,
   },
-  actionIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
-  },
-  actionCopy: {
-    flex: 1,
-  },
-  actionTitle: {
-    color: colors.text,
+  priorityPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
+  priorityCopy: { flex: 1, minWidth: 0, gap: spacing[1] },
+  priorityKicker: {
+    color: colors.orangeScale[300],
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 13,
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
-  actionBody: {
-    color: colors.textMuted,
+  priorityTitle: {
+    color: colors.white,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 19,
+    lineHeight: 23,
+  },
+  priorityBody: {
+    color: '#B7C2D3',
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 16,
   },
-  sectionHeader: {
+  ringWrap: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center' },
+  ringCopy: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  ringValue: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 20, lineHeight: 23 },
+  ringLabel: { color: '#B7C2D3', fontFamily: typography.fonts.bodyBold, fontSize: 8, textTransform: 'uppercase' },
+  subjectList: { gap: spacing[2] },
+  subjectCard: {
+    minHeight: 86,
+    borderRadius: radius.lg,
+    backgroundColor: '#FFFCF6',
+    borderWidth: 1,
+    borderColor: '#E6D7C5',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
     gap: spacing[1],
   },
-  sectionTitle: {
-    ...typography.roles.title,
-    color: colors.text,
-  },
-  sectionSubtitle: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  subjectList: {
-    gap: spacing[3],
-  },
-  subjectCard: {
-    borderRadius: radius.card,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing[4],
-    gap: spacing[2],
-    ...shadows.xs,
-  },
-  subjectCardActive: {
-    borderColor: colors.borderBrand,
-    backgroundColor: colors.accentSurface,
-  },
-  subjectTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  subjectName: {
-    flex: 1,
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 17,
-  },
-  masteryText: {
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 14,
-  },
-  subjectMeta: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-  },
-  subjectWeak: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 13,
-  },
-  progressTrack: {
-    height: 7,
-    borderRadius: radius.full,
-    backgroundColor: colors.borderSubtle,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: radius.full,
-  },
-  topicCard: {
-    borderRadius: radius.card,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing[4],
-    gap: spacing[3],
-    ...shadows.sm,
-  },
-  topicTop: {
-    flexDirection: 'row',
-    gap: spacing[3],
-    alignItems: 'flex-start',
-  },
-  topicCopy: {
-    flex: 1,
-  },
-  topicKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.textSoft,
-    letterSpacing: 0.6,
-  },
-  topicTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 17,
-    lineHeight: 22,
-    marginTop: spacing[1],
-  },
-  topicSummary: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  statusPill: {
-    borderRadius: radius.full,
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[1],
-  },
-  statusText: {
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    textTransform: 'capitalize',
-  },
-  topicFooter: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[2],
-  },
-  topicFooterText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-  },
-  emptyCard: {
-    gap: spacing[3],
-  },
-  emptyText: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  pressed: {
-    opacity: 0.78,
-  },
+  subjectCardActive: { borderColor: colors.borderBrand },
+  subjectTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
+  subjectName: { flex: 1, color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 16, lineHeight: 20 },
+  subjectMastery: { fontFamily: typography.fonts.bodyBold, fontSize: 14 },
+  subjectMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 15 },
+  weakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], minHeight: 16 },
+  weakText: { flex: 1, color: colors.warning, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  progressTrack: { height: 6, borderRadius: radius.full, backgroundColor: '#E9E1D6', overflow: 'hidden', marginTop: spacing[1] },
+  progressFill: { height: '100%', borderRadius: radius.full },
+  pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
+  skeletonStack: { gap: spacing[3] },
+  skeletonHero: { height: 112, borderRadius: radius.xl, backgroundColor: colors.slate[200] },
+  skeletonRow: { height: 86, borderRadius: radius.lg, backgroundColor: colors.slate[100], borderWidth: 1, borderColor: colors.borderSubtle },
+  emptySurface: { alignItems: 'center', gap: spacing[3], paddingVertical: spacing[8] },
+  emptyIcon: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  emptyTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 19, textAlign: 'center' },
+  emptyBody: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 })

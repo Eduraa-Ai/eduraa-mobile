@@ -1,16 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectableChip } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, SelectableChip } from '../../components/ui'
 import { previousPapersApi, PreviousPaper, PreviousQuestion, resolvePreviousPaperAssetUrl } from '../../api/previousPapers'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
-
-function errorMessage(error: unknown) {
-  const anyError = error as { response?: { data?: { detail?: string } } }
-  return anyError.response?.data?.detail || 'Unable to load previous-year papers.'
-}
+import PreviousPaperAssemblyState, { AssemblyStage } from './PreviousPaperAssemblyState'
+import {
+  filterPreviousPapers,
+  getApiErrorMessage,
+  getPreviousPaperFilters,
+  getVisibleChapters,
+  reconcileSelectedPaperId,
+} from './previousPapersModel'
 
 function metaForPaper(paper: PreviousPaper) {
   return [paper.exam, paper.year, paper.session_label, paper.shift_label, paper.paper_label].filter(Boolean).join(' / ')
@@ -78,8 +81,16 @@ function QuestionCard({ question }: { question: PreviousQuestion }) {
 export default function PreviousPapersScreen() {
   const navigation = useNavigation<any>()
   const [selectedPaperId, setSelectedPaperId] = useState<string | null>(null)
+  const [examFilter, setExamFilter] = useState<string | null>(null)
+  const [yearFilter, setYearFilter] = useState<string | null>(null)
   const [subject, setSubject] = useState<string | null>(null)
   const [chapterId, setChapterId] = useState<string | null>(null)
+  const [chaptersExpanded, setChaptersExpanded] = useState(false)
+  const [viewMode, setViewMode] = useState<'browse' | 'preview'>('browse')
+  const [assemblyStage, setAssemblyStage] = useState<AssemblyStage | null>(null)
+  const [assemblyError, setAssemblyError] = useState<string | null>(null)
+  const [assemblyAction, setAssemblyAction] = useState<'auto' | 'new'>('auto')
+  const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pendingResume, setPendingResume] = useState<{
     paperId: string
     title: string
@@ -94,22 +105,34 @@ export default function PreviousPapersScreen() {
   })
 
   const papers = papersQuery.data ?? []
+  const filterOptions = useMemo(() => getPreviousPaperFilters(papers), [papers])
+  const visiblePapers = useMemo(
+    () => filterPreviousPapers(papers, examFilter, yearFilter),
+    [examFilter, papers, yearFilter],
+  )
   const selectedPaper = useMemo(
-    () => papers.find((paper) => paper.id === selectedPaperId) ?? papers[0],
-    [papers, selectedPaperId],
+    () => visiblePapers.find((paper) => paper.id === selectedPaperId),
+    [selectedPaperId, visiblePapers],
   )
 
   useEffect(() => {
-    if (!selectedPaperId && papers[0]) setSelectedPaperId(papers[0].id)
-  }, [papers, selectedPaperId])
+    const nextPaperId = reconcileSelectedPaperId(visiblePapers, selectedPaperId)
+    if (nextPaperId !== selectedPaperId) setSelectedPaperId(nextPaperId)
+  }, [selectedPaperId, visiblePapers])
 
   useEffect(() => {
     setSubject(null)
+    setViewMode('browse')
   }, [selectedPaper?.id])
 
   useEffect(() => {
     setChapterId(null)
+    setChaptersExpanded(false)
   }, [selectedPaper?.id, subject])
+
+  useEffect(() => () => {
+    if (transitionTimer.current) clearTimeout(transitionTimer.current)
+  }, [])
 
   const chaptersQuery = useQuery({
     queryKey: ['previous-paper-chapters', selectedPaper?.id, subject],
@@ -118,6 +141,7 @@ export default function PreviousPapersScreen() {
   })
 
   const chapters = chaptersQuery.data ?? []
+  const visibleChapters = getVisibleChapters(chapters, chaptersExpanded, 6)
   const selectedChapter = chapters.find((chapter) => chapter.chapter_id === chapterId)
 
   const questionsQuery = useQuery({
@@ -138,6 +162,7 @@ export default function PreviousPapersScreen() {
     },
     onSuccess: (result, attemptAction) => {
       if (attemptAction === 'auto' && result.reused_existing) {
+        setAssemblyStage(null)
         setPendingResume({
           paperId: result.paper_id,
           title: result.title,
@@ -148,12 +173,19 @@ export default function PreviousPapersScreen() {
         return
       }
       setPendingResume(null)
-      navigation.navigate('Papers', { screen: 'AttemptPaper', params: { paperId: result.paper_id } })
+      setAssemblyStage('opening')
+      transitionTimer.current = setTimeout(() => {
+        setAssemblyStage(null)
+        navigation.navigate('Papers', { screen: 'AttemptPaper', params: { paperId: result.paper_id } })
+      }, 180)
+    },
+    onError: (error) => {
+      setAssemblyError(getApiErrorMessage(error, 'The paper could not be assembled. Check your connection and try again.'))
+      setAssemblyStage('error')
     },
   })
 
   const publishedCount = papers.length
-  const solutionCount = papers.filter((paper) => paper.has_solutions).length
   const canStart = !questionsQuery.isLoading && !questionsQuery.isError && (questionsQuery.data?.length ?? 0) > 0
   const previewSummary = questionsQuery.isLoading
     ? 'Checking the selected practice set…'
@@ -164,6 +196,45 @@ export default function PreviousPapersScreen() {
       : selectedPaper
         ? `${selectedPaper.question_count} questions available in ${selectedPaper.title}`
         : 'Choose a paper to build a timed practice set.'
+  const selectionLabel = [subject || 'All subjects', selectedChapter?.chapter_title || 'Any chapter'].join(' · ')
+
+  const beginStart = (attemptAction: 'auto' | 'new') => {
+    if (startMutation.isPending || assemblyStage === 'preparing' || assemblyStage === 'requesting' || assemblyStage === 'opening') return
+    if (transitionTimer.current) clearTimeout(transitionTimer.current)
+    setAssemblyAction(attemptAction)
+    setAssemblyError(null)
+    setPendingResume(null)
+    setAssemblyStage('preparing')
+    transitionTimer.current = setTimeout(() => {
+      setAssemblyStage('requesting')
+      startMutation.mutate(attemptAction)
+    }, 180)
+  }
+
+  const openRecoveredPaper = (paperId: string) => {
+    setPendingResume(null)
+    setAssemblyStage('opening')
+    transitionTimer.current = setTimeout(() => {
+      setAssemblyStage(null)
+      navigation.navigate('Papers', { screen: 'AttemptPaper', params: { paperId } })
+    }, 180)
+  }
+
+  if (assemblyStage && selectedPaper) {
+    return (
+      <PreviousPaperAssemblyState
+        stage={assemblyStage}
+        paperTitle={selectedPaper.title}
+        selectionLabel={selectionLabel}
+        errorMessage={assemblyError || undefined}
+        onRetry={() => beginStart(assemblyAction)}
+        onBack={() => {
+          setAssemblyError(null)
+          setAssemblyStage(null)
+        }}
+      />
+    )
+  }
 
   if (papersQuery.isLoading) {
     return (
@@ -179,7 +250,7 @@ export default function PreviousPapersScreen() {
       <AppScreen scroll={false} contentStyle={styles.center}>
         <ErrorState
           title="Previous papers are for JEE learners"
-          message={errorMessage(papersQuery.error)}
+          message={getApiErrorMessage(papersQuery.error, 'Unable to load previous-year papers.')}
           onAction={() => void papersQuery.refetch()}
         />
       </AppScreen>
@@ -188,175 +259,241 @@ export default function PreviousPapersScreen() {
 
   return (
     <>
-    <AppScreen contentStyle={styles.screen}>
-      <GradientHeroCard
-        eyebrow="JEE PREVIOUS PAPERS"
-        title="Practice from PYQs"
-        subtitle="Browse the structured paper database, inspect questions, then continue an unfinished set or start a timed practice paper."
-      >
-        <View style={styles.heroStats}>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatValue}>{publishedCount}</Text>
-            <Text style={styles.heroStatLabel}>Published</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatValue}>{solutionCount}</Text>
-            <Text style={styles.heroStatLabel}>With solutions</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatValue}>{selectedPaper?.question_count ?? 0}</Text>
-            <Text style={styles.heroStatLabel}>Selected pool</Text>
-          </View>
-        </View>
-      </GradientHeroCard>
+      <AppScreen key={viewMode} protectedChrome contentStyle={styles.screen}>
+        {viewMode === 'preview' && selectedPaper ? (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to practice builder"
+              onPress={() => setViewMode('browse')}
+              style={({ pressed }) => [styles.previewBack, pressed && styles.pressed]}
+            >
+              <Ionicons name="arrow-back" size={18} color={colors.paperStudio.jee} />
+              <Text style={styles.previewBackText}>Back to builder</Text>
+            </Pressable>
 
-      {papers.length === 0 ? (
-        <AnimatedCard style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No published papers yet</Text>
-          <Text style={styles.emptyBody}>Once JEE PYQs are published in the backend, they will appear here automatically.</Text>
-        </AnimatedCard>
-      ) : null}
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Published papers</Text>
-        <Text style={styles.sectionSubtitle}>{publishedCount} papers available for practice</Text>
-      </View>
-
-      <View style={styles.paperList}>
-        {papers.map((paper) => (
-          <PaperCard key={paper.id} paper={paper} active={paper.id === selectedPaper?.id} onPress={() => setSelectedPaperId(paper.id)} />
-        ))}
-      </View>
-
-      {selectedPaper ? (
-        <AnimatedCard style={styles.focusCard}>
-          <View style={styles.focusHeader}>
-            <View style={styles.focusCopy}>
-              <Text style={styles.sectionKicker}>Build practice set</Text>
-              <Text style={styles.focusTitle}>{selectedPaper.title}</Text>
-              <Text style={styles.focusMeta}>{metaForPaper(selectedPaper)}</Text>
+            <View style={styles.previewIntro}>
+              <Text style={styles.previewEyebrow}>QUESTION PREVIEW · ANSWERS STAY LOCKED</Text>
+              <Text style={styles.previewTitle}>Know the shape of your set.</Text>
+              <Text style={styles.previewBody}>{selectionLabel} from {selectedPaper.title}. Solutions unlock only after submission.</Text>
             </View>
-            <View style={styles.focusBadge}>
-              <Ionicons name="library-outline" size={16} color={colors.paperStudio.jee} />
-              <Text style={styles.focusBadgeText}>{selectedPaper.question_count} Q</Text>
-            </View>
-          </View>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoTile}>
-              <Text style={styles.infoTileLabel}>Subject</Text>
-              <Text style={styles.infoTileValue}>{subject || 'All subjects'}</Text>
-            </View>
-            <View style={styles.infoTile}>
-              <Text style={styles.infoTileLabel}>Chapter</Text>
-              <Text style={styles.infoTileValue}>{selectedChapter?.chapter_title || 'Any chapter'}</Text>
-            </View>
-          </View>
+            {questionsQuery.isLoading ? (
+              <View style={styles.previewLoading}>
+                <ActivityIndicator color={colors.paperStudio.jee} />
+                <Text style={styles.inlineLoadingText}>Preparing a safe question preview</Text>
+              </View>
+            ) : null}
 
-          <View style={styles.chipSection}>
-            <Text style={styles.chipSectionTitle}>Subject</Text>
-            <View style={styles.chipRow}>
-              <SelectableChip label="All subjects" selected={!subject} onPress={() => setSubject(null)} />
-              {selectedPaper.subjects.map((item) => (
-                <SelectableChip key={item} label={item} selected={subject === item} onPress={() => setSubject(item)} />
-              ))}
+            {questionsQuery.isError ? (
+              <ErrorState
+                title="Could not load this preview"
+                message={getApiErrorMessage(questionsQuery.error, 'The question preview could not load. Your filters are unchanged.')}
+                onAction={() => void questionsQuery.refetch()}
+              />
+            ) : null}
+
+            {!questionsQuery.isLoading && !questionsQuery.isError && (questionsQuery.data ?? []).length === 0 ? (
+              <AnimatedCard style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>No questions match this selection yet</Text>
+                <Text style={styles.emptyBody}>Return to the builder and choose another subject or chapter.</Text>
+              </AnimatedCard>
+            ) : null}
+
+            {(questionsQuery.data ?? []).slice(0, 8).map((question) => (
+              <QuestionCard key={question.id} question={question} />
+            ))}
+
+            <View style={styles.previewActions}>
+              <AnimatedButton
+                label="Start this practice set"
+                onPress={() => beginStart('auto')}
+                disabled={!canStart}
+              />
+              <AnimatedButton label="Adjust selection" variant="ghost" onPress={() => setViewMode('browse')} />
             </View>
-          </View>
-
-          {chaptersQuery.isLoading ? (
-            <View style={styles.inlineLoading}>
-              <ActivityIndicator color={colors.paperStudio.jee} />
-              <Text style={styles.inlineLoadingText}>Loading chapters</Text>
-            </View>
-          ) : null}
-
-          {chaptersQuery.isError ? (
-            <ErrorState
-              title="Could not load chapters"
-              message="You can still start the full paper, or retry to narrow the practice set."
-              onAction={() => void chaptersQuery.refetch()}
-              style={styles.inlineError}
-            />
-          ) : null}
-
-          {chapters.length ? (
-            <View style={styles.chipSection}>
-              <Text style={styles.chipSectionTitle}>Chapter drill</Text>
-              <View style={styles.chipRow}>
-                <SelectableChip label="Any chapter" selected={!chapterId} onPress={() => setChapterId(null)} />
-                {chapters.slice(0, 18).map((chapter) => (
-                  <SelectableChip
-                    key={`${chapter.chapter_id || chapter.chapter_title}-${chapter.subject || 'all'}`}
-                    label={`${chapter.chapter_title} (${chapter.question_count})`}
-                    selected={chapterId === chapter.chapter_id}
-                    onPress={() => setChapterId(chapter.chapter_id || null)}
-                  />
-                ))}
+          </>
+        ) : (
+          <>
+            <View style={styles.libraryIntro}>
+              <View style={styles.libraryTopline}>
+                <View style={styles.libraryMark}><Ionicons name="library-outline" size={18} color={colors.white} /></View>
+                <Text style={styles.libraryKicker}>JEE PYQ LIBRARY</Text>
+                <View style={styles.libraryCount}><Text style={styles.libraryCountText}>{publishedCount} papers</Text></View>
+              </View>
+              <Text style={styles.libraryTitle}>Choose the paper. Shape the practice.</Text>
+              <Text style={styles.libraryBody}>Real previous-year questions, one focused attempt, and solutions kept safely behind submission.</Text>
+              <View style={styles.libraryPromise}>
+                <Ionicons name="shield-checkmark-outline" size={15} color="#93e2b7" />
+                <Text style={styles.libraryPromiseText}>Your filters and unfinished attempts are preserved.</Text>
               </View>
             </View>
-          ) : null}
 
-          <AnimatedCard style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Practice set ready</Text>
-            <Text style={styles.summaryBody}>{previewSummary}</Text>
-          </AnimatedCard>
+            {papers.length ? (
+              <View style={styles.filterSection}>
+                <View style={styles.filterHeader}>
+                  <Text style={styles.filterTitle}>Find a paper</Text>
+                  {(examFilter || yearFilter) ? (
+                    <Pressable accessibilityRole="button" onPress={() => { setExamFilter(null); setYearFilter(null) }}>
+                      <Text style={styles.clearFilterText}>Clear filters</Text>
+                    </Pressable>
+                  ) : <Text style={styles.filterHint}>Exam · year</Text>}
+                </View>
+                <Text style={styles.filterLabel}>Exam</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail} accessibilityLabel="Filter papers by exam">
+                  <SelectableChip label="All exams" selected={!examFilter} onPress={() => setExamFilter(null)} />
+                  {filterOptions.exams.map((exam) => (
+                    <SelectableChip key={exam} label={exam} selected={examFilter === exam} onPress={() => setExamFilter(exam)} />
+                  ))}
+                </ScrollView>
+                <Text style={styles.filterLabel}>Year</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail} accessibilityLabel="Filter papers by year">
+                  <SelectableChip label="All years" selected={!yearFilter} onPress={() => setYearFilter(null)} />
+                  {filterOptions.years.map((year) => (
+                    <SelectableChip key={year} label={year} selected={yearFilter === year} onPress={() => setYearFilter(year)} />
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
 
-          {startMutation.isError ? (
-            <ErrorState
-              title="Could not start practice"
-              message={errorMessage(startMutation.error)}
-              onAction={() => startMutation.mutate(startMutation.variables || 'auto')}
-              style={styles.inlineError}
-            />
-          ) : null}
+            {papers.length === 0 ? (
+              <AnimatedCard style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>The PYQ shelf is waiting</Text>
+                <Text style={styles.emptyBody}>Published JEE papers will appear here automatically. Pull to refresh when your school or Eduraa adds them.</Text>
+              </AnimatedCard>
+            ) : null}
 
-          <AnimatedButton
-            label={
-              startMutation.isPending
-                ? 'Starting...'
-                : selectedChapter
-                  ? `Start ${selectedChapter.chapter_title}`
-                  : subject
-                    ? `Start ${subject} practice`
-                    : 'Start full paper'
-            }
-            loading={startMutation.isPending}
-            onPress={() => startMutation.mutate('auto')}
-            disabled={!canStart}
-          />
-        </AnimatedCard>
-      ) : null}
+            {papers.length > 0 && visiblePapers.length === 0 ? (
+              <View style={styles.noMatch}>
+                <View style={styles.noMatchIcon}><Ionicons name="search-outline" size={22} color={colors.paperStudio.jee} /></View>
+                <Text style={styles.emptyTitle}>No papers match both filters</Text>
+                <Text style={styles.emptyBody}>Clear the exam and year filters to return to the complete library.</Text>
+                <AnimatedButton label="Show all papers" variant="secondary" onPress={() => { setExamFilter(null); setYearFilter(null) }} />
+              </View>
+            ) : null}
 
-      {selectedPaper ? (
-        <>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Question preview</Text>
-            <Text style={styles.sectionSubtitle}>{[subject || 'All subjects', selectedChapter?.chapter_title].filter(Boolean).join(' / ')} from the selected paper.</Text>
-          </View>
+            {visiblePapers.length ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Published papers</Text>
+                  <Text style={styles.sectionSubtitle}>{visiblePapers.length} of {publishedCount} available</Text>
+                </View>
+                <View style={styles.paperList}>
+                  {visiblePapers.map((paper) => (
+                    <PaperCard key={paper.id} paper={paper} active={paper.id === selectedPaper?.id} onPress={() => setSelectedPaperId(paper.id)} />
+                  ))}
+                </View>
+              </>
+            ) : null}
 
-          {questionsQuery.isLoading ? <ActivityIndicator color={colors.paperStudio.jee} /> : null}
+            {selectedPaper ? (
+              <View style={styles.focusCard}>
+                <View style={styles.focusHeader}>
+                  <View style={styles.focusCopy}>
+                    <Text style={styles.sectionKicker}>BUILD PRACTICE</Text>
+                    <Text style={styles.focusTitle}>{selectedPaper.title}</Text>
+                    <Text style={styles.focusMeta}>{metaForPaper(selectedPaper)}</Text>
+                  </View>
+                  <View style={styles.focusBadge}>
+                    <Ionicons name="library-outline" size={16} color={colors.paperStudio.jee} />
+                    <Text style={styles.focusBadgeText}>{selectedPaper.question_count} Q</Text>
+                  </View>
+                </View>
 
-          {questionsQuery.isError ? (
-            <ErrorState
-              title="Could not load this practice set"
-              message={errorMessage(questionsQuery.error)}
-              onAction={() => void questionsQuery.refetch()}
-            />
-          ) : null}
+                <View style={styles.selectionLine}>
+                  <Ionicons name="options-outline" size={16} color={colors.paperStudio.jee} />
+                  <Text style={styles.selectionLineText}>{selectionLabel}</Text>
+                </View>
 
-          {!questionsQuery.isLoading && !questionsQuery.isError && (questionsQuery.data ?? []).length === 0 ? (
-            <AnimatedCard style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No questions match this selection yet</Text>
-              <Text style={styles.emptyBody}>Try switching to another subject or chapter to inspect a different portion of the paper.</Text>
-            </AnimatedCard>
-          ) : null}
+                <View style={styles.chipSection}>
+                  <Text style={styles.chipSectionTitle}>Subject</Text>
+                  <View style={styles.chipRow}>
+                    <SelectableChip label="All subjects" selected={!subject} onPress={() => setSubject(null)} />
+                    {selectedPaper.subjects.map((item) => (
+                      <SelectableChip key={item} label={item} selected={subject === item} onPress={() => setSubject(item)} />
+                    ))}
+                  </View>
+                </View>
 
-          {(questionsQuery.data ?? []).slice(0, 8).map((question) => (
-            <QuestionCard key={question.id} question={question} />
-          ))}
-        </>
-      ) : null}
-    </AppScreen>
+                {chaptersQuery.isLoading ? (
+                  <View style={styles.inlineLoading}>
+                    <ActivityIndicator color={colors.paperStudio.jee} />
+                    <Text style={styles.inlineLoadingText}>Loading chapters</Text>
+                  </View>
+                ) : null}
+
+                {chaptersQuery.isError ? (
+                  <ErrorState
+                    title="Could not load chapters"
+                    message={getApiErrorMessage(chaptersQuery.error, 'You can still start the full paper, or retry to narrow this set.')}
+                    onAction={() => void chaptersQuery.refetch()}
+                    style={styles.inlineError}
+                  />
+                ) : null}
+
+                {chapters.length ? (
+                  <View style={styles.chipSection}>
+                    <View style={styles.chapterHeader}>
+                      <Text style={styles.chipSectionTitle}>Chapter drill</Text>
+                      <Text style={styles.chapterHint}>Optional</Text>
+                    </View>
+                    <View style={styles.chipRow}>
+                      <SelectableChip label="Any chapter" selected={!chapterId} onPress={() => setChapterId(null)} />
+                      {visibleChapters.map((chapter) => (
+                        <SelectableChip
+                          key={`${chapter.chapter_id || chapter.chapter_title}-${chapter.subject || 'all'}`}
+                          label={`${chapter.chapter_title} (${chapter.question_count})`}
+                          selected={chapterId === chapter.chapter_id}
+                          onPress={() => setChapterId(chapter.chapter_id || null)}
+                        />
+                      ))}
+                    </View>
+                    {chapters.length > 6 ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={chaptersExpanded ? 'Show fewer chapters' : `Show all ${chapters.length} chapters`}
+                        onPress={() => setChaptersExpanded((expanded) => !expanded)}
+                        style={({ pressed }) => [styles.chapterToggle, pressed && styles.pressed]}
+                      >
+                        <Text style={styles.chapterToggleText}>{chaptersExpanded ? 'Show fewer chapters' : `Show all ${chapters.length} chapters`}</Text>
+                        <Ionicons name={chaptersExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.paperStudio.jee} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                <View style={styles.readinessBand}>
+                  <View style={styles.readinessIcon}><Ionicons name="checkmark" size={17} color={colors.white} /></View>
+                  <View style={styles.readinessCopy}>
+                    <Text style={styles.summaryTitle}>Practice set ready</Text>
+                    <Text style={styles.summaryBody}>{previewSummary}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.builderActions}>
+                  <AnimatedButton
+                    label="Preview questions"
+                    variant="secondary"
+                    onPress={() => setViewMode('preview')}
+                    disabled={!canStart}
+                  />
+                  <AnimatedButton
+                    label={
+                      selectedChapter
+                        ? `Start ${selectedChapter.chapter_title}`
+                        : subject
+                          ? `Start ${subject} practice`
+                          : 'Start full paper'
+                    }
+                    onPress={() => beginStart('auto')}
+                    disabled={!canStart}
+                  />
+                </View>
+              </View>
+            ) : null}
+          </>
+        )}
+      </AppScreen>
       <Modal
         visible={Boolean(pendingResume)}
         transparent
@@ -387,8 +524,7 @@ export default function PreviousPapersScreen() {
                 label="Resume paper"
                 onPress={() => {
                   if (!pendingResume) return
-                  navigation.navigate('Papers', { screen: 'AttemptPaper', params: { paperId: pendingResume.paperId } })
-                  setPendingResume(null)
+                  openRecoveredPaper(pendingResume.paperId)
                 }}
                 disabled={startMutation.isPending}
               />
@@ -396,7 +532,7 @@ export default function PreviousPapersScreen() {
                 label="Start new attempt"
                 variant="secondary"
                 loading={startMutation.isPending && startMutation.variables === 'new'}
-                onPress={() => startMutation.mutate('new')}
+                onPress={() => beginStart('new')}
               />
               <AnimatedButton
                 label="Not now"
@@ -414,56 +550,161 @@ export default function PreviousPapersScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-    paddingBottom: spacing[20],
+    gap: spacing[4],
+    paddingBottom: spacing[8],
   },
   center: {
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing[3],
   },
   loadingText: {
     ...typography.roles.body,
     color: colors.textMuted,
   },
-  heroStats: {
-    flexDirection: 'row',
+  libraryIntro: {
+    overflow: 'hidden',
+    borderRadius: 24,
+    padding: spacing[5],
     gap: spacing[3],
-    marginTop: spacing[4],
-    flexWrap: 'wrap',
+    backgroundColor: '#07152d',
+    ...shadows.md,
   },
-  heroStat: {
+  libraryTopline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  libraryMark: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  libraryKicker: {
     flex: 1,
-    minWidth: 88,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
+    color: 'rgba(255,255,255,0.72)',
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 9,
+    letterSpacing: 1.25,
   },
-  heroStatValue: {
+  libraryCount: {
+    minHeight: 28,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[3],
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.09)',
+  },
+  libraryCountText: {
     color: colors.white,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 16,
+    fontSize: 10,
   },
-  heroStatLabel: {
-    color: 'rgba(255,255,255,0.78)',
+  libraryTitle: {
+    maxWidth: 320,
+    color: colors.white,
+    fontFamily: typography.fonts.heading,
+    fontSize: 25,
+    lineHeight: 29,
+  },
+  libraryBody: {
+    maxWidth: 340,
+    color: 'rgba(255,255,255,0.68)',
     fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  libraryPromise: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingTop: spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.09)',
+  },
+  libraryPromiseText: {
+    flex: 1,
+    color: '#b7e8cb',
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  filterSection: {
+    gap: spacing[2],
+    paddingVertical: spacing[2],
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[3],
+  },
+  filterTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 17,
+  },
+  filterHint: {
+    color: colors.textSoft,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 10,
+  },
+  clearFilterText: {
+    color: colors.accentStrong,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 11,
-    marginTop: 2,
+  },
+  filterLabel: {
+    marginTop: spacing[1],
+    color: colors.textSoft,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 9,
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  filterRail: {
+    gap: spacing[2],
+    paddingRight: spacing[5],
+  },
+  noMatch: {
+    alignItems: 'center',
+    gap: spacing[3],
+    paddingVertical: spacing[6],
+    paddingHorizontal: spacing[4],
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  noMatchIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef3ff',
   },
   paperList: {
-    gap: spacing[3],
+    overflow: 'hidden',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
   },
   paperCard: {
-    borderRadius: radius.card,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    minHeight: 112,
     padding: spacing[4],
     gap: spacing[3],
-    ...shadows.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    backgroundColor: colors.backgroundElevated,
   },
   paperCardActive: {
-    backgroundColor: colors.paperStudio.jee,
-    borderColor: colors.paperStudio.jee,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.paperStudio.jee,
+    backgroundColor: '#eef3ff',
   },
   paperTop: {
     flexDirection: 'row',
@@ -487,7 +728,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[1],
   },
   paperTitleActive: {
-    color: colors.white,
+    color: colors.paperStudio.jee,
   },
   countPill: {
     borderRadius: radius.full,
@@ -496,7 +737,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
   },
   countPillActive: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: colors.paperStudio.jee,
   },
   countText: {
     color: colors.text,
@@ -519,7 +760,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   paperSubjectsActive: {
-    color: 'rgba(255,255,255,0.76)',
+    color: colors.textSecondary,
   },
   solutionBadge: {
     borderRadius: radius.full,
@@ -528,7 +769,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
   },
   solutionBadgeActive: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: '#dfe8ff',
   },
   solutionBadgeText: {
     color: colors.textSecondary,
@@ -537,10 +778,16 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   solutionBadgeTextActive: {
-    color: colors.white,
+    color: colors.paperStudio.jee,
   },
   focusCard: {
+    borderRadius: 24,
+    padding: spacing[5],
     gap: spacing[3],
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+    ...shadows.sm,
   },
   focusHeader: {
     flexDirection: 'row',
@@ -558,6 +805,8 @@ const styles = StyleSheet.create({
   focusTitle: {
     ...typography.roles.title,
     color: colors.text,
+    fontSize: 19,
+    lineHeight: 24,
   },
   focusMeta: {
     ...typography.roles.body,
@@ -578,27 +827,21 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyBold,
     fontSize: 12,
   },
-  infoRow: {
+  selectionLine: {
+    minHeight: 44,
+    paddingHorizontal: spacing[3],
+    borderRadius: 15,
     flexDirection: 'row',
-    gap: spacing[3],
+    alignItems: 'center',
+    gap: spacing[2],
+    backgroundColor: '#eef3ff',
   },
-  infoTile: {
+  selectionLineText: {
     flex: 1,
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
-    padding: spacing[3],
-    gap: 2,
-  },
-  infoTileLabel: {
-    color: colors.textSoft,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-  },
-  infoTileValue: {
-    color: colors.text,
+    color: colors.paperStudio.jee,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
+    fontSize: 11,
+    lineHeight: 15,
   },
   chipSection: {
     gap: spacing[2],
@@ -613,6 +856,28 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing[2],
   },
+  chapterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chapterHint: {
+    color: colors.textSoft,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 10,
+  },
+  chapterToggle: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  chapterToggleText: {
+    color: colors.paperStudio.jee,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 11,
+  },
   inlineLoading: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -625,24 +890,49 @@ const styles = StyleSheet.create({
   inlineError: {
     alignSelf: 'stretch',
   },
-  summaryCard: {
-    gap: spacing[2],
-    backgroundColor: colors.accentSurface,
-    borderColor: colors.borderBrand,
+  readinessBand: {
+    minHeight: 76,
+    padding: spacing[3],
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    backgroundColor: '#eef8f2',
+    borderWidth: 1,
+    borderColor: '#cfe7d7',
+  },
+  readinessIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.success,
+  },
+  readinessCopy: {
+    flex: 1,
   },
   summaryTitle: {
-    color: colors.accentStrong,
+    color: '#17623c',
     fontFamily: typography.fonts.bodyBold,
     fontSize: 13,
   },
   summaryBody: {
-    color: colors.text,
+    marginTop: 2,
+    color: colors.textSecondary,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  builderActions: {
+    gap: spacing[2],
+    paddingTop: spacing[1],
   },
   sectionHeader: {
-    gap: spacing[1],
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: spacing[3],
   },
   sectionTitle: {
     ...typography.roles.title,
@@ -651,6 +941,53 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     ...typography.roles.body,
     color: colors.textMuted,
+    fontSize: 11,
+  },
+  previewBack: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  previewBackText: {
+    color: colors.paperStudio.jee,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  previewIntro: {
+    borderRadius: 24,
+    padding: spacing[5],
+    gap: spacing[2],
+    backgroundColor: '#07152d',
+  },
+  previewEyebrow: {
+    color: '#ff9b62',
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 9,
+    letterSpacing: 1,
+  },
+  previewTitle: {
+    color: colors.white,
+    fontFamily: typography.fonts.heading,
+    fontSize: 24,
+    lineHeight: 29,
+  },
+  previewBody: {
+    color: 'rgba(255,255,255,0.68)',
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  previewLoading: {
+    minHeight: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[3],
+  },
+  previewActions: {
+    gap: spacing[2],
+    paddingTop: spacing[2],
   },
   questionCard: {
     gap: spacing[3],

@@ -1,0 +1,56 @@
+name: Mobile CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "1"
+      EAS_BUILD_PROFILE: production
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_API_URL: https://api.example.com
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 20.19.4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20.19.4"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Reject critical dependency advisories
+        run: npm audit --audit-level=critical
+
+      - name: Check Expo dependency alignment
+        run: npm run check:deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run contract and configuration tests
+        run: npm test
+
+      - name: Bundle Android, iOS, and web
+        run: npm run export:ci -- --output-dir "${RUNNER_TEMP}/eduraa-mobile-export"

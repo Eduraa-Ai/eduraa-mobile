@@ -11,6 +11,7 @@ import { API_BASE_URL } from '../../api/client'
 import type { AnswerEntry, MCQOption, QuestionInPaper } from '../../types'
 import { AnimatedButton, AnimatedCard, AppScreen, ErrorState } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
+import { selectNewestInProgressAttempt } from './paperAttemptModel'
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, 'Quiz'>
 type Route = RouteProp<PapersStackParamList, 'Quiz'>
@@ -156,7 +157,7 @@ export default function QuizScreen() {
     queryKey: ['paper-attempt', params.paperId, params.examId, 'interactive-quiz'],
     queryFn: async () => {
       const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
-      const inProgress = attempts.items.find((attempt) => attempt.grading_status === 'in_progress')
+      const inProgress = selectNewestInProgressAttempt(attempts.items)
       return inProgress ?? papersApi.createAttempt(params.paperId, {
         exam_id: params.examId,
         reason: 'interactive_quiz',

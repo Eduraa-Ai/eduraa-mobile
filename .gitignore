@@ -1,4 +1,6 @@
 node_modules
+dist
+coverage
 .env
 .expo
 .env.local
@@ -6,6 +8,13 @@ node_modules
 .env.test.local
 .env.production.local
 .env.development
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+
+# Local runtime logs
+*.log
 
 # Local visual validation artifacts
 test-artifacts/**/*.png

@@ -1,753 +1,364 @@
-import React, { useMemo } from 'react'
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import React from 'react'
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useRoute } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState } from '../../components/ui'
-import { agenticLearningApi, AgenticLearningTopicDetail } from '../../api/agenticLearning'
+import { useNetInfo } from '@react-native-community/netinfo'
+import { agenticLearningApi } from '../../api/agenticLearning'
+import { getHttpStatus } from '../../api/queryReliability'
+import { AppScreen, ErrorState } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
+import { AgenticHeader, AgenticIntro, AgenticSectionHeader, AgenticSurface } from './AgenticLearningFrame'
+import { clampPercent, nextOpenTopic, topicStatusLabel } from './agenticLearningModel'
 
-type RouteParams = {
-  topicId: string
-}
+type RouteParams = { topicId: string; topicName?: string; subjectName?: string }
 
-type Tone = {
-  accent: string
-  label: string
-}
-
-function clampPercent(value: number) {
-  return Math.max(0, Math.min(100, Math.round(value)))
-}
-
-function masteryTone(value: number): Tone {
-  if (value >= 75) return { accent: colors.success, label: 'Stable' }
-  if (value >= 45) return { accent: colors.warning, label: 'Needs polish' }
-  return { accent: colors.danger, label: 'Repair now' }
-}
-
-function cleanStatus(status: string) {
-  return status.replace(/_/g, ' ')
-}
-
-function splitConcept(text: string) {
-  const normalized = text.replace(/\s+/g, ' ')
-  return (normalized.match(/[^.!?]+[.!?]?/g) ?? [])
-    .map((part) => part.trim())
-    .filter(Boolean)
-}
-
-function compactMeta(topic: AgenticLearningTopicDetail) {
-  return [topic.subject_name, topic.chapter_title, topic.weightage_label].filter(Boolean).join(' / ')
-}
-
-function StatTile({ label, value, icon, tone }: { label: string; value: string; icon: keyof typeof Ionicons.glyphMap; tone: string }) {
+function StatTile({ value, label }: { value: string; label: string }) {
   return (
-    <View style={styles.statTile}>
-      <View style={[styles.statIcon, { backgroundColor: `${tone}16` }]}>
-        <Ionicons name={icon} size={15} color={tone} />
-      </View>
+    <View style={styles.statTile} accessibilityLabel={`${label}, ${value}`}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   )
 }
 
-function RouteStep({
-  index,
-  title,
-  caption,
-  icon,
-  tone,
-  active,
-}: {
-  index: number
-  title: string
-  caption: string
-  icon: keyof typeof Ionicons.glyphMap
-  tone: string
-  active?: boolean
-}) {
+function RouteStep({ index, title, body, tone, last }: { index: number; title: string; body: string; tone: string; last?: boolean }) {
   return (
-    <View style={[styles.routeStep, active && styles.routeStepActive]}>
+    <View style={styles.routeStep}>
       <View style={styles.routeRail}>
-        <View style={[styles.routeNode, { backgroundColor: active ? tone : colors.backgroundElevated, borderColor: `${tone}66` }]}>
-          <Ionicons name={icon} size={16} color={active ? colors.white : tone} />
-        </View>
-        <Text style={[styles.routeIndex, { color: tone }]}>0{index}</Text>
+        <View style={[styles.routeNumber, { backgroundColor: tone }]}><Text style={styles.routeNumberText}>{index}</Text></View>
+        {!last ? <View style={styles.routeLine} /> : null}
       </View>
       <View style={styles.routeCopy}>
         <Text style={styles.routeTitle}>{title}</Text>
-        <Text style={styles.routeCaption}>{caption}</Text>
+        <Text style={styles.routeBody}>{body}</Text>
       </View>
     </View>
   )
 }
 
-function ListSection({
-  title,
-  items,
-  icon,
-  tone,
-}: {
-  title: string
-  items: string[]
-  icon: keyof typeof Ionicons.glyphMap
-  tone: string
-}) {
-  if (!items.length) return null
-
+function PrimaryAction({ label, onPress, loading, success = false }: { label: string; onPress: () => void; loading?: boolean; success?: boolean }) {
   return (
-    <AnimatedCard style={styles.listCard}>
-      <View style={styles.sectionHeaderRow}>
-        <View style={[styles.sectionIcon, { backgroundColor: `${tone}14` }]}>
-          <Ionicons name={icon} size={17} color={tone} />
-        </View>
-        <Text style={styles.sectionTitle}>{title}</Text>
-      </View>
-      <View style={styles.smartList}>
-        {items.slice(0, 5).map((item, index) => (
-          <View key={`${title}-${index}`} style={styles.smartRow}>
-            <View style={[styles.smartNumber, { backgroundColor: `${tone}14` }]}>
-              <Text style={[styles.smartNumberText, { color: tone }]}>{index + 1}</Text>
-            </View>
-            <Text style={styles.smartText}>{item}</Text>
-          </View>
-        ))}
-      </View>
-    </AnimatedCard>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={loading}
+      onPress={onPress}
+      style={({ pressed }) => [styles.primaryAction, success && styles.primaryActionSuccess, pressed && styles.actionPressed, loading && styles.actionDisabled]}
+    >
+      {loading ? <ActivityIndicator color={colors.white} /> : <Ionicons name={success ? 'arrow-forward' : 'checkmark'} size={18} color={colors.white} />}
+      <Text style={styles.primaryActionText}>{label}</Text>
+    </Pressable>
   )
 }
 
-function PracticePrompt({ prompt, index }: { prompt: string; index: number }) {
+function LessonConnectionStatus({ failed, offline, loading, onRetry }: { failed: boolean; offline: boolean; loading: boolean; onRetry: () => void }) {
+  const title = failed ? offline ? 'Lesson saved offline' : 'Saved lesson · refresh paused' : 'Lesson synced'
+  const detail = failed ? 'Progress unchanged' : 'Evidence and progress saved'
+
   return (
-    <View style={styles.practicePrompt}>
-      <View style={styles.practiceNumber}>
-        <Text style={styles.practiceNumberText}>{index + 1}</Text>
+    <View style={styles.connectionStatus} accessibilityRole={failed ? 'alert' : undefined} accessibilityLabel={`${title}. ${detail}.`}>
+      <View style={[styles.connectionDot, { backgroundColor: failed ? colors.warning : colors.success }]} />
+      <View style={styles.connectionCopy}>
+        <Text style={styles.connectionTitle} numberOfLines={1} maxFontSizeMultiplier={1.5}>{title}</Text>
+        <Text style={styles.connectionDetail} numberOfLines={1} maxFontSizeMultiplier={1.5}>{detail}</Text>
       </View>
-      <Text style={styles.practiceText}>{prompt}</Text>
+      {failed && !offline ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={loading ? 'Refreshing lesson' : 'Refresh lesson'}
+          accessibilityState={{ disabled: loading, busy: loading }}
+          disabled={loading}
+          onPress={onRetry}
+          style={({ pressed }) => [styles.connectionAction, pressed && styles.actionPressed, loading && styles.actionDisabled]}
+        >
+          {loading ? <ActivityIndicator size="small" color={colors.accentStrong} /> : null}
+          <Text style={styles.connectionActionText} maxFontSizeMultiplier={1.5}>{loading ? 'Refreshing…' : 'Refresh'}</Text>
+        </Pressable>
+      ) : null}
     </View>
   )
 }
 
 export default function AgenticTopicScreen() {
+  const navigation = useNavigation<any>()
   const route = useRoute()
-  const { topicId } = route.params as RouteParams
+  const { topicId, topicName, subjectName } = route.params as RouteParams
+  const netInfo = useNetInfo()
   const queryClient = useQueryClient()
-
   const topicQuery = useQuery({
     queryKey: ['agentic-topic', topicId],
-    queryFn: () => agenticLearningApi.getTopic(topicId),
+    queryFn: ({ signal }) => agenticLearningApi.getTopic(topicId, signal),
+    refetchOnMount: 'always',
   })
-
-  const resolveMutation = useMutation({
-    mutationFn: async () => {
-      const topic = topicQuery.data
-      if (!topic) return null
-      return agenticLearningApi.setTopicResolved(topic.topic_id, topic.subject_id, topic.status !== 'resolved')
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['agentic-topic', topicId] })
-      await queryClient.invalidateQueries({ queryKey: ['agentic-subjects'] })
-      await queryClient.invalidateQueries({ queryKey: ['agentic-subtopics'] })
-    },
-    onError: () => {
-      Alert.alert('Update failed', 'Unable to update this topic right now.')
-    },
-  })
-
   const topic = topicQuery.data
-  const conceptPieces = useMemo(() => splitConcept(topic?.concept_explanation ?? ''), [topic?.concept_explanation])
+  const subtopicsQuery = useQuery({
+    queryKey: ['agentic-subtopics', topic?.subject_id],
+    queryFn: () => agenticLearningApi.getSubtopics(topic!.subject_id),
+    enabled: Boolean(topic?.subject_id),
+  })
+  const resolveMutation = useMutation({
+    mutationFn: (resolved: boolean) => agenticLearningApi.setTopicResolved(topicId, topic!.subject_id, resolved),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['agentic-topic', topicId] }),
+        queryClient.invalidateQueries({ queryKey: ['agentic-subjects'] }),
+        queryClient.invalidateQueries({ queryKey: ['agentic-subtopics'] }),
+        queryClient.invalidateQueries({ queryKey: ['agentic-quick-actions'] }),
+      ])
+    },
+  })
 
   if (topicQuery.isLoading) {
     return (
-      <AppScreen scroll={false} contentStyle={styles.center}>
-        <ActivityIndicator color={colors.accent} />
-        <Text style={styles.loadingText}>Loading lesson</Text>
+      <AppScreen protectedChrome contentStyle={styles.screen}>
+        <AgenticHeader meta="Building concept lesson" pill="Repair" onBack={() => navigation.goBack()} />
+        <AgenticIntro kicker="Concept repair" title="Preparing your lesson" subtitle="Connecting attempts, checked work, and repeated mistake evidence." />
+        <View style={styles.loadingState}><ActivityIndicator color={colors.accent} /><View style={styles.skeletonHero} /><View style={styles.skeletonBody} /></View>
       </AppScreen>
     )
   }
 
-  if (topicQuery.isError || !topic) {
+  const isOffline = netInfo.isConnected === false || netInfo.isInternetReachable === false
+  const status = getHttpStatus(topicQuery.error)
+  const isGone = status === 404 || status === 410
+
+  if (!topic) {
+    const title = isOffline ? 'Waiting for connection' : isGone ? 'Lesson no longer available' : 'Lesson refresh paused'
+    const message = isOffline
+      ? 'Your learning evidence is safe. This lesson will refresh automatically when you are back online.'
+      : isGone
+        ? 'This concept may have moved as your learning map changed. Return and choose the latest lesson.'
+        : 'Eduraa could not refresh the lesson. Your learning evidence and progress remain safely stored.'
+
     return (
-      <AppScreen scroll={false} contentStyle={styles.center}>
+      <AppScreen protectedChrome key={`concept-error-${topicId}`} contentStyle={styles.screen}>
+        <AgenticHeader meta={subjectName || 'Concept lesson'} pill={isOffline ? 'Offline' : 'Progress safe'} onBack={() => navigation.goBack()} />
+        <AgenticIntro kicker="Concept repair" title={topicName || 'Your concept lesson'} subtitle="Your place in this learning route is preserved." />
         <ErrorState
-          title="Lesson unavailable"
-          message="This Agentic Learning topic could not be loaded."
-          onAction={() => void topicQuery.refetch()}
+          kind={isOffline ? 'offline' : 'error'}
+          title={title}
+          message={message}
+          actionLabel={isGone ? 'Back to learning map' : 'Refresh lesson'}
+          loading={topicQuery.isFetching}
+          onAction={isOffline ? undefined : isGone ? () => navigation.goBack() : () => void topicQuery.refetch()}
         />
       </AppScreen>
     )
   }
 
-  const isResolved = topic.status === 'resolved'
+  const isResolved = topic.status.toLowerCase() === 'resolved'
   const mastery = clampPercent(topic.mastery_score)
   const confidence = clampPercent(topic.confidence)
-  const tone = masteryTone(mastery)
-  const conceptLead = conceptPieces.slice(0, 2).join(' ')
-  const conceptSupport = conceptPieces.slice(2, 6)
-  const openLoops = Math.max(0, 100 - mastery)
-  const practiceCount = topic.practice_questions.length
+  const nextTopic = nextOpenTopic(subtopicsQuery.data ?? [], topic.topic_id)
+  const curriculumMeta = [topic.curriculum_label, topic.chapter_title].filter(Boolean).join(' · ')
+  const updateError = resolveMutation.isError ? 'The update did not reach Eduraa. Your current status is unchanged; try again.' : null
+  const showRefreshFailure = topicQuery.isError
+
+  if (isResolved) {
+    return (
+      <AppScreen protectedChrome key={`resolved-concept-${topicId}-${showRefreshFailure ? 'recovery' : 'ready'}`} contentStyle={styles.screen}>
+        <AgenticHeader meta={curriculumMeta || topic.subject_name} pill="Resolved" onBack={() => navigation.goBack()} />
+        <AgenticIntro kicker="Loop closed" title="Concept resolved" />
+        <LessonConnectionStatus failed={showRefreshFailure} offline={isOffline} loading={topicQuery.isFetching} onRetry={() => void topicQuery.refetch()} />
+
+        <View style={styles.resolvedHero}>
+          <View style={styles.resolvedIcon}><Ionicons name="checkmark" size={28} color={colors.white} /></View>
+          <Text style={styles.resolvedTitle}>Concept closed</Text>
+          <Text style={styles.resolvedTopic}>{topic.topic_name} marked resolved</Text>
+          <Text style={styles.resolvedMastery}>{mastery}% <Text style={styles.resolvedMasteryLabel}>mastery</Text></Text>
+          <Text style={styles.resolvedNote}>{topic.improvement_trend || 'New attempt evidence will keep this signal honest.'}</Text>
+        </View>
+
+        <AgenticSectionHeader title="What changed" meta="Summary" />
+        <AgenticSurface style={styles.changedCard}>
+          {[
+            `${topic.topic_name} is marked resolved.`,
+            topic.improvement_trend || `Mastery remains ${mastery}% until a new attempt updates it.`,
+            'You can reopen this concept if the same mistake returns.',
+          ].map((item, index) => (
+            <View key={`${index}-${item}`} style={styles.changedRow}>
+              <View style={styles.changedCheck}><Ionicons name="checkmark" size={13} color={colors.success} /></View>
+              <Text style={styles.changedText}>{item}</Text>
+            </View>
+          ))}
+        </AgenticSurface>
+
+        <AgenticSectionHeader title="Up next" meta={nextTopic ? 'Keep the momentum' : 'Learning map clear'} />
+        {nextTopic ? (
+          <AgenticSurface style={styles.nextCard}>
+            <View style={styles.nextTop}>
+              <View style={styles.nextCopy}>
+                <Text style={styles.nextKicker}>{nextTopic.chapter_title || nextTopic.branch || 'Next concept'}</Text>
+                <Text style={styles.nextTitle}>{nextTopic.topic_name}</Text>
+              </View>
+              <View style={styles.nextPill}><Text style={styles.nextPillText}>{topicStatusLabel(nextTopic)}</Text></View>
+            </View>
+            <Text style={styles.nextBody}>{nextTopic.summary}</Text>
+            <Text style={styles.nextMeta}>{clampPercent(nextTopic.mastery_score)}% mastery{nextTopic.pyq_frequency != null ? ` · ${nextTopic.pyq_frequency} PYQs` : ''}</Text>
+          </AgenticSurface>
+        ) : (
+          <AgenticSurface><Text style={styles.nextBody}>No other open concept is waiting in this subject.</Text></AgenticSurface>
+        )}
+
+        {updateError ? <Text style={styles.inlineError}>{updateError}</Text> : null}
+        <PrimaryAction
+          success
+          label={nextTopic ? 'Start next concept' : 'Back to learning map'}
+          onPress={() => nextTopic ? navigation.replace('AgenticTopic', { topicId: nextTopic.topic_id, topicName: nextTopic.topic_name, subjectName: topic.subject_name }) : navigation.navigate('AgenticLearning')}
+        />
+        <Pressable
+          accessibilityRole="button"
+          disabled={resolveMutation.isPending}
+          onPress={() => resolveMutation.mutate(false)}
+          style={({ pressed }) => [styles.reopenAction, pressed && styles.actionPressed]}
+        >
+          <Text style={styles.reopenText}>{resolveMutation.isPending ? 'Reopening…' : 'Reopen this concept'}</Text>
+        </Pressable>
+      </AppScreen>
+    )
+  }
 
   return (
-    <AppScreen contentStyle={styles.screen}>
-      <LinearGradient colors={['#111827', '#7c2d12', '#f97316']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
-        <View style={styles.heroTop}>
-          <View style={styles.heroKickerWrap}>
-            <Ionicons name="sparkles" size={14} color={colors.orangeScale[200]} />
-            <Text style={styles.heroKicker}>{topic.curriculum_label}</Text>
-          </View>
-          <View style={[styles.heroStatusPill, isResolved && styles.heroStatusResolved]}>
-            <Text style={styles.heroStatusText}>{isResolved ? 'Resolved' : cleanStatus(topic.status)}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.heroTitle}>{topic.topic_name}</Text>
-        <Text style={styles.heroMeta}>{compactMeta(topic)}</Text>
-
-        <View style={styles.heroMission}>
-          <View style={styles.missionCopy}>
-            <Text style={styles.missionKicker}>Smart focus</Text>
-            <Text style={styles.missionText}>
-              {tone.label}: close {openLoops}% of the gap with one concept pass, one recall pass, and a short practice burst.
-            </Text>
-          </View>
-          <View style={styles.masteryOrb}>
-            <Text style={styles.masteryOrbValue}>{mastery}%</Text>
-            <Text style={styles.masteryOrbLabel}>ready</Text>
-          </View>
-        </View>
-      </LinearGradient>
+    <AppScreen protectedChrome key={`concept-lesson-${topicId}-${showRefreshFailure ? 'recovery' : 'ready'}`} contentStyle={styles.screen}>
+      <AgenticHeader meta={curriculumMeta || topic.subject_name} pill={topicStatusLabel({ status: topic.status, mastery_score: topic.mastery_score })} onBack={() => navigation.goBack()} />
+      <AgenticIntro kicker="Concept repair" title={topic.topic_name} subtitle={topic.summary} />
+      <LessonConnectionStatus failed={showRefreshFailure} offline={isOffline} loading={topicQuery.isFetching} onRetry={() => void topicQuery.refetch()} />
 
       <View style={styles.statGrid}>
-        <StatTile label="Mastery" value={`${mastery}%`} icon="analytics" tone={tone.accent} />
-        <StatTile label="Confidence" value={`${confidence}%`} icon="pulse" tone={colors.info} />
-        <StatTile label="Attempts" value={`${topic.attempt_count}`} icon="repeat" tone={colors.violet[600]} />
+        <StatTile value={`${mastery}%`} label="Mastery" />
+        <StatTile value={`${confidence}%`} label="Confidence" />
+        <StatTile value={`${topic.attempt_count}`} label="Attempts" />
       </View>
 
-      <AnimatedCard style={styles.routeCard} elevated>
-        <View style={styles.sectionHeaderRow}>
-          <View style={[styles.sectionIcon, styles.routeHeaderIcon]}>
-            <Ionicons name="trail-sign" size={17} color={colors.accent} />
-          </View>
-          <View style={styles.sectionHeaderCopy}>
-            <Text style={styles.sectionTitle}>Lesson route</Text>
-            <Text style={styles.sectionSubtitle}>A compact path from understanding to recall.</Text>
-          </View>
-        </View>
-        <View style={styles.routeList}>
-          <RouteStep
-            index={1}
-            title="Concept repair"
-            caption={conceptLead || topic.summary}
-            icon="bulb"
-            tone={colors.accent}
-            active
-          />
-          <RouteStep
-            index={2}
-            title="Recall anchors"
-            caption={`${topic.easy_ways_to_learn.length + topic.memory_tips.length} short hooks to remember the idea.`}
-            icon="flash"
-            tone={colors.info}
-          />
-          <RouteStep
-            index={3}
-            title="Exam transfer"
-            caption={practiceCount ? `${practiceCount} prompts ready for a quick check.` : 'Use the recap to create a fast self-check.'}
-            icon="barbell"
-            tone={colors.violet[600]}
-          />
-        </View>
-      </AnimatedCard>
+      <AgenticSectionHeader title="Lesson route" meta="3 steps" />
+      <AgenticSurface style={styles.routeCard}>
+        <RouteStep index={1} title="Concept repair" body="Rebuild the core idea from the ground up." tone={colors.accent} />
+        <RouteStep index={2} title="Recall anchors" body={`${topic.memory_tips.length || topic.easy_ways_to_learn.length} memory hooks for exam pressure.`} tone={colors.info} />
+        <RouteStep index={3} title="Exam transfer" body={`${topic.practice_questions.length} prompts for a fast self-check.`} tone={colors.violet[600]} last />
+      </AgenticSurface>
 
-      <AnimatedCard style={styles.conceptCard}>
-        <View style={styles.sectionHeaderRow}>
-          <View style={[styles.sectionIcon, { backgroundColor: colors.accentSurface }]}>
-            <Ionicons name="library" size={17} color={colors.accent} />
-          </View>
-          <Text style={styles.sectionTitle}>Core idea</Text>
-        </View>
-        <Text style={styles.conceptLead}>{conceptLead || topic.summary}</Text>
-        {conceptSupport.length > 0 ? (
-          <View style={styles.conceptSupportList}>
-            {conceptSupport.map((part, index) => (
-              <View key={`concept-${index}`} style={styles.conceptSupportRow}>
-                <View style={styles.conceptDot} />
-                <Text style={styles.conceptSupportText}>{part}</Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-        {topic.text_diagram ? (
-          <View style={styles.whiteboard}>
-            <View style={styles.whiteboardTop}>
-              <Ionicons name="git-network" size={15} color={colors.info} />
-              <Text style={styles.whiteboardTitle}>Mental model</Text>
+      <AgenticSurface style={styles.coreCard}>
+        <Text style={styles.cardKicker}>Core idea</Text>
+        <Text style={styles.coreText}>{topic.concept_explanation || topic.summary}</Text>
+        {topic.text_diagram ? <View style={styles.diagram}><Text style={styles.diagramText}>{topic.text_diagram}</Text></View> : null}
+      </AgenticSurface>
+
+      {(topic.memory_tips.length > 0 || topic.easy_ways_to_learn.length > 0) ? (
+        <AgenticSurface style={styles.anchorCard}>
+          <Text style={[styles.cardKicker, { color: colors.info }]}>Memory anchors</Text>
+          {(topic.memory_tips.length ? topic.memory_tips : topic.easy_ways_to_learn).slice(0, 3).map((tip, index) => (
+            <View key={`${index}-${tip}`} style={styles.anchorRow}>
+              <View style={styles.anchorIcon}><Ionicons name="diamond" size={9} color={colors.info} /></View>
+              <Text style={styles.anchorText}>{tip}</Text>
             </View>
-            <Text style={styles.diagramText}>{topic.text_diagram}</Text>
-          </View>
-        ) : null}
-      </AnimatedCard>
-
-      <ListSection title="Easy ways to learn" items={topic.easy_ways_to_learn} icon="rocket" tone={colors.accent} />
-      <ListSection title="Memory anchors" items={topic.memory_tips} icon="bookmark" tone={colors.info} />
-      <ListSection title="Recap points" items={topic.recap_points} icon="checkmark-circle" tone={colors.success} />
+          ))}
+        </AgenticSurface>
+      ) : null}
 
       {topic.practice_questions.length > 0 ? (
-        <AnimatedCard style={styles.practiceCard} elevated>
+        <AgenticSurface dark style={styles.practiceCard}>
           <View style={styles.practiceHeader}>
-            <View>
-              <Text style={styles.practiceKicker}>Practice burst</Text>
-              <Text style={styles.practiceTitle}>Prove it under exam language</Text>
-            </View>
-            <View style={styles.practiceBadge}>
-              <Text style={styles.practiceBadgeText}>{practiceCount}</Text>
-            </View>
+            <View><Text style={styles.practiceKicker}>Practice burst</Text><Text style={styles.practiceTitle}>Transfer it to exam language</Text></View>
+            <View style={styles.practiceCount}><Text style={styles.practiceCountText}>{topic.practice_questions.length}</Text></View>
           </View>
           {topic.practice_questions.slice(0, 4).map((prompt, index) => (
-            <PracticePrompt key={`practice-${index}`} prompt={prompt} index={index} />
+            <View key={`${index}-${prompt}`} style={styles.practiceRow}>
+              <View style={styles.practiceNumber}><Text style={styles.practiceNumberText}>{index + 1}</Text></View>
+              <Text style={styles.practiceText}>{prompt}</Text>
+            </View>
           ))}
-        </AnimatedCard>
+        </AgenticSurface>
       ) : null}
 
       {topic.coach_note ? (
-        <AnimatedCard style={styles.coachCard}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={[styles.sectionIcon, { backgroundColor: colors.warningSurface }]}>
-              <Ionicons name="school" size={17} color={colors.warning} />
-            </View>
-            <Text style={styles.sectionTitle}>Coach note</Text>
-          </View>
-          <Text style={styles.coachText}>{topic.coach_note}</Text>
-        </AnimatedCard>
+        <View style={styles.coachCard}>
+          <View style={styles.coachIcon}><Ionicons name="school" size={17} color={colors.accentStrong} /></View>
+          <View style={styles.coachCopy}><Text style={styles.coachTitle}>Coach note</Text><Text style={styles.coachText}>{topic.coach_note}</Text></View>
+        </View>
       ) : null}
 
-      <AnimatedCard style={styles.actionCard}>
-        <View style={styles.actionCopy}>
-          <Text style={styles.actionTitle}>{isResolved ? 'This concept is closed' : 'Close the loop when it feels automatic'}</Text>
-          <Text style={styles.actionText}>
-            {isResolved ? 'Reopen it if the next attempt shows the same mistake.' : 'Mark resolved after you can explain it and answer the practice burst without notes.'}
-          </Text>
-        </View>
-        <AnimatedButton
-          label={resolveMutation.isPending ? 'Updating...' : isResolved ? 'Mark active again' : 'Mark resolved'}
-          variant={isResolved ? 'secondary' : 'primary'}
-          loading={resolveMutation.isPending}
-          icon={<Ionicons name={isResolved ? 'refresh' : 'checkmark'} size={18} color={isResolved ? colors.accentStrong : colors.white} />}
-          onPress={() => resolveMutation.mutate()}
-        />
-      </AnimatedCard>
+      {updateError ? <Text style={styles.inlineError}>{updateError}</Text> : null}
+      <PrimaryAction label={resolveMutation.isPending ? 'Updating concept…' : 'Mark resolved'} loading={resolveMutation.isPending} onPress={() => resolveMutation.mutate(true)} />
     </AppScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    paddingBottom: spacing[20],
-  },
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  heroCard: {
-    borderRadius: radius['2xl'],
-    padding: spacing[5],
-    gap: spacing[4],
-    overflow: 'hidden',
-    ...shadows.hero,
-  },
-  heroTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  heroKickerWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-  },
-  heroKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.orangeScale[100],
-    letterSpacing: 0.7,
-  },
-  heroStatusPill: {
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-  },
-  heroStatusResolved: {
-    backgroundColor: 'rgba(16,185,129,0.22)',
-    borderColor: 'rgba(167,243,208,0.42)',
-  },
-  heroStatusText: {
-    color: colors.white,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    textTransform: 'capitalize',
-  },
-  heroTitle: {
-    color: colors.white,
-    fontFamily: typography.fonts.heading,
-    fontSize: 31,
-    lineHeight: 36,
-    letterSpacing: 0,
-  },
-  heroMeta: {
-    color: 'rgba(255,255,255,0.78)',
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  heroMission: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[4],
-    borderRadius: radius.xl,
-    backgroundColor: 'rgba(255,255,255,0.13)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    padding: spacing[3],
-  },
-  missionCopy: {
-    flex: 1,
-    gap: spacing[1],
-  },
-  missionKicker: {
-    color: colors.orangeScale[100],
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-  },
-  missionText: {
-    color: colors.white,
-    fontFamily: typography.fonts.bodySemibold,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  masteryOrb: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.94)',
-  },
-  masteryOrbValue: {
-    color: colors.text,
-    fontFamily: typography.fonts.heading,
-    fontSize: 22,
-    lineHeight: 26,
-  },
-  masteryOrbLabel: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  statGrid: {
-    flexDirection: 'row',
-    gap: spacing[2],
-  },
-  statTile: {
-    flex: 1,
-    minHeight: 96,
-    borderRadius: radius.xl,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing[3],
-    justifyContent: 'space-between',
-    ...shadows.xs,
-  },
-  statIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statValue: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 21,
-    lineHeight: 25,
-  },
-  statLabel: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  routeCard: {
-    gap: spacing[4],
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  sectionHeaderCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  sectionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  routeHeaderIcon: {
-    backgroundColor: colors.accentSurface,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 18,
-    lineHeight: 23,
-  },
-  sectionSubtitle: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  routeList: {
-    gap: spacing[3],
-  },
-  routeStep: {
-    flexDirection: 'row',
-    gap: spacing[3],
-    borderRadius: radius.xl,
-    backgroundColor: colors.backgroundMuted,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing[3],
-  },
-  routeStepActive: {
-    backgroundColor: colors.accentSurface,
-    borderColor: colors.borderBrand,
-  },
-  routeRail: {
-    width: 40,
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  routeNode: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  routeIndex: {
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-  },
-  routeCopy: {
-    flex: 1,
-    gap: spacing[1],
-  },
-  routeTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 14,
-  },
-  routeCaption: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  conceptCard: {
-    gap: spacing[4],
-  },
-  conceptLead: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 17,
-    lineHeight: 25,
-  },
-  conceptSupportList: {
-    gap: spacing[3],
-  },
-  conceptSupportRow: {
-    flexDirection: 'row',
-    gap: spacing[3],
-  },
-  conceptDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 7,
-    marginTop: 7,
-    backgroundColor: colors.accent,
-  },
-  conceptSupportText: {
-    flex: 1,
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  whiteboard: {
-    borderRadius: radius.xl,
-    backgroundColor: colors.infoSurface,
-    borderWidth: 1,
-    borderColor: colors.sky[100],
-    padding: spacing[4],
-    gap: spacing[3],
-  },
-  whiteboardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-  },
-  whiteboardTitle: {
-    color: colors.info,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-    textTransform: 'uppercase',
-  },
-  diagramText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-    lineHeight: 19,
-  },
-  listCard: {
-    gap: spacing[4],
-  },
-  smartList: {
-    gap: spacing[3],
-  },
-  smartRow: {
-    flexDirection: 'row',
-    gap: spacing[3],
-    alignItems: 'flex-start',
-  },
-  smartNumber: {
-    width: 26,
-    height: 26,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
-  smartNumberText: {
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-  },
-  smartText: {
-    flex: 1,
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  practiceCard: {
-    gap: spacing[4],
-    backgroundColor: colors.slate[950],
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  practiceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  practiceKicker: {
-    color: colors.orangeScale[300],
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-  },
-  practiceTitle: {
-    color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 19,
-    lineHeight: 24,
-    marginTop: spacing[1],
-  },
-  practiceBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accent,
-  },
-  practiceBadgeText: {
-    color: colors.white,
-    fontFamily: typography.fonts.heading,
-    fontSize: 18,
-  },
-  practicePrompt: {
-    flexDirection: 'row',
-    gap: spacing[3],
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    padding: spacing[3],
-  },
-  practiceNumber: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(249,115,22,0.20)',
-  },
-  practiceNumberText: {
-    color: colors.orangeScale[200],
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-  },
-  practiceText: {
-    flex: 1,
-    color: 'rgba(255,255,255,0.86)',
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  coachCard: {
-    gap: spacing[4],
-    backgroundColor: colors.warningSurface,
-    borderColor: colors.warningBorder,
-  },
-  coachText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodySemibold,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  actionCard: {
-    gap: spacing[4],
-  },
-  actionCopy: {
-    gap: spacing[1],
-  },
-  actionTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 19,
-    lineHeight: 24,
-  },
-  actionText: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 20,
-  },
+  screen: { gap: spacing[3], paddingBottom: spacing[6], backgroundColor: '#FBF6EC' },
+  statGrid: { flexDirection: 'row', gap: spacing[2] },
+  statTile: { flex: 1, minHeight: 70, justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: '#FFFCF6', borderWidth: 1, borderColor: '#E9DFD2', padding: spacing[3] },
+  statValue: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 21, lineHeight: 25 },
+  statLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 0.6, textTransform: 'uppercase' },
+  routeCard: { paddingVertical: spacing[3] },
+  routeStep: { flexDirection: 'row', gap: spacing[3], minHeight: 52 },
+  routeRail: { width: 28, alignItems: 'center' },
+  routeNumber: { width: 28, height: 28, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  routeNumberText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  routeLine: { flex: 1, width: 2, backgroundColor: '#E4D8CA', marginVertical: 2 },
+  routeCopy: { flex: 1, paddingBottom: spacing[2] },
+  routeTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 17 },
+  routeBody: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  coreCard: { gap: spacing[3] },
+  cardKicker: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1.1, textTransform: 'uppercase' },
+  coreText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 20 },
+  diagram: { borderRadius: radius.md, backgroundColor: '#EEF4FF', borderWidth: 1, borderColor: '#C7DBF6', padding: spacing[3] },
+  diagramText: { color: '#28457E', fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 19 },
+  anchorCard: { gap: spacing[3] },
+  anchorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
+  anchorIcon: { width: 24, height: 24, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6EFFD' },
+  anchorText: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
+  practiceCard: { gap: spacing[3] },
+  practiceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
+  practiceKicker: { color: colors.orangeScale[300], fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
+  practiceTitle: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 17, lineHeight: 22, marginTop: 2 },
+  practiceCount: { width: 38, height: 38, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  practiceCountText: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 17 },
+  practiceRow: { flexDirection: 'row', gap: spacing[2], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.10)' },
+  practiceNumber: { width: 24, height: 24, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(249,115,22,0.22)' },
+  practiceNumberText: { color: colors.orangeScale[200], fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  practiceText: { flex: 1, color: '#D7DEEA', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
+  coachCard: { flexDirection: 'row', gap: spacing[3], borderRadius: radius.lg, backgroundColor: colors.warningSurface, borderWidth: 1, borderColor: colors.warningBorder, padding: spacing[3] },
+  coachIcon: { width: 38, height: 38, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurfaceStrong },
+  coachCopy: { flex: 1, gap: spacing[1] },
+  coachTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  coachText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
+  primaryAction: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.lg, backgroundColor: '#07152D', paddingHorizontal: spacing[4], ...shadows.sm },
+  primaryActionSuccess: { backgroundColor: '#16834B' },
+  primaryActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
+  actionPressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
+  actionDisabled: { opacity: 0.66 },
+  inlineError: { color: colors.danger, fontFamily: typography.fonts.bodySemibold, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  resolvedHero: { alignItems: 'center', gap: spacing[2], borderRadius: radius.xl, backgroundColor: '#177A43', paddingHorizontal: spacing[5], paddingVertical: spacing[5], ...shadows.md },
+  resolvedIcon: { width: 52, height: 52, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' },
+  resolvedTitle: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 23, lineHeight: 28, marginTop: spacing[2] },
+  resolvedTopic: { color: '#D8F4E4', fontFamily: typography.fonts.bodyMedium, fontSize: 12, textAlign: 'center' },
+  resolvedMastery: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 36, lineHeight: 40, marginTop: spacing[2] },
+  resolvedMasteryLabel: { fontFamily: typography.fonts.headingSemibold, fontSize: 16 },
+  resolvedNote: { color: '#D8F4E4', fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16, textAlign: 'center' },
+  changedCard: { gap: spacing[3] },
+  changedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
+  changedCheck: { width: 24, height: 24, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successSurface },
+  changedText: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
+  nextCard: { gap: spacing[2] },
+  nextTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
+  nextCopy: { flex: 1, minWidth: 0 },
+  nextKicker: { color: '#927C69', fontFamily: typography.fonts.bodyBold, fontSize: 9, textTransform: 'uppercase' },
+  nextTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18, lineHeight: 22, marginTop: 2 },
+  nextPill: { borderRadius: radius.full, backgroundColor: colors.warningSurface, paddingHorizontal: spacing[3], paddingVertical: spacing[2] },
+  nextPillText: { color: colors.warning, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  nextBody: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
+  nextMeta: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  reopenAction: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  reopenText: { color: colors.textMuted, fontFamily: typography.fonts.bodySemibold, fontSize: 12 },
+  loadingState: { gap: spacing[4], alignItems: 'center' },
+  connectionStatus: { height: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[2], borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E7DCCD' },
+  connectionDot: { width: 8, height: 8, borderRadius: radius.full },
+  connectionCopy: { flex: 1, minWidth: 0 },
+  connectionTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 15 },
+  connectionDetail: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 13 },
+  connectionAction: { minWidth: 76, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1], paddingHorizontal: spacing[2] },
+  connectionActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  skeletonHero: { width: '100%', height: 160, borderRadius: radius.xl, backgroundColor: colors.slate[200] },
+  skeletonBody: { width: '100%', height: 260, borderRadius: radius.xl, backgroundColor: colors.slate[100] },
 })

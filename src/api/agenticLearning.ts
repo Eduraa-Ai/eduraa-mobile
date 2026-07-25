@@ -94,13 +94,18 @@ export const agenticLearningApi = {
     return response.data.items
   },
 
-  async getTopic(topicId: string) {
-    const response = await apiClient.get<AgenticLearningTopicDetail>(`/agentic-learning/topics/${topicId}`)
+  async getTopic(topicId: string, signal?: AbortSignal) {
+    const safeTopicId = encodeURIComponent(topicId)
+    const response = await apiClient.get<AgenticLearningTopicDetail>(`/agentic-learning/topics/${safeTopicId}`, {
+      signal,
+      timeout: 20000,
+    })
     return response.data
   },
 
   async setTopicResolved(topicId: string, subjectId: string, resolved: boolean) {
-    const response = await apiClient.post(`/agentic-learning/topics/${topicId}/resolve`, { subject_id: subjectId, resolved })
+    const safeTopicId = encodeURIComponent(topicId)
+    const response = await apiClient.post(`/agentic-learning/topics/${safeTopicId}/resolve`, { subject_id: subjectId, resolved })
     return response.data
   },
 }
