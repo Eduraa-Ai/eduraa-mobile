@@ -15,6 +15,7 @@ import RootNavigator from './src/navigation'
 import { useAuthStore } from './src/stores/authStore'
 import { authApi } from './src/api/auth'
 import { isDefinitiveAuthFailure, queryRetryDelay, shouldRetryQuery } from './src/api/queryReliability'
+import { shouldClearQueryCache } from './src/auth/queryCacheScope'
 
 onlineManager.setEventListener((setOnline) => NetInfo.addEventListener((state) => {
   setOnline(state.isConnected !== false && state.isInternetReachable !== false)
@@ -51,7 +52,7 @@ function AppContent() {
   }, [])
 
   useEffect(() => {
-    if (previousUserId.current !== undefined && previousUserId.current !== userId) {
+    if (shouldClearQueryCache(previousUserId.current, userId)) {
       queryClient.clear()
     }
     previousUserId.current = userId
