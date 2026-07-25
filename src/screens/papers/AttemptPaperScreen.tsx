@@ -20,6 +20,7 @@ import { spacing, radius, shadows } from '../../theme/spacing'
 import { typography } from '../../theme/typography'
 import type { AnswerEntry, MatchColumnsOptions, MCQOption, QuestionInPaper } from '../../types'
 import { ErrorState } from '../../components/ui'
+import { selectNewestInProgressAttempt } from './paperAttemptModel'
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, 'AttemptPaper'>
 type Route = RouteProp<PapersStackParamList, 'AttemptPaper'>
@@ -349,7 +350,7 @@ export default function AttemptPaperScreen() {
     staleTime: Infinity,
     queryFn: async () => {
       const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
-      const inProgress = attempts.items.find((attempt) => attempt.grading_status === 'in_progress')
+      const inProgress = selectNewestInProgressAttempt(attempts.items)
       return inProgress ?? papersApi.createAttempt(params.paperId, { exam_id: params.examId, reason: 'student_attempt' })
     },
   })
