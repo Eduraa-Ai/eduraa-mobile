@@ -17,6 +17,7 @@ const models = [
   'src/screens/learning/previousPapersModel.ts',
   'src/screens/papers/paperAttemptModel.ts',
   'src/utils/protectedDocumentModel.ts',
+  'src/auth/queryCacheScope.ts',
   'src/auth/roles.ts',
 ]
 
@@ -47,6 +48,10 @@ const suites = [
       PROTECTED_DOCUMENT_MODEL_PATH: path.join(outDir, 'utils/protectedDocumentModel.js'),
       AUTH_ROLES_PATH: path.join(outDir, 'auth/roles.js'),
     },
+  },
+  {
+    file: 'scripts/query-cache-scope.test.cjs',
+    env: { QUERY_CACHE_SCOPE_PATH: path.join(outDir, 'auth/queryCacheScope.js') },
   },
 ]
 
