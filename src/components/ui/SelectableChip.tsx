@@ -11,13 +11,7 @@ interface SelectableChipProps {
 
 export function SelectableChip({ label, selected = false, onPress, style }: SelectableChipProps) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [styles.root, selected && styles.selected, pressed && styles.pressed, style]}
-    >
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.root, selected && styles.selected, pressed && styles.pressed, style]}>
       <Text style={[styles.label, selected && styles.selectedLabel]}>{label}</Text>
     </Pressable>
   )
@@ -25,7 +19,7 @@ export function SelectableChip({ label, selected = false, onPress, style }: Sele
 
 const styles = StyleSheet.create({
   root: {
-    minHeight: 44,
+    minHeight: 38,
     borderRadius: radius.full,
     paddingHorizontal: spacing[4],
     alignItems: 'center',

@@ -54,7 +54,6 @@ export interface StartPreviousPaperExamRequest {
   mode: 'paper' | 'subject' | 'chapter'
   subject?: string | null
   chapter_id?: string | null
-  attempt_action?: 'auto' | 'new'
 }
 
 export interface StartPreviousPaperExamResponse {
@@ -62,7 +61,6 @@ export interface StartPreviousPaperExamResponse {
   question_count: number
   redirect_path: string
   title: string
-  reused_existing: boolean
 }
 
 export function resolvePreviousPaperAssetUrl(url?: string | null) {

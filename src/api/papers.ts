@@ -3,14 +3,12 @@
  */
 
 import apiClient from './client'
-import type { DownloadedPdf } from '../utils/pdfDownload'
 import type {
   Paper,
   PaperListItem,
   PaperGenerateRequest,
   PaperSubmissionCreate,
   PaperSubmissionRead,
-  PaperAttemptsResponse,
   PaperOptions,
   PaginatedResponse,
   Chapter,
@@ -32,19 +30,6 @@ type JeeGenerateFormPaperResponse = {
   status: string
   failed_count?: number
   error?: string | null
-}
-
-function downloadFilename(contentDisposition: unknown, fallback: string) {
-  if (typeof contentDisposition !== 'string') return fallback
-  const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
-  if (encoded) {
-    try {
-      return decodeURIComponent(encoded)
-    } catch {
-      return encoded
-    }
-  }
-  return contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] || fallback
 }
 
 export const papersApi = {
@@ -105,34 +90,9 @@ export const papersApi = {
     return response.data
   },
 
-  createAttempt: async (paperId: string, data?: { exam_id?: string; reason?: string }): Promise<PaperSubmissionRead> => {
-    const response = await apiClient.post<PaperSubmissionRead>(`/papers/${paperId}/attempts`, data)
+  getSubmission: async (paperId: string): Promise<PaperSubmissionRead> => {
+    const response = await apiClient.get<PaperSubmissionRead>(`/papers/${paperId}/submission`)
     return response.data
-  },
-
-  listAttempts: async (paperId: string, params?: { exam_id?: string }): Promise<PaperAttemptsResponse> => {
-    const response = await apiClient.get<PaperAttemptsResponse>(`/papers/${paperId}/attempts`, { params })
-    return response.data
-  },
-
-  getSubmission: async (
-    paperId: string,
-    params?: { exam_id?: string; attempt_id?: string },
-  ): Promise<PaperSubmissionRead> => {
-    const response = await apiClient.get<PaperSubmissionRead>(`/papers/${paperId}/submission`, { params })
-    return response.data
-  },
-
-  downloadPdf: async (paperId: string): Promise<DownloadedPdf> => {
-    const response = await apiClient.get<ArrayBuffer>(`/papers/${paperId}/export/pdf`, {
-      params: { include_answers: false },
-      responseType: 'arraybuffer',
-      timeout: 120000,
-    })
-    return {
-      bytes: response.data,
-      filename: downloadFilename(response.headers['content-disposition'], `eduraa-paper-${paperId}.pdf`),
-    }
   },
 
   getInteractiveAssist: async (
