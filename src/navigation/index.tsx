@@ -34,6 +34,10 @@ import AgenticLearningScreen from '../screens/learning/AgenticLearningScreen'
 import AgenticSubjectScreen from '../screens/learning/AgenticSubjectScreen'
 import AgenticTopicScreen from '../screens/learning/AgenticTopicScreen'
 import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
+import LearningResourcesScreen from '../screens/learning/LearningResourcesScreen'
+import LearningResourceDetailScreen from '../screens/learning/LearningResourceDetailScreen'
+import CheatSheetDetailScreen from '../screens/learning/CheatSheetDetailScreen'
+import StudyPackScreen from '../screens/learning/StudyPackScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
 import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
@@ -74,6 +78,10 @@ export type LearningStackParamList = {
   AgenticSubject: { subjectId: string }
   AgenticTopic: { topicId: string; topicName?: string; subjectName?: string }
   PreviousPapers: undefined
+  LearningResources: undefined
+  LearningResourceDetail: { resourceId: string }
+  CheatSheetDetail: { cheatSheetId: string }
+  StudyPack: { subject?: string; chapter?: string; standard?: '11th' | '12th' }
   Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
@@ -191,6 +199,10 @@ function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
       <LearningStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="PreviousPapers" component={PreviousPapersScreen} options={{ title: 'Previous papers' }} />
+      <LearningStack.Screen name="LearningResources" component={LearningResourcesScreen} options={{ title: 'Learning resources' }} />
+      <LearningStack.Screen name="LearningResourceDetail" component={LearningResourceDetailScreen} options={{ title: 'Resource' }} />
+      <LearningStack.Screen name="CheatSheetDetail" component={CheatSheetDetailScreen} options={{ title: 'Cheat sheet' }} />
+      <LearningStack.Screen name="StudyPack" component={StudyPackScreen} options={{ title: 'Study pack' }} />
       <LearningStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <LearningStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
