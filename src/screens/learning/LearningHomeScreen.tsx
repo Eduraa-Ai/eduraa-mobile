@@ -6,7 +6,7 @@ import { AppScreen } from '../../components/ui'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 
-type LearningDestination = 'AgenticLearning' | 'CompetitiveExam' | 'PreviousPapers'
+type LearningDestination = 'AgenticLearning' | 'CompetitiveExam' | 'PreviousPapers' | 'LearningResources'
 
 interface LearningTile {
   title: string
@@ -41,6 +41,14 @@ const tiles: LearningTile[] = [
     icon: 'library',
     color: colors.paperStudio.jee,
     destination: 'PreviousPapers',
+  },
+  {
+    title: 'Learning resources',
+    meta: 'Library',
+    body: 'Formula sheets, reference books, AI cheat sheets and study packs in one place.',
+    icon: 'reader',
+    color: colors.info,
+    destination: 'LearningResources',
   },
 ]
 
