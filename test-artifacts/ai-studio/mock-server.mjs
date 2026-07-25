@@ -161,6 +161,79 @@ const previousQuestions = [
     },
 ]
 
+const previousAttemptStartedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+const previousAttemptPaper = {
+    id: PREVIOUS_ATTEMPT_PAPER_ID,
+    school_id: '70000000-0000-4000-8000-000000000001',
+    created_by: '00000000-0000-4000-8000-000000000018',
+    subject_id: '80000000-0000-4000-8000-000000000001',
+    title: 'Recovered Electrostatics PYQ practice',
+    subtitle: `Synthetic handoff proof · ${PREVIOUS_PAPERS_SEED}`,
+    course: 'JEE Main',
+    category: 'Previous-year practice',
+    standard: '12',
+    total_marks: 8,
+    duration_minutes: 180,
+    instructions: 'Choose the best answer. Your newest unfinished attempt is restored automatically.',
+    status: 'published',
+    published_at: '2026-07-25T10:00:00.000Z',
+    created_at: '2026-07-25T09:55:00.000Z',
+    questions: previousQuestions.map((question, index) => ({
+        id: question.id,
+        question_number: question.question_number,
+        section: 'Physics',
+        question_text: question.question_text,
+        question_type: question.question_type === 'numeric' ? 'short_answer' : 'mcq',
+        difficulty: index === 0 ? 'medium' : 'hard',
+        marks: 4,
+        options: question.options?.map(option => ({ id: option.id, text: option.text })),
+        topic_name: question.topic_slug,
+        subject_name: question.subject,
+        chapter_id: question.chapter_id,
+        chapter_title: question.chapter_title,
+    })),
+}
+
+const previousAttempts = [
+    {
+        id: '95000000-0000-4000-8000-000000000001',
+        paper_id: PREVIOUS_ATTEMPT_PAPER_ID,
+        b2c_student_id: '00000000-0000-4000-8000-000000000018',
+        attempt_number: 1,
+        started_at: '2026-07-25T09:00:00.000Z',
+        answers: [{ question_id: previousQuestions[0].id, response: 'A' }],
+        results: [],
+        results_visible_to_student: false,
+        grading_status: 'in_progress',
+        created_at: '2026-07-25T09:00:00.000Z',
+    },
+    {
+        id: '95000000-0000-4000-8000-000000000002',
+        paper_id: PREVIOUS_ATTEMPT_PAPER_ID,
+        b2c_student_id: '00000000-0000-4000-8000-000000000018',
+        attempt_number: 2,
+        started_at: '2026-07-25T09:30:00.000Z',
+        submitted_at: '2026-07-25T09:50:00.000Z',
+        answers: [{ question_id: previousQuestions[0].id, response: 'C' }],
+        results: [],
+        results_visible_to_student: false,
+        grading_status: 'submitted',
+        created_at: '2026-07-25T09:30:00.000Z',
+    },
+    {
+        id: '95000000-0000-4000-8000-000000000003',
+        paper_id: PREVIOUS_ATTEMPT_PAPER_ID,
+        b2c_student_id: '00000000-0000-4000-8000-000000000018',
+        attempt_number: 3,
+        started_at: previousAttemptStartedAt,
+        answers: [{ question_id: previousQuestions[0].id, response: 'B' }],
+        results: [],
+        results_visible_to_student: false,
+        grading_status: 'in_progress',
+        created_at: previousAttemptStartedAt,
+    },
+]
+
 const buildGeneratedPaper = (payload = {}) => {
     const questionCount = Math.max(1, Number(payload.count || payload.mcq_count || 10))
     const marks = Number(payload.question_marks || payload.marks_per_mcq || 1)
@@ -480,6 +553,39 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'GET' && path === `/api/v1/papers/${GENERATED_PAPER_ID}/submission`) {
         json(response, 404, { detail: 'No synthetic submission yet.' })
+        return
+    }
+
+    if (request.method === 'GET' && path === `/api/v1/papers/${PREVIOUS_ATTEMPT_PAPER_ID}`) {
+        json(response, 200, previousAttemptPaper)
+        return
+    }
+
+    if (request.method === 'GET' && path === `/api/v1/papers/${PREVIOUS_ATTEMPT_PAPER_ID}/attempts`) {
+        json(response, 200, { items: previousAttempts })
+        return
+    }
+
+    if (request.method === 'POST' && path === `/api/v1/papers/${PREVIOUS_ATTEMPT_PAPER_ID}/attempts`) {
+        json(response, 201, previousAttempts.at(-1))
+        return
+    }
+
+    if (request.method === 'GET' && path === `/api/v1/papers/${PREVIOUS_ATTEMPT_PAPER_ID}/submission`) {
+        json(response, 404, { detail: 'No completed synthetic submission yet.' })
+        return
+    }
+
+    if (request.method === 'POST' && path === `/api/v1/papers/${PREVIOUS_ATTEMPT_PAPER_ID}/submit`) {
+        const payload = await readBody(request)
+        json(response, 200, {
+            ...previousAttempts.at(-1),
+            answers: payload.answers || [],
+            submitted_at: new Date().toISOString(),
+            grading_status: 'submitted',
+            mode: payload.mode,
+            time_taken_seconds: payload.time_taken_seconds,
+        })
         return
     }
 

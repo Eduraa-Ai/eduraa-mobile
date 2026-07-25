@@ -259,7 +259,7 @@ export default function PreviousPapersScreen() {
 
   return (
     <>
-      <AppScreen protectedChrome contentStyle={styles.screen}>
+      <AppScreen key={viewMode} protectedChrome contentStyle={styles.screen}>
         {viewMode === 'preview' && selectedPaper ? (
           <>
             <Pressable
