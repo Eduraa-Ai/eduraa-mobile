@@ -70,6 +70,16 @@ test('missing question metadata remains unavailable instead of becoming zero', (
   assert.equal(model.scoreLabel(paper()), '72/100')
 })
 
+test('pending scores keep the checked-paper inbox polling until a real result arrives', () => {
+  assert.equal(model.isPaperChecking(paper({ total_score: null, max_score: null })), true)
+  assert.equal(model.isPaperChecking(paper()), false)
+  assert.equal(model.isPaperChecking(paper({
+    status: 'pending_manual_review',
+    total_score: null,
+    max_score: null,
+  })), false)
+})
+
 test('paper opening rejects missing ids and an already claimed navigation', () => {
   assert.equal(model.canOpenPaper('', null), false)
   assert.equal(model.canOpenPaper(undefined, null), false)

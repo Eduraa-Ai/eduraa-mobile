@@ -23,10 +23,12 @@ import { AppScreen, AnimatedButton, AuthLogoMark, ErrorState } from '../../compo
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
 import type { CheckedPaper } from '../../types'
+import { downloadCheckedPaperPdf } from '../../utils/openProtectedDocument'
 import {
   buildAssessmentModel,
   buildSubjectOptions,
   canOpenPaper,
+  CHECKED_PAPERS_POLL_INTERVAL_MS,
   formatPaperCount,
   getPaperSubject,
   getPaperTitle,
@@ -34,6 +36,7 @@ import {
   matchesSearch,
   matchesTab,
   normalize,
+  isPaperChecking,
   paperAccessibilityLabel,
   paperInsight,
   scorePercent,
@@ -113,7 +116,23 @@ function SummaryMetric({ label, value, divider = false }: { label: string; value
   )
 }
 
-function CheckedPaperRow({ paper, onPress, opening, featured }: { paper: CheckedPaper; onPress: () => void; opening: boolean; featured: boolean }) {
+function CheckedPaperRow({
+  paper,
+  onPress,
+  onDownload,
+  opening,
+  downloading,
+  downloadBlocked,
+  featured,
+}: {
+  paper: CheckedPaper
+  onPress: () => void
+  onDownload: () => void
+  opening: boolean
+  downloading: boolean
+  downloadBlocked: boolean
+  featured: boolean
+}) {
   const percent = scorePercent(paper)
   const icon = getPaperIcon(paper)
   const title = getPaperTitle(paper)
@@ -153,10 +172,39 @@ function CheckedPaperRow({ paper, onPress, opening, featured }: { paper: Checked
       </View>
 
       <View style={styles.paperFooter}>
-        <Text style={styles.paperInsight} numberOfLines={1}>{paperInsight(paper)}</Text>
-        <View style={styles.openAction}>
-          <Text style={styles.openActionText}>{opening ? 'Opening' : 'View'}</Text>
-          {opening ? <ActivityIndicator color={colors.accentStrong} size="small" /> : <Ionicons name="chevron-forward" size={13} color={colors.accentStrong} />}
+        <Text style={styles.paperInsight} numberOfLines={2}>{paperInsight(paper)}</Text>
+        <View style={styles.paperActions}>
+          {!isPaperChecking(paper) ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Download ${title} as PDF`}
+              accessibilityHint={downloadBlocked ? 'Another PDF is downloading. Try again when it finishes.' : 'Downloads the checked paper report as a PDF.'}
+              accessibilityState={{ busy: downloading, disabled: downloading || downloadBlocked }}
+              hitSlop={4}
+              onPress={(event) => {
+                event.stopPropagation()
+                if (downloading || downloadBlocked) return
+                onDownload()
+              }}
+              style={({ pressed }) => [
+                styles.downloadAction,
+                pressed && !downloading && !downloadBlocked && styles.downloadActionPressed,
+                downloading && styles.downloadActionDisabled,
+                downloadBlocked && styles.downloadActionBlocked,
+              ]}
+            >
+              {downloading ? (
+                <ActivityIndicator color={colors.accentStrong} size="small" />
+              ) : (
+                <Ionicons name="download-outline" size={16} color={downloadBlocked ? colors.textSoft : colors.accentStrong} />
+              )}
+              <Text style={[styles.downloadActionText, downloadBlocked && styles.downloadActionTextBlocked]}>PDF</Text>
+            </Pressable>
+          ) : null}
+          <View style={styles.openAction}>
+            <Text style={styles.openActionText}>{opening ? 'Opening' : 'View'}</Text>
+            {opening ? <ActivityIndicator color={colors.accentStrong} size="small" /> : <Ionicons name="chevron-forward" size={13} color={colors.accentStrong} />}
+          </View>
         </View>
       </View>
     </Pressable>
@@ -345,12 +393,22 @@ export default function CheckedPapersLibraryScreen() {
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null)
   const [filterVisible, setFilterVisible] = useState(false)
   const [openingPaperId, setOpeningPaperId] = useState<string | null>(null)
+  const [downloadingPaperId, setDownloadingPaperId] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const openingPaperRef = useRef<string | null>(null)
+  const downloadingPaperRef = useRef<string | null>(null)
   const focusOnceRef = useRef(false)
 
   const { data, error, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ['checked-papers'],
     queryFn: checkedPapersApi.list,
+    refetchInterval: (activeQuery) => (
+      (activeQuery.state.data ?? []).some(isPaperChecking)
+        ? CHECKED_PAPERS_POLL_INTERVAL_MS
+        : false
+    ),
+    refetchIntervalInBackground: false,
+    refetchOnMount: 'always',
   })
 
   useFocusEffect(
@@ -388,6 +446,21 @@ export default function CheckedPapersLibraryScreen() {
     },
     [navigation],
   )
+
+  const downloadPaper = useCallback(async (paper: CheckedPaper) => {
+    if (downloadingPaperRef.current) return
+    downloadingPaperRef.current = paper.id
+    setDownloadError(null)
+    setDownloadingPaperId(paper.id)
+    try {
+      await downloadCheckedPaperPdf(paper.id, `${getPaperTitle(paper)}-checked-report`)
+    } catch {
+      setDownloadError('The PDF could not be downloaded. Check your connection and try again.')
+    } finally {
+      downloadingPaperRef.current = null
+      setDownloadingPaperId(null)
+    }
+  }, [])
 
   const clearSearch = () => setQuery('')
   const clearFilters = () => {
@@ -529,6 +602,16 @@ export default function CheckedPapersLibraryScreen() {
           </Pressable>
         </View>
       ) : null}
+
+      {downloadError ? (
+        <View style={styles.downloadErrorBanner} accessibilityRole="alert">
+          <Ionicons name="alert-circle-outline" size={17} color={colors.danger} />
+          <Text style={styles.downloadErrorText}>{downloadError}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Dismiss download error" hitSlop={8} onPress={() => setDownloadError(null)}>
+            <Ionicons name="close" size={17} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   )
 
@@ -595,6 +678,7 @@ export default function CheckedPapersLibraryScreen() {
         <FlatList
           style={styles.list}
           data={visiblePapers}
+          extraData={downloadingPaperId}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={header}
           ListEmptyComponent={listEmpty}
@@ -602,7 +686,17 @@ export default function CheckedPapersLibraryScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={() => void refetch()} tintColor={colors.accent} colors={[colors.accent]} />}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item, index }) => <CheckedPaperRow paper={item} featured={index === 0} opening={openingPaperId === item.id} onPress={() => openPaper(item)} />}
+          renderItem={({ item, index }) => (
+            <CheckedPaperRow
+              paper={item}
+              featured={index === 0}
+              opening={openingPaperId === item.id}
+              downloading={downloadingPaperId === item.id}
+              downloadBlocked={Boolean(downloadingPaperId && downloadingPaperId !== item.id)}
+              onPress={() => openPaper(item)}
+              onDownload={() => void downloadPaper(item)}
+            />
+          )}
         />
       </View>
     </AppScreen>
@@ -1074,6 +1168,7 @@ const styles = StyleSheet.create({
   },
   paperInsight: {
     flex: 1,
+    minWidth: 0,
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 9,
@@ -1109,10 +1204,16 @@ const styles = StyleSheet.create({
   },
   paperFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    gap: spacing[3],
+    gap: spacing[1],
     paddingLeft: 55,
+  },
+  paperActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    flexShrink: 0,
   },
   paperFooterLeft: {
     flex: 1,
@@ -1148,12 +1249,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
   },
   openAction: {
-    minHeight: 24,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
     flexShrink: 0,
-    paddingHorizontal: 0,
+    paddingHorizontal: spacing[1],
     borderRadius: radius.full,
     backgroundColor: 'transparent',
   },
@@ -1161,6 +1262,57 @@ const styles = StyleSheet.create({
     color: colors.accentStrong,
     fontFamily: typography.fonts.bodyBold,
     fontSize: 9,
+  },
+  downloadAction: {
+    width: 44,
+    minHeight: 44,
+    paddingHorizontal: 0,
+    borderRadius: radius.full,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 0,
+  },
+  downloadActionPressed: {
+    backgroundColor: colors.accentSurface,
+  },
+  downloadActionDisabled: {
+    opacity: 0.68,
+  },
+  downloadActionBlocked: {
+    opacity: 0.5,
+  },
+  downloadActionText: {
+    color: colors.accentStrong,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 7,
+    lineHeight: 9,
+    letterSpacing: 0.35,
+  },
+  downloadActionTextBlocked: {
+    color: colors.textSoft,
+  },
+  downloadErrorBanner: {
+    minHeight: 48,
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[2],
+    paddingHorizontal: spacing[3],
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSurface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  downloadErrorText: {
+    flex: 1,
+    color: colors.danger,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 10,
+    lineHeight: 14,
   },
   errorWrap: {
     flex: 1,

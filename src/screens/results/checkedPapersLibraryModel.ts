@@ -5,6 +5,7 @@ export type CheckedPaperTab = 'all' | 'needs_attention' | 'strong'
 // Presentation-only band shared with ResultDetailScreen. This never changes
 // persisted scores, grading outcomes, submission state, or API semantics.
 export const STRONG_PERCENT = 65
+export const CHECKED_PAPERS_POLL_INTERVAL_MS = 4000
 
 export function normalize(value?: string | null) {
   return String(value ?? '').trim().toLowerCase()
@@ -30,6 +31,14 @@ export function scorePercent(paper: CheckedPaper) {
 export function scoreLabel(paper: CheckedPaper) {
   if (paper.total_score != null && paper.max_score != null) return `${paper.total_score}/${paper.max_score}`
   return 'Score pending'
+}
+
+export function isPaperChecking(paper: CheckedPaper) {
+  const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review' || status === 'needs_review') {
+    return false
+  }
+  return scorePercent(paper) == null
 }
 
 export function paperAccessibilityLabel(paper: CheckedPaper, dateLabel: string) {

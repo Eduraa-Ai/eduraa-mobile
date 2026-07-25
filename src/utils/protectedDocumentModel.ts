@@ -21,3 +21,13 @@ export function requiresApiAuthorization(url: string, apiBaseUrl: string) {
     return false
   }
 }
+
+export function checkedPaperDownloadEndpoint(checkedPaperId: string) {
+  const normalizedId = checkedPaperId.trim()
+  if (!normalizedId) throw new Error('Choose a checked paper before downloading.')
+  return `/checked-papers/${encodeURIComponent(normalizedId)}/download`
+}
+
+export function safeDocumentFileStem(value: string) {
+  return value.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'checked-paper'
+}

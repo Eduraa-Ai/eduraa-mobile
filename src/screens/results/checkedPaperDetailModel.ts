@@ -1,6 +1,25 @@
 import type { CheckedPaper, GradingResultItem } from '../../types'
 
-export type QuestionEvidenceTab = 'feedback' | 'scan' | 'review'
+export type QuestionEvidenceTab = 'feedback' | 'details' | 'review'
+export type CheckedPaperQuestionStatus = 'correct' | 'wrong' | 'missed' | 'pending'
+
+export const CHECKED_PAPER_POLL_INTERVAL_MS = 3000
+export const CHECKING_ESTIMATE_MS = 2 * 60 * 1000
+
+export interface QuestionReviewOption {
+  key: string
+  text: string
+  imageUrl: string | null
+  selected: boolean
+  expected: boolean
+}
+
+export interface DetailedExplanationSection {
+  key: 'why_marks_cut' | 'potential_solutions' | 'hints' | 'easy_example' | 'recommendation'
+  title: string
+  content: string[]
+  list: boolean
+}
 
 export const QUESTION_TYPE_LABELS: Record<string, string> = {
   mcq: 'MCQ',
@@ -11,7 +30,7 @@ export const QUESTION_TYPE_LABELS: Record<string, string> = {
   true_false: 'True / false',
 }
 
-export function readableMathText(value?: string | null) {
+function legacyReadableMathText(value?: string | null) {
   if (!value) return ''
   return String(value)
     .replace(/\$\$([\s\S]*?)\$\$/g, ' $1 ')
@@ -31,6 +50,139 @@ export function readableMathText(value?: string | null) {
     .trim()
 }
 
+export function readableMathText(value?: string | null) {
+  const symbols: Record<string, string> = {
+    alpha: 'α',
+    beta: 'β',
+    gamma: 'γ',
+    delta: 'δ',
+    theta: 'θ',
+    lambda: 'λ',
+    mu: 'μ',
+    pi: 'π',
+    rho: 'ρ',
+    sigma: 'σ',
+    phi: 'φ',
+    omega: 'ω',
+  }
+  let source = String(value || '')
+  Object.entries(symbols).forEach(([name, symbol]) => {
+    source = source.replace(new RegExp(`\\\\${name}\\b`, 'g'), symbol)
+  })
+  let next = legacyReadableMathText(source)
+  const superscripts: Record<string, string> = {
+    '0': '⁰',
+    '1': '¹',
+    '2': '²',
+    '3': '³',
+    '4': '⁴',
+    '5': '⁵',
+    '6': '⁶',
+    '7': '⁷',
+    '8': '⁸',
+    '9': '⁹',
+    '+': '⁺',
+    '-': '⁻',
+  }
+  const subscripts: Record<string, string> = {
+    '0': '₀',
+    '1': '₁',
+    '2': '₂',
+    '3': '₃',
+    '4': '₄',
+    '5': '₅',
+    '6': '₆',
+    '7': '₇',
+    '8': '₈',
+    '9': '₉',
+    '+': '₊',
+    '-': '₋',
+    '=': '₌',
+    '(': '₍',
+    ')': '₎',
+    a: 'ₐ',
+    e: 'ₑ',
+    h: 'ₕ',
+    i: 'ᵢ',
+    j: 'ⱼ',
+    k: 'ₖ',
+    l: 'ₗ',
+    m: 'ₘ',
+    n: 'ₙ',
+    o: 'ₒ',
+    p: 'ₚ',
+    r: 'ᵣ',
+    s: 'ₛ',
+    t: 'ₜ',
+    u: 'ᵤ',
+    v: 'ᵥ',
+    x: 'ₓ',
+  }
+
+  Object.entries(symbols).forEach(([name, symbol]) => {
+    next = next.replace(new RegExp(`\\b${name}\\b`, 'g'), symbol)
+  })
+
+  return next
+    .replace(/\bsqrt\(([^)]+)\)/g, '√($1)')
+    .replace(/_([A-Za-z0-9()+\-=]+)/g, (_match, subscript: string) => (
+      subscript.split('').map((char) => subscripts[char] || char).join('')
+    ))
+    .replace(/\^\{?([0-9+-]+)\}?/g, (_match, exponent: string) => (
+      exponent.split('').map((char) => superscripts[char] || char).join('')
+    ))
+}
+
+function normalizedToken(value: unknown) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase()
+}
+
+function recordValue(value: unknown, keys: string[]) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  for (const key of keys) {
+    if (record[key] != null) return record[key]
+  }
+  return undefined
+}
+
+export function hasMeaningfulAnswer(value: unknown): boolean {
+  if (value == null) return false
+  if (Array.isArray(value)) return value.some(hasMeaningfulAnswer)
+  if (typeof value === 'object') return Object.values(value as Record<string, unknown>).some(hasMeaningfulAnswer)
+  const token = normalizedToken(value)
+  return Boolean(token && !['null', 'undefined', 'not answered', 'unanswered'].includes(token))
+}
+
+export function answerDisplay(value: unknown): string {
+  if (!hasMeaningfulAnswer(value)) return ''
+  if (Array.isArray(value)) return value.map(answerDisplay).filter(Boolean).join(', ')
+  if (typeof value === 'object') {
+    const display = recordValue(value, ['text', 'label', 'key', 'id', 'value', 'answer'])
+    return display == null ? '' : answerDisplay(display)
+  }
+  return String(value).trim()
+}
+
+function toStringList(value: unknown) {
+  if (Array.isArray(value)) return value.map(answerDisplay).filter(Boolean)
+  const text = answerDisplay(value)
+  return text ? text.split(/\r?\n/).map((line) => line.replace(/^[\s•*-]+/, '').trim()).filter(Boolean) : []
+}
+
+export function normalizeCheckedPaperStatus(value: unknown): CheckedPaperQuestionStatus | null {
+  const token = normalizedToken(value).replace(/[\s-]+/g, '_')
+  if (!token) return null
+  if (['correct', 'fully_correct', 'right'].includes(token)) return 'correct'
+  if (['partial', 'partially_correct', 'incorrect', 'wrong'].includes(token)) return 'wrong'
+  if (['missed', 'unanswered', 'skipped', 'no_answer'].includes(token)) return 'missed'
+  if (['pending', 'ungraded', 'processing'].includes(token)) return 'pending'
+  return null
+}
+
 export function formatReportDate(value?: string | null) {
   if (!value) return 'Recent'
   const date = new Date(value)
@@ -47,13 +199,186 @@ export function questionTypeLabel(item: GradingResultItem) {
   return QUESTION_TYPE_LABELS[raw] || raw.replace(/_/g, ' ') || 'Question'
 }
 
-export function questionStatus(item: GradingResultItem) {
+export function isCheckedPaperChecking(paper: CheckedPaper) {
+  const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
+  if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review' || status === 'needs_review') {
+    return false
+  }
+  return paper.total_score == null || paper.max_score == null || paper.max_score <= 0
+}
+
+export function buildCheckingEstimate(createdAt?: string | null, now = Date.now()) {
+  const createdTime = createdAt ? new Date(createdAt).getTime() : now
+  const elapsedMs = Number.isFinite(createdTime) ? Math.max(0, now - createdTime) : 0
+  const rawProgress = (elapsedMs / CHECKING_ESTIMATE_MS) * 100
+  const percent = Math.max(8, Math.min(94, Math.round(8 + rawProgress * 0.86)))
+  const remainingSeconds = Math.max(0, Math.ceil((CHECKING_ESTIMATE_MS - elapsedMs) / 1000))
+  const isOverdue = remainingSeconds <= 0
+  const timeLabel = remainingSeconds <= 0
+    ? 'Finishing up'
+    : remainingSeconds < 60
+      ? `≈ ${remainingSeconds}s left`
+      : `≈ ${Math.ceil(remainingSeconds / 60)}m left`
+  return { percent, remainingSeconds, timeLabel, isOverdue }
+}
+
+export function questionStatus(item: GradingResultItem): CheckedPaperQuestionStatus {
+  const explicit = normalizeCheckedPaperStatus(item.result_status ?? item.status ?? item.correctness)
+  if (explicit) return explicit
   const score = item.score ?? null
   const max = item.max_score ?? null
   if (score == null || max == null || max <= 0) return 'pending' as const
   if (score >= max) return 'correct' as const
-  if (score > 0) return 'partial' as const
-  return 'missed' as const
+  const response = item.response ?? item.student_answer ?? item.selected_answer
+  if (!hasMeaningfulAnswer(response)) return 'missed' as const
+  return 'wrong' as const
+}
+
+function parseOptionSource(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const candidate = value.trim()
+  if (!candidate || (!candidate.startsWith('[') && !candidate.startsWith('{'))) return value
+  try {
+    return JSON.parse(candidate) as unknown
+  } catch {
+    return value
+  }
+}
+
+function normalizeRawOptions(value: unknown): Array<{ key: string; text: string; imageUrl: string | null }> {
+  const parsed = parseOptionSource(value)
+  const nested = parseOptionSource(recordValue(parsed, ['options', 'choices', 'items']))
+  const candidate = nested ?? parsed
+  const source = Array.isArray(candidate)
+    ? candidate
+    : candidate && typeof candidate === 'object'
+      ? Object.entries(candidate as Record<string, unknown>).map(([key, option]) => (
+        option && typeof option === 'object' && !Array.isArray(option)
+          ? { ...(option as Record<string, unknown>), id: recordValue(option, ['id', 'key', 'label', 'option_id']) ?? key }
+          : { id: key, text: option }
+      ))
+      : []
+
+  return source.flatMap((option, index) => {
+    if (typeof option === 'string' || typeof option === 'number') {
+      return [{ key: String.fromCharCode(65 + index), text: String(option), imageUrl: null }]
+    }
+    if (!option || typeof option !== 'object' || Array.isArray(option)) return []
+    const key = answerDisplay(recordValue(option, ['id', 'key', 'label', 'option_id'])) || String.fromCharCode(65 + index)
+    const text = answerDisplay(recordValue(option, ['text', 'content', 'value', 'option']))
+    const visual = recordValue(option, ['visual_payload'])
+    const imageUrl = answerDisplay(recordValue(option, ['image_url', 'image', 'asset_url']))
+      || answerDisplay(recordValue(visual, ['asset_url']))
+      || null
+    if (!text && !imageUrl) return []
+    return [{ key, text, imageUrl }]
+  })
+}
+
+function matchAnswer(value: unknown, options: Array<{ key: string; text: string }>) {
+  const matches = new Set<string>()
+  const matchOne = (candidate: unknown) => {
+    if (!hasMeaningfulAnswer(candidate)) return
+    if (Array.isArray(candidate)) {
+      candidate.forEach(matchOne)
+      return
+    }
+    if (typeof candidate === 'object') {
+      const index = recordValue(candidate, ['index', 'option_index'])
+      if (typeof index === 'number' && Number.isInteger(index) && options[index]) matches.add(options[index].key)
+      const nested = recordValue(candidate, ['key', 'id', 'label', 'option_id', 'text', 'value', 'answer'])
+      if (nested != null) matchOne(nested)
+      return
+    }
+    if (typeof candidate === 'number' && Number.isInteger(candidate) && options[candidate]) {
+      matches.add(options[candidate].key)
+      return
+    }
+
+    const raw = String(candidate).trim()
+    const token = normalizedToken(raw)
+    const exact = options.find((option) => {
+      const key = normalizedToken(option.key)
+      const text = normalizedToken(option.text)
+      return token === key
+        || (Boolean(text) && token === text)
+        || (Boolean(text) && token === `${key}. ${text}`)
+        || (Boolean(text) && token === `${key}) ${text}`)
+        || token.startsWith(`${key}.`)
+        || token.startsWith(`${key})`)
+    })
+    if (exact) {
+      matches.add(exact.key)
+      return
+    }
+    if (/^\d+$/.test(raw)) {
+      const index = Number(raw)
+      if (options[index]) matches.add(options[index].key)
+      return
+    }
+    if (/[,;|]/.test(raw)) raw.split(/[,;|]/).forEach(matchOne)
+  }
+  matchOne(value)
+  return matches
+}
+
+export function normalizeQuestionOptions(item: GradingResultItem): QuestionReviewOption[] {
+  const nestedQuestion = recordValue(item, ['question', 'question_data', 'question_details'])
+  const optionSource = recordValue(item, ['options', 'question_options', 'choices'])
+    ?? recordValue(nestedQuestion, ['options', 'question_options', 'choices'])
+  const rawOptions = normalizeRawOptions(optionSource)
+  const selected = matchAnswer(item.response ?? item.student_answer ?? item.selected_answer, rawOptions)
+  const expected = matchAnswer(item.expected_answer, rawOptions)
+  return rawOptions.map((option) => ({
+    ...option,
+    selected: selected.has(option.key),
+    expected: expected.has(option.key),
+  }))
+}
+
+export function buildDetailedExplanation(item: GradingResultItem): DetailedExplanationSection[] {
+  const status = questionStatus(item)
+  const unsuccessful = status === 'wrong' || status === 'missed'
+  const selected = answerDisplay(item.response ?? item.student_answer ?? item.selected_answer)
+  const expected = answerDisplay(item.expected_answer)
+  const whyMarksCut = answerDisplay(item.why_marks_cut)
+    || (unsuccessful ? answerDisplay(item.feedback) : '')
+    || (unsuccessful && (selected || expected)
+      ? `Selected: ${selected || 'Not answered'}; Expected: ${expected || 'Not available'}.`
+      : '')
+  const potentialSolutions = toStringList(item.solution_ideas ?? item.solution_steps ?? item.explanation)
+  const hints = toStringList(item.hints)
+  const easyExample = toStringList(item.easy_example)
+  const recommendation = toStringList(item.recommendation)
+  const sections: DetailedExplanationSection[] = []
+
+  if (whyMarksCut) sections.push({ key: 'why_marks_cut', title: 'Why Marks Cut', content: [whyMarksCut], list: false })
+  if (potentialSolutions.length) sections.push({ key: 'potential_solutions', title: 'Potential Solutions', content: potentialSolutions, list: true })
+  if (hints.length) sections.push({ key: 'hints', title: 'Hints', content: hints, list: true })
+  if (easyExample.length) sections.push({ key: 'easy_example', title: 'Easy Example', content: easyExample, list: false })
+  if (recommendation.length) sections.push({ key: 'recommendation', title: 'Recommendation', content: recommendation, list: false })
+  return sections
+}
+
+export function buildQuestionReview(item: GradingResultItem) {
+  const responseValue = item.response ?? item.student_answer ?? item.selected_answer
+  const nestedQuestion = recordValue(item, ['question', 'question_data', 'question_details'])
+  const questionText = readableMathText(
+    answerDisplay(recordValue(item, ['question_text', 'text', 'prompt']))
+      || answerDisplay(recordValue(nestedQuestion, ['question_text', 'text', 'prompt'])),
+  )
+  const options = normalizeQuestionOptions(item)
+  const optionBased = ['mcq', 'true_false'].includes(normalizedToken(item.question_type).replace(/\s+/g, '_'))
+  return {
+    questionText,
+    contextAvailable: Boolean(questionText),
+    optionBased,
+    options,
+    unanswered: !hasMeaningfulAnswer(responseValue),
+    studentAnswer: answerDisplay(responseValue),
+    expectedAnswer: answerDisplay(item.expected_answer),
+    detailedExplanation: buildDetailedExplanation(item),
+  }
 }
 
 export function buildCheckedPaperReport(paper: CheckedPaper) {
@@ -64,12 +389,12 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
     ? Math.max(0, Math.min(100, Math.round((totalScore / maxScore) * 100)))
     : null
   const correct = questions.filter((item) => questionStatus(item) === 'correct').length
-  const partial = questions.filter((item) => questionStatus(item) === 'partial').length
+  const wrong = questions.filter((item) => questionStatus(item) === 'wrong').length
   const missed = questions.filter((item) => questionStatus(item) === 'missed').length
   const pending = questions.filter((item) => questionStatus(item) === 'pending').length
-  const firstRepair = questions.find((item) => ['partial', 'missed'].includes(questionStatus(item)) && (item.recommendation || item.feedback)) ?? null
+  const firstRepair = questions.find((item) => ['wrong', 'missed'].includes(questionStatus(item)) && (item.recommendation || item.feedback)) ?? null
   const recoverableMarks = questions.reduce((sum, item) => {
-    if (!['partial', 'missed'].includes(questionStatus(item))) return sum
+    if (!['wrong', 'missed'].includes(questionStatus(item))) return sum
     return sum + Math.max(0, (item.max_score ?? 0) - (item.score ?? 0))
   }, 0)
 
@@ -83,15 +408,19 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
           ? 'The method is within reach.\nRepair the setup next.'
           : 'The first step is clear.\nRebuild one idea at a time.'
 
-  const repairCount = partial + missed
-  const diagnosisTitle = repairCount > 0
-    ? `Repair the setup in ${repairCount} question${repairCount === 1 ? '' : 's'}.`
-    : 'Keep the method precise.'
+  const repairCount = wrong + missed
+  const diagnosisTitle = percent == null
+    ? 'No need to refresh.'
+    : repairCount > 0
+      ? `Repair the setup in ${repairCount} question${repairCount === 1 ? '' : 's'}.`
+      : 'Keep the method precise.'
   const diagnosisBody = readableMathText(
-    firstRepair?.recommendation || firstRepair?.feedback || paper.grading_feedback || 'Review each question and carry the strongest method into your next attempt.',
+    percent == null
+      ? 'This report updates automatically. You can leave and come back later.'
+      : firstRepair?.recommendation || firstRepair?.feedback || paper.grading_feedback || 'Review each question and carry the strongest method into your next attempt.',
   )
 
-  return { questions, totalScore, maxScore, percent, correct, partial, missed, pending, firstRepair, recoverableMarks, repairCount, headline, diagnosisTitle, diagnosisBody }
+  return { questions, totalScore, maxScore, percent, correct, wrong, missed, pending, firstRepair, recoverableMarks, repairCount, headline, diagnosisTitle, diagnosisBody }
 }
 
 export function findEvidenceQuestion(paper: CheckedPaper, questionId?: string, questionIndex?: number) {

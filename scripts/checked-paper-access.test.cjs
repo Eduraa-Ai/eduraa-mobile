@@ -42,6 +42,16 @@ test('sends bearer authorization only to the configured API origin', () => {
   )
 })
 
+test('builds a safe authenticated checked-paper PDF download request', () => {
+  assert.equal(
+    documents.checkedPaperDownloadEndpoint('paper id/synthetic'),
+    '/checked-papers/paper%20id%2Fsynthetic/download',
+  )
+  assert.throws(() => documents.checkedPaperDownloadEndpoint('  '))
+  assert.equal(documents.safeDocumentFileStem('Algebra / Checked Report'), 'Algebra-Checked-Report')
+  assert.equal(documents.safeDocumentFileStem('***'), 'checked-paper')
+})
+
 test('student roles retain learner actions while staff roles do not', () => {
   assert.equal(roles.isLearnerRole('student'), true)
   assert.equal(roles.isLearnerRole('b2c_student'), true)
