@@ -396,14 +396,6 @@ export default function CheckedPapersLibraryScreen() {
     setActiveTab('all')
   }
 
-  const pageIntro = (
-    <View style={styles.pageIntro}>
-      <Text style={styles.pageOverline}>CHECKED PAPERS · ASSESSMENT INTELLIGENCE</Text>
-      <Text style={styles.libraryTitle}>Checked library</Text>
-      <Text style={styles.librarySubtitle}>A focused results inbox that reveals what deserves attention.</Text>
-    </View>
-  )
-
   const header = (
     <View style={styles.headerStack}>
       <View style={styles.shellHeader}>
@@ -567,7 +559,6 @@ export default function CheckedPapersLibraryScreen() {
   if (isLoading && totalCount === 0) {
     return (
       <AppScreen scroll={false} padded={false} contentStyle={styles.screenRoot}>
-        {pageIntro}
         <View style={styles.warmSurface}><LibrarySkeleton /></View>
       </AppScreen>
     )
@@ -576,7 +567,6 @@ export default function CheckedPapersLibraryScreen() {
   if (isError && totalCount === 0) {
     return (
       <AppScreen scroll={false} padded={false} contentStyle={styles.screenRoot}>
-        {pageIntro}
         <View style={[styles.warmSurface, styles.errorWrap]}>
           <ErrorState title="Checked papers could not load" message={errorMessage(error)} actionLabel="Retry" onAction={() => void refetch()} style={styles.errorCard} />
         </View>
@@ -586,7 +576,6 @@ export default function CheckedPapersLibraryScreen() {
 
   return (
     <AppScreen scroll={false} padded={false} contentStyle={styles.screenRoot}>
-      {pageIntro}
       <FilterSheet
         visible={filterVisible}
         subjects={subjectOptions}
@@ -623,53 +612,18 @@ export default function CheckedPapersLibraryScreen() {
 const styles = StyleSheet.create({
   screenRoot: {
     flex: 1,
-    gap: spacing[2],
     paddingBottom: 0,
-    backgroundColor: '#dce3ea',
-  },
-  pageIntro: {
-    paddingHorizontal: spacing[4],
-    paddingBottom: 2,
-    gap: 1,
-    backgroundColor: '#dce3ea',
-    zIndex: 20,
-    elevation: 20,
-  },
-  pageOverline: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 8,
-    lineHeight: 11,
-    letterSpacing: 0.7,
-  },
-  libraryTitle: {
-    color: colors.nav,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 19,
-    lineHeight: 23,
-  },
-  librarySubtitle: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
-    lineHeight: 13,
+    backgroundColor: '#fffaf2',
   },
   warmSurface: {
     flex: 1,
     minHeight: 0,
-    marginHorizontal: spacing[3],
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(7,21,45,0.10)',
     backgroundColor: '#fffaf2',
     overflow: 'hidden',
   },
   list: {
     flex: 1,
     overflow: 'hidden',
-    borderTopLeftRadius: 27,
-    borderTopRightRadius: 27,
   },
   listContent: {
     gap: spacing[3],
@@ -678,7 +632,7 @@ const styles = StyleSheet.create({
     paddingBottom: layout.bottomTabHeight + spacing[10],
   },
   headerStack: {
-    gap: spacing[2],
+    gap: spacing[3],
   },
   shellHeader: {
     minHeight: 48,
@@ -721,8 +675,8 @@ const styles = StyleSheet.create({
   brandName: {
     color: colors.text,
     fontFamily: typography.fonts.headingSemibold,
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 19,
   },
   brandContext: {
     color: colors.textMuted,
@@ -760,19 +714,19 @@ const styles = StyleSheet.create({
   pageTitle: {
     color: colors.text,
     fontFamily: typography.fonts.heading,
-    fontSize: 28,
-    lineHeight: 28,
+    fontSize: 24,
+    lineHeight: 25,
     letterSpacing: -0.3,
   },
   pageTitleCompact: {
-    fontSize: 27,
-    lineHeight: 29,
+    fontSize: 23,
+    lineHeight: 25,
   },
   pageSubtitle: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 11,
-    lineHeight: 15,
+    lineHeight: 16,
     maxWidth: 320,
   },
   assessmentPanel: {
@@ -806,7 +760,7 @@ const styles = StyleSheet.create({
   assessmentTitle: {
     color: colors.textOnDark,
     fontFamily: typography.fonts.headingSemibold,
-    fontSize: 16,
+    fontSize: 15,
     lineHeight: 18,
     letterSpacing: -0.2,
   },
@@ -994,8 +948,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: colors.text,
     fontFamily: typography.fonts.headingSemibold,
-    fontSize: 17,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 19,
   },
   sectionSubtitle: {
     color: colors.textMuted,
@@ -1115,7 +1069,7 @@ const styles = StyleSheet.create({
   paperTitle: {
     color: colors.text,
     fontFamily: typography.fonts.headingSemibold,
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 17,
   },
   paperInsight: {
@@ -1132,8 +1086,8 @@ const styles = StyleSheet.create({
   scorePercent: {
     color: colors.text,
     fontFamily: typography.fonts.headingSemibold,
-    fontSize: 17,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 19,
   },
   scoreFraction: {
     color: colors.textMuted,
@@ -1178,7 +1132,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 9,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
@@ -1191,7 +1145,7 @@ const styles = StyleSheet.create({
   footerMetaText: {
     color: colors.textSecondary,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
+    fontSize: 9,
   },
   openAction: {
     minHeight: 24,
