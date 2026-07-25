@@ -74,18 +74,9 @@ export default function QuestionEvidenceScreen() {
     },
   })
 
-  const intro = (
-    <View style={styles.pageIntro}>
-      <Text style={styles.pageOverline}>CHECKED PAPERS · ASSESSMENT INTELLIGENCE</Text>
-      <Text style={styles.pageTitle}>Question evidence</Text>
-      <Text style={styles.pageSubtitle}>{isStaff ? 'Feedback and source evidence stay in one focused sheet.' : 'Feedback, the original scan, and review stay in one focused sheet.'}</Text>
-    </View>
-  )
-
   if (!data || !evidence) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
-        {intro}
         <View style={styles.stateSurface}>
           {isLoading ? <><ActivityIndicator color={colors.accent} size="large" /><Text style={styles.stateMessage}>Loading question evidence…</Text></> : (
             <><Ionicons name="alert-circle-outline" size={30} color={colors.danger} /><Text style={styles.stateTitle}>{isError ? 'Question evidence unavailable' : 'Question not found'}</Text><Text style={styles.stateMessage}>Return to the report or retry without changing the checked paper.</Text><View style={styles.stateActions}><Pressable onPress={() => navigation.goBack()} style={styles.stateSecondary}><Text style={styles.stateSecondaryText}>Back</Text></Pressable>{isError ? <Pressable onPress={() => void refetch()} style={styles.statePrimary}><Text style={styles.statePrimaryText}>Retry</Text></Pressable> : null}</View></>
@@ -208,12 +199,8 @@ export default function QuestionEvidenceScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, gap: spacing[2], backgroundColor: '#dce3ea' },
-  pageIntro: { paddingHorizontal: spacing[4], gap: 1, zIndex: 2, backgroundColor: '#dce3ea' },
-  pageOverline: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8, lineHeight: 11, letterSpacing: 0.7 },
-  pageTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 19, lineHeight: 23 },
-  pageSubtitle: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 13 },
-  detailSurface: { flex: 1, minHeight: 0, marginHorizontal: spacing[3], borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: '#07152d', borderWidth: 1, borderColor: 'rgba(7,21,45,0.16)' },
+  root: { flex: 1, backgroundColor: '#07152d' },
+  detailSurface: { flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: '#07152d' },
   navyHeader: { backgroundColor: '#07152d' },
   identityRow: { minHeight: 58, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   backButton: { width: 44, height: 44, borderRadius: radius.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },

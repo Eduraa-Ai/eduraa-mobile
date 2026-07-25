@@ -1,15 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Svg, { Circle, Path } from 'react-native-svg'
 import { colors, motion, radius, spacing } from '../../theme'
 
-const ITEM_SIZE = 42
-const ITEM_GAP = 7
-const SWIPE_THRESHOLD = 34
-const SLOT_SIZE = ITEM_SIZE + ITEM_GAP
+const MAX_SHELL_WIDTH = 410
+const MIN_SHELL_WIDTH = 288
+const SHELL_INSET = 14
+const SHELL_EDGE_PADDING = 5
+const SHELL_HEIGHT = 68
+const SCROLLING_ITEM_WIDTH = 66
+const ACTIVE_ORB_SIZE = 46
 
 const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
@@ -69,45 +74,134 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
+function ConstellationField() {
+  return (
+    <View pointerEvents="none" style={styles.constellationClip}>
+      <Svg width="100%" height="100%" viewBox="0 0 360 74" preserveAspectRatio="none">
+        <Path
+          d="M18 51L62 24L112 43L158 18L206 48L252 28L302 49L344 19M62 24L78 61M158 18L174 63M252 28L270 63M302 49L344 19"
+          fill="none"
+          stroke="rgba(7,21,45,0.18)"
+          strokeWidth={0.7}
+          strokeDasharray="2 4"
+        />
+        <Circle cx={18} cy={51} r={1.4} fill="rgba(7,21,45,0.25)" />
+        <Circle cx={62} cy={24} r={1.8} fill="rgba(7,21,45,0.30)" />
+        <Circle cx={78} cy={61} r={1.2} fill="rgba(7,21,45,0.22)" />
+        <Circle cx={112} cy={43} r={1.3} fill="rgba(7,21,45,0.24)" />
+        <Circle cx={158} cy={18} r={1.6} fill="rgba(7,21,45,0.28)" />
+        <Circle cx={174} cy={63} r={1.2} fill="rgba(7,21,45,0.22)" />
+        <Circle cx={206} cy={48} r={2} fill={colors.accentLight} />
+        <Circle cx={252} cy={28} r={1.5} fill="rgba(7,21,45,0.27)" />
+        <Circle cx={270} cy={63} r={1.1} fill="rgba(7,21,45,0.20)" />
+        <Circle cx={302} cy={49} r={1.5} fill="rgba(7,21,45,0.27)" />
+        <Circle cx={344} cy={19} r={1.7} fill="rgba(7,21,45,0.29)" />
+      </Svg>
+    </View>
+  )
+}
+
+interface TabItemProps {
+  icon: keyof typeof Ionicons.glyphMap
+  isFocused: boolean
+  isPreviewed: boolean
+  label: string
+  onLongPress: () => void
+  onPress: () => void
+  testID?: string
+  width: number
+}
+
+function TabItem({ icon, isFocused, isPreviewed, label, onLongPress, onPress, testID, width }: TabItemProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: isFocused }}
+      accessibilityLabel={label}
+      hitSlop={{ top: 10, bottom: 2, left: 2, right: 2 }}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.item,
+        { width },
+        pressed && styles.itemPressed,
+      ]}
+    >
+      <View pointerEvents="none" style={styles.iconStage}>
+        <Ionicons
+          name={icon}
+          size={20}
+          color={isPreviewed ? 'transparent' : colors.textSecondary}
+        />
+      </View>
+      <Text numberOfLines={1} style={[styles.label, isPreviewed && styles.labelFocused]}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
 export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { width: windowWidth } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
   const focusedRoute = state.routes[state.index]
   const focusedOptions = focusedRoute ? descriptors[focusedRoute.key]?.options : undefined
   const nestedRouteName = focusedRoute ? getNestedFocusedRouteName(focusedRoute) : null
+  const shellRef = useRef<View>(null)
   const scrollRef = useRef<ScrollView>(null)
-  const thumbX = useRef(new Animated.Value(state.index * SLOT_SIZE)).current
-  const dragPositionRef = useRef(state.index * SLOT_SIZE)
-  const [previewIndex, setPreviewIndex] = useState(state.index)
+  const shellLeftRef = useRef(0)
+  const scrollOffsetRef = useRef(0)
+  const previewIndexRef = useRef(state.index)
   const [viewportWidth, setViewportWidth] = useState(0)
+  const [previewIndex, setPreviewIndex] = useState(state.index)
+  const [isDragging, setIsDragging] = useState(false)
 
-  const contentWidth = Math.max(ITEM_SIZE, state.routes.length * ITEM_SIZE + Math.max(0, state.routes.length - 1) * ITEM_GAP + 1)
-  const shellWidth = Math.min(430, Math.max(ITEM_SIZE, windowWidth - spacing[5] * 2))
+  const shellWidth = Math.min(MAX_SHELL_WIDTH, Math.max(MIN_SHELL_WIDTH, windowWidth - SHELL_INSET * 2))
+  const availableTabWidth = shellWidth - SHELL_EDGE_PADDING * 2
+  const fitsWithoutScrolling = state.routes.length <= 5
+  const itemWidth = fitsWithoutScrolling
+    ? availableTabWidth / Math.max(1, state.routes.length)
+    : SCROLLING_ITEM_WIDTH
+  const contentWidth = fitsWithoutScrolling
+    ? shellWidth
+    : state.routes.length * itemWidth + SHELL_EDGE_PADDING * 2
+  const activeIndicatorX = useRef(
+    new Animated.Value(
+      SHELL_EDGE_PADDING + state.index * itemWidth + (itemWidth - ACTIVE_ORB_SIZE) / 2,
+    ),
+  ).current
+  const activeIcon = iconByRoute[state.routes[previewIndex]?.name] ?? 'ellipse-outline'
+  const indicatorPositionForIndex = useCallback(
+    (index: number) => SHELL_EDGE_PADDING + index * itemWidth + (itemWidth - ACTIVE_ORB_SIZE) / 2,
+    [itemWidth],
+  )
+
+  const measureShell = useCallback(() => {
+    shellRef.current?.measureInWindow((x) => {
+      shellLeftRef.current = x
+    })
+  }, [])
 
   const scrollToIndex = useCallback((index: number, animated = true) => {
-    if (!viewportWidth) return
-    const thumbPosition = index * SLOT_SIZE
+    if (!viewportWidth || fitsWithoutScrolling) return
+    const itemCenter = SHELL_EDGE_PADDING + index * itemWidth + itemWidth / 2
     const maxScroll = Math.max(0, contentWidth - viewportWidth)
-    const centeredScroll = clamp(thumbPosition - (viewportWidth - ITEM_SIZE) / 2, 0, maxScroll)
+    const centeredScroll = clamp(itemCenter - viewportWidth / 2, 0, maxScroll)
     scrollRef.current?.scrollTo({ x: centeredScroll, animated })
-  }, [contentWidth, viewportWidth])
+  }, [contentWidth, fitsWithoutScrolling, itemWidth, viewportWidth])
 
-  useEffect(() => {
-    const nextPosition = state.index * SLOT_SIZE
-    dragPositionRef.current = nextPosition
-    setPreviewIndex(state.index)
-    scrollToIndex(state.index)
-    Animated.spring(thumbX, {
-      toValue: nextPosition,
-      damping: 20,
-      stiffness: 260,
-      mass: 0.72,
+  const settleIndicator = useCallback((index: number) => {
+    Animated.spring(activeIndicatorX, {
+      toValue: indicatorPositionForIndex(index),
+      ...motion.spring.tab,
       useNativeDriver: true,
     }).start()
-  }, [state.index, scrollToIndex, thumbX])
+  }, [activeIndicatorX, indicatorPositionForIndex])
 
-  const navigateToIndex = (index: number) => {
+  const navigateToIndex = useCallback((index: number) => {
     const route = state.routes[index]
-    if (!route || index === state.index) return
+    if (!route || index === state.index) return false
 
     const event = navigation.emit({
       type: 'tabPress',
@@ -115,62 +209,92 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
       canPreventDefault: true,
     })
 
-    if (!event.defaultPrevented) {
-      navigation.navigate(route.name)
+    if (event.defaultPrevented) return false
+    navigation.navigate(route.name)
+    return true
+  }, [navigation, state.index, state.routes])
+
+  const updateDragFromPageX = useCallback((pageX: number) => {
+    const lastIndex = Math.max(0, state.routes.length - 1)
+    const firstPosition = indicatorPositionForIndex(0)
+    const lastPosition = indicatorPositionForIndex(lastIndex)
+    const contentX = pageX - shellLeftRef.current + scrollOffsetRef.current
+    const nextPosition = clamp(contentX - ACTIVE_ORB_SIZE / 2, firstPosition, lastPosition)
+    const nextIndex = clamp(
+      Math.round((nextPosition - firstPosition) / itemWidth),
+      0,
+      lastIndex,
+    )
+
+    activeIndicatorX.setValue(nextPosition)
+
+    if (previewIndexRef.current !== nextIndex) {
+      previewIndexRef.current = nextIndex
+      setPreviewIndex(nextIndex)
+      scrollToIndex(nextIndex, false)
     }
-  }
+  }, [
+    activeIndicatorX,
+    indicatorPositionForIndex,
+    itemWidth,
+    scrollToIndex,
+    state.routes.length,
+  ])
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gesture) => {
-          const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3
-          return horizontalIntent && Math.abs(gesture.dx) > 10
+          const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.2
+          return horizontalIntent && Math.abs(gesture.dx) > 3
         },
-        onPanResponderGrant: () => {
-          thumbX.stopAnimation()
-          dragPositionRef.current = state.index * SLOT_SIZE
-          thumbX.setValue(dragPositionRef.current)
+        onMoveShouldSetPanResponderCapture: (_, gesture) => {
+          const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.2
+          return horizontalIntent && Math.abs(gesture.dx) > 3
+        },
+        onPanResponderGrant: (_, gesture) => {
+          activeIndicatorX.stopAnimation()
+          setIsDragging(true)
+          updateDragFromPageX(gesture.moveX || gesture.x0 + gesture.dx)
         },
         onPanResponderMove: (_, gesture) => {
-          const maxPosition = Math.max(0, (state.routes.length - 1) * SLOT_SIZE)
-          const nextPosition = clamp(state.index * SLOT_SIZE + gesture.dx, 0, maxPosition)
-          const nextPreviewIndex = clamp(Math.round(nextPosition / SLOT_SIZE), 0, state.routes.length - 1)
-
-          dragPositionRef.current = nextPosition
-          thumbX.setValue(nextPosition)
-          setPreviewIndex((current) => (current === nextPreviewIndex ? current : nextPreviewIndex))
-          scrollToIndex(nextPreviewIndex, false)
+          updateDragFromPageX(gesture.moveX || gesture.x0 + gesture.dx)
         },
-        onPanResponderRelease: (_, gesture) => {
-          const nearestIndex = clamp(Math.round(dragPositionRef.current / SLOT_SIZE), 0, state.routes.length - 1)
+        onPanResponderRelease: () => {
+          const targetIndex = previewIndexRef.current
+          const committed = navigateToIndex(targetIndex)
+          const settledIndex = committed ? targetIndex : state.index
 
-          if (Math.abs(gesture.dx) >= SWIPE_THRESHOLD || nearestIndex !== state.index) {
-            navigateToIndex(nearestIndex)
-          } else {
-            Animated.spring(thumbX, {
-              toValue: state.index * SLOT_SIZE,
-              damping: 20,
-              stiffness: 260,
-              mass: 0.72,
-              useNativeDriver: true,
-            }).start()
-            setPreviewIndex(state.index)
-          }
+          previewIndexRef.current = settledIndex
+          setPreviewIndex(settledIndex)
+          setIsDragging(false)
+          settleIndicator(settledIndex)
         },
         onPanResponderTerminate: () => {
-          Animated.spring(thumbX, {
-            toValue: state.index * SLOT_SIZE,
-            damping: 20,
-            stiffness: 260,
-            mass: 0.72,
-            useNativeDriver: true,
-          }).start()
+          previewIndexRef.current = state.index
           setPreviewIndex(state.index)
+          setIsDragging(false)
+          settleIndicator(state.index)
         },
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
       }),
-    [navigation, scrollToIndex, state.index, state.routes, thumbX],
+    [
+      activeIndicatorX,
+      navigateToIndex,
+      settleIndicator,
+      state.index,
+      updateDragFromPageX,
+    ],
   )
+
+  useEffect(() => {
+    previewIndexRef.current = state.index
+    setPreviewIndex(state.index)
+    settleIndicator(state.index)
+    scrollToIndex(state.index)
+  }, [scrollToIndex, settleIndicator, state.index])
 
   if (
     isTabBarStyleHidden(focusedOptions?.tabBarStyle) ||
@@ -181,45 +305,79 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   }
 
   return (
-    <View style={styles.wrap}>
-      <View style={[styles.barShell, { width: shellWidth, minWidth: shellWidth, maxWidth: shellWidth }]}>
-        <LinearGradient
-          pointerEvents="none"
-          colors={['rgba(255,255,255,0.92)', 'rgba(255,247,237,0.72)', 'rgba(255,255,255,0.86)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View pointerEvents="none" style={styles.topSheen} />
+    <View
+      pointerEvents="box-none"
+      style={[
+        styles.wrap,
+        {
+          paddingBottom: Math.max(insets.bottom, spacing[3]),
+        },
+      ]}
+    >
+      <View
+        ref={shellRef}
+        {...panResponder.panHandlers}
+        onLayout={measureShell}
+        style={[styles.barShell, { width: shellWidth, minWidth: shellWidth, maxWidth: shellWidth }]}
+      >
+        <View pointerEvents="none" style={styles.glassSurface}>
+          <LinearGradient
+            colors={['rgba(255,255,255,0.90)', 'rgba(255,247,237,0.71)', 'rgba(255,255,255,0.82)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <ConstellationField />
+          <View style={styles.topSheen} />
+        </View>
         <ScrollView
           ref={scrollRef}
           horizontal
+          scrollEnabled={!fitsWithoutScrolling && !isDragging}
           showsHorizontalScrollIndicator={false}
-          bounces
+          bounces={!fitsWithoutScrolling}
+          directionalLockEnabled
+          keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={false}
           style={styles.scroller}
-          contentContainerStyle={styles.bar}
+          contentContainerStyle={[styles.bar, { width: contentWidth }]}
           onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
+          onScroll={(event) => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.x
+          }}
+          scrollEventThrottle={16}
         >
-          <View pointerEvents="none" style={styles.sliderTrack} />
           <Animated.View
-            {...panResponder.panHandlers}
+            pointerEvents="none"
+            testID="bottom-tab-active-indicator"
             style={[
-              styles.activeThumb,
+              styles.slidingIndicator,
               {
-                transform: [{ translateX: thumbX }],
+                transform: [{ translateX: activeIndicatorX }],
               },
             ]}
           >
-            <Ionicons name={iconByRoute[state.routes[previewIndex]?.name] ?? 'ellipse'} size={20} color={colors.white} />
-            <View style={styles.activeDot} />
+            <LinearGradient
+              colors={['#173250', '#07152d', '#061226']}
+              start={{ x: 0.18, y: 0 }}
+              end={{ x: 0.82, y: 1 }}
+              style={styles.activeOrb}
+            >
+              <View style={styles.orbSheen} />
+              <View style={styles.orbWhiteStar} />
+              <View style={styles.orbWhiteStarSmall} />
+              <View style={styles.orbOrangeSignal} />
+              <Ionicons name={activeIcon} size={20} color={colors.white} />
+            </LinearGradient>
           </Animated.View>
           {state.routes.map((route, index) => {
-            const isFocused = state.index === index
+            const isFocused = state.routes[state.index]?.key === route.key
+            const isPreviewed = previewIndex === index
             const options = descriptors[route.key]?.options
             const label =
-              options?.tabBarLabel !== undefined
-                ? String(options.tabBarLabel)
-                : options?.title !== undefined
+              typeof options?.tabBarLabel === 'string'
+                ? options.tabBarLabel
+                : typeof options?.title === 'string'
                   ? options.title
                   : route.name
 
@@ -235,17 +393,25 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
               }
             }
 
+            const onLongPress = () => {
+              navigation.emit({
+                type: 'tabLongPress',
+                target: route.key,
+              })
+            }
+
             return (
-              <Pressable
+              <TabItem
                 key={route.key}
+                icon={iconByRoute[route.name] ?? 'ellipse-outline'}
+                isFocused={isFocused}
+                isPreviewed={isPreviewed}
+                label={label}
+                onLongPress={onLongPress}
                 onPress={onPress}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: isFocused }}
-                accessibilityLabel={label}
-                style={({ pressed }) => [styles.item, styles.itemInactive, pressed && styles.itemPressed]}
-              >
-                <Ionicons name={iconByRoute[route.name] ?? 'ellipse'} size={20} color={isFocused ? 'transparent' : colors.textSecondary} />
-              </Pressable>
+                testID={options?.tabBarTestID}
+                width={itemWidth}
+              />
             )
           })}
         </ScrollView>
@@ -259,101 +425,154 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    bottom: 0,
     width: '100%',
     alignSelf: 'stretch',
-    bottom: 0,
-    paddingHorizontal: spacing[5],
-    paddingBottom: spacing[4],
+    paddingHorizontal: SHELL_INSET,
     alignItems: 'center',
   },
   barShell: {
+    position: 'relative',
     alignSelf: 'stretch',
     flexShrink: 0,
-    minHeight: 58,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.86)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.88)',
-    paddingVertical: 7,
-    paddingHorizontal: 7,
-    overflow: 'hidden',
+    height: SHELL_HEIGHT,
+    borderRadius: radius.xl,
     shadowColor: colors.slate[950],
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.16,
-    shadowRadius: 32,
-    elevation: 14,
+    shadowOffset: { width: 0, height: 13 },
+    shadowOpacity: 0.15,
+    shadowRadius: 25,
+    elevation: 12,
+  },
+  glassSurface: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.90)',
+    borderRadius: radius.xl,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+  },
+  constellationClip: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.82,
   },
   scroller: {
     width: '100%',
     maxWidth: '100%',
+    height: SHELL_HEIGHT,
     flexGrow: 0,
+    overflow: 'visible',
   },
   topSheen: {
     position: 'absolute',
     left: spacing[4],
     right: spacing[4],
-    top: 5,
+    top: 4,
     height: 1,
     borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(255,255,255,0.96)',
   },
   bar: {
     position: 'relative',
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingRight: 1,
-  },
-  sliderTrack: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    top: 27,
-    height: 2,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(15,23,42,0.06)',
+    alignItems: 'stretch',
+    paddingHorizontal: SHELL_EDGE_PADDING,
   },
   item: {
     position: 'relative',
-    width: ITEM_SIZE,
-    height: ITEM_SIZE,
-    borderRadius: radius.full,
+    height: SHELL_HEIGHT,
+    minWidth: 52,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 6,
+    zIndex: 2,
+  },
+  itemPressed: {
+    opacity: motion.press.opacity,
+  },
+  iconStage: {
+    position: 'absolute',
+    top: 5,
+    width: ACTIVE_ORB_SIZE,
+    height: ACTIVE_ORB_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1,
+    borderRadius: radius.full,
   },
-  itemInactive: {
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.08)',
-  },
-  activeThumb: {
+  slidingIndicator: {
     position: 'absolute',
     left: 0,
-    top: 0,
-    width: ITEM_SIZE,
-    height: ITEM_SIZE,
-    borderRadius: radius.full,
-    backgroundColor: colors.slate[950],
+    top: -6,
+    width: ACTIVE_ORB_SIZE,
+    height: ACTIVE_ORB_SIZE,
+    zIndex: 4,
+  },
+  activeOrb: {
+    width: ACTIVE_ORB_SIZE,
+    height: ACTIVE_ORB_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 3,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: 'rgba(255,250,242,0.90)',
+    borderRadius: radius.full,
     shadowColor: colors.slate[950],
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.21,
+    shadowRadius: 15,
     elevation: 8,
   },
-  activeDot: {
+  orbSheen: {
     position: 'absolute',
-    bottom: 5,
+    top: 3,
+    left: 8,
+    width: 19,
+    height: 8,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    transform: [{ rotate: '-18deg' }],
+  },
+  orbWhiteStar: {
+    position: 'absolute',
+    top: 8,
+    left: 9,
+    width: 2.5,
+    height: 2.5,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.76)',
+  },
+  orbWhiteStarSmall: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    width: 2,
+    height: 2,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.48)',
+  },
+  orbOrangeSignal: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
     width: 4,
     height: 4,
     borderRadius: radius.full,
     backgroundColor: colors.accentLight,
+    shadowColor: colors.accentLight,
+    shadowOpacity: 0.7,
+    shadowRadius: 5,
+    elevation: 2,
   },
-  itemPressed: {
-    opacity: motion.press.opacity,
+  label: {
+    maxWidth: '94%',
+    color: colors.textSecondary,
+    fontSize: 8.5,
+    fontWeight: '700',
+    lineHeight: 10,
+    textAlign: 'center',
+  },
+  labelFocused: {
+    color: '#07152d',
+    fontWeight: '900',
   },
 })
 

@@ -147,18 +147,9 @@ export default function ResultDetailScreen() {
     else navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })
   }
 
-  const intro = (
-    <View style={styles.pageIntro}>
-      <Text style={styles.pageOverline}>CHECKED PAPERS · ASSESSMENT INTELLIGENCE</Text>
-      <Text style={styles.pageTitle}>Performance report</Text>
-      <Text style={styles.pageSubtitle}>A score becomes a diagnosis, then one clear recovery action.</Text>
-    </View>
-  )
-
   if (!id || !data || !report) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
-        {intro}
         <View style={styles.stateSurface}>
           {isLoading ? <><ActivityIndicator color={colors.accent} size="large" /><Text style={styles.stateMessage}>Loading the performance report…</Text></> : (
             <ResultState
@@ -178,7 +169,6 @@ export default function ResultDetailScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
-      {intro}
       <View style={styles.reportSurface}>
         <View style={styles.identityRow}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to checked papers" onPress={goBack} style={styles.backButton}>
@@ -257,13 +247,9 @@ export default function ResultDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, gap: spacing[2], backgroundColor: '#dce3ea' },
-  pageIntro: { paddingHorizontal: spacing[4], paddingBottom: 2, gap: 1, zIndex: 20, elevation: 20, backgroundColor: '#dce3ea' },
-  pageOverline: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8, lineHeight: 11, letterSpacing: 0.7 },
-  pageTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 19, lineHeight: 23 },
-  pageSubtitle: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 13 },
-  reportSurface: { flex: 1, minHeight: 0, marginHorizontal: spacing[3], borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: '#07152d', borderWidth: 1, borderColor: 'rgba(7,21,45,0.16)' },
-  stateSurface: { flex: 1, marginHorizontal: spacing[3], borderTopLeftRadius: 28, borderTopRightRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf2', padding: spacing[5] },
+  root: { flex: 1, backgroundColor: '#07152d' },
+  reportSurface: { flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: '#07152d' },
+  stateSurface: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf2', padding: spacing[5] },
   identityRow: { minHeight: 58, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: '#07152d' },
   backButton: { width: 44, height: 44, borderRadius: radius.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
   identityCopy: { flex: 1, minWidth: 0 },

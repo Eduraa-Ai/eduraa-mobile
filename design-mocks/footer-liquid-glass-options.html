@@ -1,0 +1,1201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4eee5">
+  <title>Eduraa AI - Liquid Glass Footer Review</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --navy: #07152d;
+      --navy-2: #102746;
+      --cream: #fffaf2;
+      --paper: #fffdf8;
+      --orange: #f36c21;
+      --rust: #c2410c;
+      --ink: #101828;
+      --muted: #667085;
+      --line: #e3d9cc;
+      --canvas: #eee8df;
+      --success: #278657;
+      --shadow: 0 28px 80px rgba(7, 21, 45, .13);
+      --ease: cubic-bezier(.2, .8, .2, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(243, 108, 33, .11), transparent 26rem),
+        radial-gradient(circle at 90% 3%, rgba(63, 94, 140, .12), transparent 30rem),
+        var(--canvas);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button { font: inherit; }
+    button:focus-visible, a:focus-visible {
+      outline: 3px solid rgba(243, 108, 33, .38);
+      outline-offset: 3px;
+    }
+
+    .mast {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-height: 76px;
+      padding: 10px clamp(18px, 4vw, 54px);
+      border-bottom: 1px solid rgba(7, 21, 45, .08);
+      background: rgba(244, 239, 231, .77);
+      backdrop-filter: blur(24px) saturate(1.25);
+      -webkit-backdrop-filter: blur(24px) saturate(1.25);
+    }
+    .identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .identity img {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      border-radius: 10px;
+      background: var(--cream);
+      box-shadow: 0 8px 22px rgba(7, 21, 45, .09);
+    }
+    .identity b { display: block; color: var(--navy); font-size: 14px; line-height: 1.15; }
+    .identity small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .mast-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 12px;
+      border: 1px solid rgba(7, 21, 45, .09);
+      border-radius: 999px;
+      color: var(--navy);
+      background: rgba(255, 255, 255, .56);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .mast-status i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 0 4px rgba(243, 108, 33, .12);
+    }
+
+    .intro {
+      max-width: 1510px;
+      margin: auto;
+      padding: clamp(52px, 8vw, 100px) clamp(20px, 4vw, 44px) 30px;
+    }
+    .eyebrow {
+      color: var(--rust);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+    .intro h1 {
+      max-width: 930px;
+      margin: 13px 0 18px;
+      color: var(--navy);
+      font: 500 clamp(42px, 6vw, 78px)/.94 Georgia, "Times New Roman", serif;
+      letter-spacing: -.045em;
+    }
+    .intro-copy {
+      display: grid;
+      grid-template-columns: minmax(0, 700px) auto;
+      align-items: end;
+      gap: 30px;
+    }
+    .intro p {
+      margin: 0;
+      color: #5e697a;
+      font-size: 15px;
+      line-height: 1.65;
+    }
+    .principles {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 7px;
+    }
+    .principles span, .traits span {
+      padding: 7px 9px;
+      border: 1px solid rgba(7, 21, 45, .07);
+      border-radius: 999px;
+      color: #586274;
+      background: rgba(255, 255, 255, .54);
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .selection-bar {
+      position: sticky;
+      top: 76px;
+      z-index: 40;
+      max-width: 1440px;
+      margin: 12px auto 4px;
+      padding: 0 clamp(20px, 4vw, 44px);
+      pointer-events: none;
+    }
+    .selection-inner {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      min-height: 54px;
+      padding: 8px 9px 8px 16px;
+      border: 1px solid rgba(255, 255, 255, .74);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .71);
+      box-shadow: 0 16px 44px rgba(7, 21, 45, .1);
+      backdrop-filter: blur(24px) saturate(1.35);
+      -webkit-backdrop-filter: blur(24px) saturate(1.35);
+      pointer-events: auto;
+    }
+    .selection-copy { min-width: 0; }
+    .selection-copy small {
+      display: block;
+      color: #8b96a8;
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .selection-copy b {
+      display: block;
+      overflow: hidden;
+      margin-top: 2px;
+      color: var(--navy);
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .selection-bar button {
+      margin-left: auto;
+      min-height: 38px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 12px;
+      color: #fff;
+      background: var(--navy);
+      font-size: 10px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .gallery {
+      max-width: 1510px;
+      margin: auto;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(330px, 1fr));
+      gap: 24px;
+      padding: 28px clamp(18px, 4vw, 44px) 100px;
+    }
+    .concept {
+      position: relative;
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid rgba(7, 21, 45, .08);
+      border-radius: 30px;
+      background: rgba(255, 255, 255, .54);
+      box-shadow: 0 18px 55px rgba(7, 21, 45, .07);
+      transition: transform .3s var(--ease), border-color .3s, box-shadow .3s;
+    }
+    .concept:hover { transform: translateY(-5px); box-shadow: 0 26px 74px rgba(7, 21, 45, .12); }
+    .concept.selected {
+      border-color: rgba(243, 108, 33, .72);
+      box-shadow: 0 28px 80px rgba(194, 65, 12, .15);
+    }
+    .badge {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      z-index: 10;
+      padding: 7px 9px;
+      border: 1px solid rgba(7, 21, 45, .08);
+      border-radius: 999px;
+      color: var(--navy);
+      background: rgba(255, 246, 218, .9);
+      box-shadow: 0 8px 20px rgba(7, 21, 45, .08);
+      font-size: 8px;
+      font-weight: 950;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      backdrop-filter: blur(14px);
+    }
+    .phone-stage {
+      height: 654px;
+      display: grid;
+      place-items: start center;
+      overflow: hidden;
+      border-radius: 21px;
+      background:
+        radial-gradient(circle at 80% 15%, rgba(243, 108, 33, .12), transparent 38%),
+        #dfe4e9;
+    }
+    .phone {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      flex: 0 0 auto;
+      overflow: hidden;
+      transform: scale(.775);
+      transform-origin: top center;
+      border-radius: 42px;
+      background: var(--cream);
+      box-shadow: var(--shadow);
+      isolation: isolate;
+    }
+    .phone::before {
+      content: "";
+      position: absolute;
+      z-index: 30;
+      top: 12px;
+      left: 50%;
+      width: 100px;
+      height: 28px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: #050a12;
+    }
+    .status {
+      position: relative;
+      z-index: 3;
+      height: 53px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 25px 0;
+      color: var(--navy);
+      font-size: 12px;
+      font-weight: 850;
+    }
+    .status-icons { display: flex; align-items: center; gap: 6px; }
+    .signal { display: flex; align-items: flex-end; gap: 2px; height: 11px; }
+    .signal i { width: 3px; border-radius: 2px; background: currentColor; }
+    .signal i:nth-child(1) { height: 4px; }
+    .signal i:nth-child(2) { height: 6px; }
+    .signal i:nth-child(3) { height: 8px; }
+    .signal i:nth-child(4) { height: 11px; }
+    .battery { width: 20px; height: 10px; padding: 1px; border: 1.4px solid currentColor; border-radius: 3px; }
+    .battery::before { content: ""; display: block; width: 80%; height: 100%; border-radius: 1px; background: currentColor; }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 102% 4%, rgba(243, 108, 33, .09), transparent 28%),
+        var(--cream);
+    }
+    .screen-body { padding: 10px 22px 155px; }
+    .screen-head { display: flex; align-items: center; gap: 12px; }
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      padding: 4px;
+      border: 1px solid rgba(7, 21, 45, .08);
+      border-radius: 13px;
+      background: rgba(255, 255, 255, .7);
+      object-fit: contain;
+    }
+    .screen-head div { min-width: 0; }
+    .screen-head small {
+      display: block;
+      color: var(--rust);
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .screen-head h2 {
+      margin: 3px 0 0;
+      color: var(--navy);
+      font: 700 22px/1.05 Georgia, serif;
+    }
+    .avatar {
+      margin-left: auto;
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #e4d9cc;
+      border-radius: 50%;
+      color: var(--navy);
+      background: #fffdf9;
+      font-size: 12px;
+      font-weight: 850;
+    }
+    .signal-card {
+      position: relative;
+      overflow: hidden;
+      margin-top: 18px;
+      min-height: 157px;
+      padding: 19px;
+      border-radius: 25px;
+      color: #fff;
+      background:
+        radial-gradient(circle at 88% 18%, rgba(243, 108, 33, .22), transparent 31%),
+        linear-gradient(145deg, #07152d, #102746);
+      box-shadow: 0 19px 42px rgba(7, 21, 45, .18);
+    }
+    .signal-card::after {
+      content: "";
+      position: absolute;
+      width: 150px;
+      height: 150px;
+      right: -52px;
+      bottom: -78px;
+      border: 1px solid rgba(255, 255, 255, .13);
+      border-radius: 50%;
+      box-shadow: 0 0 0 18px rgba(255, 255, 255, .025), 0 0 0 42px rgba(255, 255, 255, .018);
+    }
+    .signal-card small {
+      color: #ff9a5f;
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+    .signal-card h3 { max-width: 245px; margin: 7px 0 0; font: 650 21px/1.05 Georgia, serif; }
+    .signal-stats { display: flex; gap: 26px; margin-top: 22px; }
+    .signal-stats b { display: block; font-size: 17px; }
+    .signal-stats span { display: block; margin-top: 2px; color: #aab5c6; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+    .section-row { display: flex; align-items: end; justify-content: space-between; margin: 23px 1px 11px; }
+    .section-row h3 { margin: 0; color: var(--navy); font-size: 15px; }
+    .section-row span { color: #8a95a6; font-size: 9px; }
+    .paper-card {
+      display: grid;
+      grid-template-columns: 46px 1fr auto;
+      align-items: center;
+      gap: 11px;
+      min-height: 83px;
+      margin-bottom: 9px;
+      padding: 13px;
+      border: 1px solid #ebe1d4;
+      border-radius: 19px;
+      background: rgba(255, 255, 255, .72);
+      box-shadow: 0 8px 22px rgba(7, 21, 45, .045);
+    }
+    .paper-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      color: var(--rust);
+      background: #fff0e6;
+    }
+    .paper-icon svg { width: 20px; height: 20px; }
+    .paper-copy { min-width: 0; }
+    .paper-copy b { display: block; overflow: hidden; color: var(--navy); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .paper-copy span { display: block; margin-top: 5px; color: #8490a2; font-size: 8px; }
+    .score { text-align: right; }
+    .score b { display: block; color: var(--navy); font-size: 15px; }
+    .score span { display: block; margin-top: 2px; color: #8a95a6; font-size: 7px; }
+    .fade {
+      position: absolute;
+      z-index: 4;
+      inset: auto 0 0;
+      height: 160px;
+      pointer-events: none;
+      background: linear-gradient(transparent, rgba(255, 250, 242, .82) 44%, var(--cream) 82%);
+    }
+    .home-indicator {
+      position: absolute;
+      z-index: 28;
+      bottom: 9px;
+      left: 50%;
+      width: 132px;
+      height: 5px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: rgba(7, 21, 45, .88);
+    }
+
+    .dock-wrap {
+      position: absolute;
+      z-index: 20;
+      left: 0;
+      right: 0;
+      bottom: 24px;
+      display: flex;
+      justify-content: center;
+      padding: 0 12px;
+    }
+    .dock {
+      position: relative;
+      width: 100%;
+      min-height: 76px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      align-items: center;
+      padding: 7px;
+      border: 1px solid rgba(255, 255, 255, .82);
+      border-radius: 27px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, .83), rgba(250, 240, 227, .62));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .92),
+        inset 0 -1px 0 rgba(7, 21, 45, .035),
+        0 16px 40px rgba(7, 21, 45, .17);
+      backdrop-filter: blur(25px) saturate(1.45);
+      -webkit-backdrop-filter: blur(25px) saturate(1.45);
+    }
+    .dock::before {
+      content: "";
+      position: absolute;
+      inset: 1px 13px auto;
+      height: 1px;
+      border-radius: 50%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .95), transparent);
+      pointer-events: none;
+    }
+    .constellation-field {
+      position: absolute;
+      z-index: 1;
+      inset: 1px;
+      display: none;
+      overflow: hidden;
+      border-radius: inherit;
+      color: var(--navy);
+      pointer-events: none;
+    }
+    .constellation-field svg {
+      width: 100%;
+      height: 100%;
+      opacity: .28;
+    }
+    .constellation-field path {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: .6;
+      stroke-dasharray: 2 3;
+      opacity: .34;
+    }
+    .constellation-field circle { fill: currentColor; opacity: .52; }
+    .constellation-field circle.signal {
+      fill: var(--orange);
+      opacity: .9;
+      filter: drop-shadow(0 0 4px rgba(243, 108, 33, .58));
+    }
+    .tab {
+      position: relative;
+      z-index: 2;
+      min-width: 0;
+      min-height: 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 4px 2px;
+      border: 0;
+      border-radius: 20px;
+      color: #647187;
+      background: transparent;
+      cursor: pointer;
+      transition: color .24s, background .24s, transform .2s var(--ease), box-shadow .24s;
+    }
+    .tab:active { transform: scale(.95); }
+    .tab svg { width: 21px; height: 21px; stroke-width: 1.8; }
+    .tab span { overflow: hidden; max-width: 100%; font-size: 8px; font-weight: 780; text-overflow: ellipsis; white-space: nowrap; }
+    .tab .ping {
+      position: absolute;
+      top: 6px;
+      right: 17px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--orange);
+      opacity: 0;
+    }
+    .tab.active { color: var(--navy); }
+
+    /* 01 - Signature capsule */
+    .style-signature .dock { padding: 7px 6px; }
+    .style-signature .tab.active {
+      color: #fff;
+      background:
+        radial-gradient(circle at 70% 12%, rgba(255, 255, 255, .22), transparent 30%),
+        linear-gradient(145deg, #102746, #07152d);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 8px 18px rgba(7, 21, 45, .24);
+    }
+    .style-signature .tab.active .ping { opacity: 1; }
+
+    /* 02 - Warm adaptive lens */
+    .style-warm-lens .dock {
+      border-color: rgba(255, 255, 255, .92);
+      background: linear-gradient(135deg, rgba(255, 255, 255, .72), rgba(255, 242, 225, .62));
+    }
+    .style-warm-lens .tab.active {
+      color: #792900;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(255, 255, 255, .85), transparent 38%),
+        rgba(243, 108, 33, .2);
+      box-shadow: inset 0 0 0 1px rgba(243, 108, 33, .19), 0 8px 20px rgba(194, 65, 12, .11);
+    }
+    .style-warm-lens .tab.active::after {
+      content: "";
+      position: absolute;
+      bottom: 4px;
+      width: 12px;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--orange);
+    }
+
+    /* 03 - Liquid island */
+    .style-island .dock {
+      min-height: 72px;
+      padding: 6px;
+      border-radius: 999px;
+      background: rgba(252, 248, 241, .68);
+    }
+    .style-island .tab { min-height: 58px; border-radius: 999px; }
+    .style-island .tab.active {
+      flex-direction: row;
+      gap: 6px;
+      color: #fff;
+      background: linear-gradient(150deg, rgba(26, 56, 92, .98), rgba(7, 21, 45, .98));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 9px 22px rgba(7, 21, 45, .22);
+    }
+    .style-island .tab.active span { font-size: 8px; }
+
+    /* 04 - Quiet editorial */
+    .style-editorial .dock {
+      min-height: 82px;
+      border-radius: 20px;
+      background: rgba(255, 253, 249, .75);
+    }
+    .style-editorial .tab { border-radius: 13px; }
+    .style-editorial .tab.active {
+      color: var(--navy);
+      background: rgba(255, 255, 255, .58);
+      box-shadow: inset 0 0 0 1px rgba(7, 21, 45, .06), 0 8px 18px rgba(7, 21, 45, .08);
+    }
+    .style-editorial .tab.active::before {
+      content: "";
+      position: absolute;
+      top: -7px;
+      width: 25px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--orange);
+      box-shadow: 0 2px 8px rgba(243, 108, 33, .3);
+    }
+
+    /* 05 - Halo */
+    .style-halo .dock { min-height: 78px; overflow: visible; }
+    .style-halo .tab.active { color: var(--navy); }
+    .style-halo .tab.active svg {
+      transform: translateY(-2px);
+      filter: drop-shadow(0 5px 8px rgba(194, 65, 12, .15));
+    }
+    .style-halo .tab.active::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      top: 3px;
+      width: 39px;
+      height: 39px;
+      border: 1px solid rgba(243, 108, 33, .22);
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 25%, rgba(255, 255, 255, .95), rgba(243, 108, 33, .17));
+      box-shadow: 0 7px 22px rgba(243, 108, 33, .14);
+    }
+    .style-halo .tab.active span { color: var(--rust); }
+
+    /* 06 - Midnight glass */
+    .style-midnight .dock {
+      border-color: rgba(255, 255, 255, .16);
+      color: #fff;
+      background:
+        radial-gradient(circle at 15% -30%, rgba(243, 108, 33, .19), transparent 45%),
+        linear-gradient(135deg, rgba(7, 21, 45, .93), rgba(16, 39, 70, .89));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .13), 0 17px 42px rgba(7, 21, 45, .28);
+    }
+    .style-midnight .tab { color: #aeb9c9; }
+    .style-midnight .tab.active {
+      color: #fff;
+      background: rgba(255, 255, 255, .11);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+    }
+    .style-midnight .tab.active::after {
+      content: "";
+      position: absolute;
+      bottom: 5px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 12px rgba(243, 108, 33, .72);
+    }
+
+    /* 07 - Layered crystal */
+    .style-crystal .dock {
+      min-height: 80px;
+      border-radius: 29px;
+      background:
+        linear-gradient(108deg, rgba(255, 255, 255, .88), rgba(255, 255, 255, .44) 45%, rgba(246, 226, 203, .55));
+      box-shadow:
+        inset 0 1px 0 #fff,
+        inset 0 -1px 0 rgba(7, 21, 45, .06),
+        0 4px 8px rgba(255, 255, 255, .5),
+        0 19px 46px rgba(7, 21, 45, .16);
+    }
+    .style-crystal .dock::after {
+      content: "";
+      position: absolute;
+      inset: 6px;
+      border: 1px solid rgba(255, 255, 255, .58);
+      border-radius: 22px;
+      pointer-events: none;
+    }
+    .style-crystal .tab.active {
+      color: var(--navy);
+      background: linear-gradient(145deg, rgba(255, 255, 255, .72), rgba(211, 224, 238, .54));
+      box-shadow: inset 0 1px 0 #fff, inset 0 0 0 1px rgba(7, 21, 45, .06), 0 8px 18px rgba(7, 21, 45, .1);
+    }
+
+    /* 08 - Precision rail */
+    .style-precision .dock {
+      min-height: 70px;
+      padding: 5px;
+      border-radius: 22px;
+    }
+    .style-precision .tab { min-height: 58px; gap: 3px; border-radius: 17px; }
+    .style-precision .tab.active {
+      color: var(--navy);
+      background: rgba(255, 255, 255, .65);
+      box-shadow: inset 0 0 0 1px rgba(7, 21, 45, .065);
+    }
+    .style-precision .tab.active::after {
+      content: "";
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 0;
+      height: 3px;
+      border-radius: 999px 999px 0 0;
+      background: linear-gradient(90deg, #c2410c, #f36c21);
+    }
+
+    /* 09 - Glass notch */
+    .style-notch .dock {
+      min-height: 75px;
+      overflow: visible;
+      margin-top: 9px;
+      border-radius: 25px;
+      background:
+        radial-gradient(circle at 13% 24%, rgba(255, 255, 255, .92), transparent 24%),
+        linear-gradient(135deg, rgba(255, 255, 255, .8), rgba(246, 235, 220, .61));
+    }
+    .style-notch .constellation-field {
+      display: block;
+      opacity: .82;
+    }
+    .style-notch .tab.active {
+      transform: translateY(-13px);
+      color: #fff;
+    }
+    .style-notch .tab.active::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      top: -2px;
+      width: 49px;
+      height: 49px;
+      border: 5px solid rgba(255, 250, 242, .82);
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 69% 24%, var(--orange) 0 1.4px, transparent 2.2px),
+        radial-gradient(circle at 27% 35%, rgba(255, 255, 255, .76) 0 1px, transparent 1.8px),
+        radial-gradient(circle at 72% 72%, rgba(255, 255, 255, .46) 0 .8px, transparent 1.6px),
+        radial-gradient(circle at 35% 18%, rgba(255, 255, 255, .22), transparent 33%),
+        var(--navy);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .18),
+        0 10px 22px rgba(7, 21, 45, .23),
+        0 0 0 1px rgba(243, 108, 33, .08);
+    }
+    .style-notch .tab.active span {
+      position: absolute;
+      top: 49px;
+      color: var(--navy);
+    }
+
+    /* 10 - Eduraa constellation */
+    .style-constellation .dock {
+      overflow: hidden;
+      border-color: rgba(255, 255, 255, .86);
+      background:
+        radial-gradient(circle at 8% 26%, rgba(243, 108, 33, .38) 0 1px, transparent 1.8px),
+        radial-gradient(circle at 37% 70%, rgba(7, 21, 45, .18) 0 1px, transparent 1.8px),
+        radial-gradient(circle at 82% 21%, rgba(243, 108, 33, .28) 0 1.2px, transparent 2px),
+        linear-gradient(135deg, rgba(255, 255, 255, .82), rgba(247, 237, 224, .63));
+      background-size: 73px 67px, 97px 79px, 89px 73px, auto;
+    }
+    .style-constellation .constellation-field { display: block; opacity: .54; }
+    .style-constellation .tab.active {
+      color: #fff;
+      background:
+        radial-gradient(circle at 68% 20%, rgba(243, 108, 33, .7) 0 1.5px, transparent 2.3px),
+        radial-gradient(circle at 25% 70%, rgba(255, 255, 255, .58) 0 1px, transparent 1.8px),
+        linear-gradient(145deg, #102746, #07152d);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 8px 22px rgba(7, 21, 45, .24);
+    }
+
+    .concept-info { padding: 19px 9px 10px; }
+    .index {
+      color: var(--rust);
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    .concept-info h2 {
+      margin: 7px 0 7px;
+      color: var(--navy);
+      font: 600 26px/1 Georgia, serif;
+      letter-spacing: -.02em;
+    }
+    .concept-info > p {
+      min-height: 46px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+    .traits { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 17px; }
+    .decision { display: flex; gap: 9px; }
+    .pick, .inspect {
+      min-height: 48px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 850;
+      cursor: pointer;
+      transition: transform .18s, background .18s, color .18s;
+    }
+    .pick {
+      flex: 1;
+      border: 0;
+      color: #fff;
+      background: var(--navy);
+    }
+    .pick:hover { background: var(--navy-2); }
+    .selected .pick { color: var(--navy); background: var(--orange); }
+    .inspect {
+      width: 49px;
+      border: 1px solid var(--line);
+      color: var(--navy);
+      background: rgba(255, 255, 255, .78);
+      font-size: 18px;
+    }
+    .pick:active, .inspect:active { transform: scale(.97); }
+
+    .modal {
+      position: fixed;
+      z-index: 100;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(7, 21, 45, .72);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    .modal.open { display: grid; }
+    .modal-card {
+      position: relative;
+      width: min(100%, 430px);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, .3);
+      border-radius: 30px;
+      background: rgba(255, 255, 255, .12);
+      box-shadow: 0 36px 100px rgba(0, 0, 0, .35);
+    }
+    .modal-card .phone { transform: scale(.9); margin-bottom: -84px; }
+    .modal-close {
+      position: absolute;
+      z-index: 110;
+      top: 10px;
+      right: 10px;
+      width: 42px;
+      height: 42px;
+      border: 1px solid rgba(255, 255, 255, .44);
+      border-radius: 50%;
+      color: #fff;
+      background: rgba(7, 21, 45, .66);
+      font-size: 20px;
+      cursor: pointer;
+    }
+    .toast {
+      position: fixed;
+      z-index: 120;
+      left: 50%;
+      bottom: 24px;
+      max-width: calc(100% - 30px);
+      transform: translate(-50%, 20px);
+      padding: 13px 18px;
+      border: 1px solid rgba(255, 255, 255, .14);
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(7, 21, 45, .94);
+      box-shadow: 0 18px 45px rgba(7, 21, 45, .3);
+      font-size: 11px;
+      font-weight: 800;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .22s, transform .22s;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 1160px) {
+      .gallery { grid-template-columns: repeat(2, minmax(330px, 1fr)); }
+      .intro-copy { grid-template-columns: 1fr; }
+      .principles { justify-content: flex-start; }
+    }
+    @media (max-width: 740px) {
+      .mast { min-height: 68px; padding: 9px 16px; }
+      .mast-status { width: 10px; height: 10px; overflow: hidden; padding: 0; border: 0; background: var(--orange); }
+      .mast-status i { display: none; }
+      .intro { padding: 48px 19px 22px; }
+      .intro h1 { letter-spacing: -.035em; }
+      .selection-bar { top: 68px; padding: 0 13px; }
+      .selection-inner { border-radius: 16px; }
+      .selection-bar button { font-size: 0; }
+      .selection-bar button::after { content: "View"; font-size: 10px; }
+      .gallery { grid-template-columns: 1fr; padding: 20px 12px 70px; }
+      .concept:hover { transform: none; }
+      .phone-stage { height: min(654px, calc(100vw * 1.68)); }
+    }
+    @media (max-width: 410px) {
+      .concept { padding: 8px; border-radius: 25px; }
+      .phone-stage { border-radius: 18px; }
+      .phone { transform: scale(.735); }
+      .concept-info { padding-inline: 8px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="mast">
+    <div class="identity">
+      <img src="assets/eduraa-book-brain.png" alt="">
+      <span><b>Eduraa AI</b><small>Product design review</small></span>
+    </div>
+    <span class="mast-status"><i></i>Footer system - Round 01</span>
+  </header>
+
+  <section class="intro">
+    <div class="eyebrow">Ten production-feasible directions</div>
+    <h1>Navigation should feel invisible until you need it.</h1>
+    <div class="intro-copy">
+      <p>Every concept uses one coherent Liquid Glass surface, five stable destinations, readable labels, and an iPhone-safe floating position. Tap the tabs to test each active state, then choose the direction that feels most like Eduraa.</p>
+      <div class="principles" aria-label="Design principles">
+        <span>One surface</span><span>44px+ targets</span><span>Safe-area aware</span><span>Readable labels</span><span>React Native feasible</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="selection-bar" aria-live="polite">
+    <div class="selection-inner">
+      <div class="selection-copy"><small>Current selection</small><b id="selectedName">01 - Signature Glass</b></div>
+      <button id="viewSelected" type="button">View selected full size</button>
+    </div>
+  </div>
+
+  <main class="gallery" id="gallery"></main>
+
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Full-size footer preview">
+    <div class="modal-card">
+      <button class="modal-close" id="modalClose" type="button" aria-label="Close preview">&times;</button>
+      <div id="modalPreview"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status">Direction selected</div>
+
+  <template id="phoneTemplate">
+    <div class="phone">
+      <div class="screen">
+        <div class="status">
+          <span>9:41</span>
+          <span class="status-icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>)))</span><span class="battery"></span></span>
+        </div>
+        <div class="screen-body">
+          <div class="screen-head">
+            <img class="brand-mark" src="assets/eduraa-book-brain.png" alt="">
+            <div><small>Assessment intelligence</small><h2>Checked library</h2></div>
+            <span class="avatar">AK</span>
+          </div>
+          <section class="signal-card">
+            <small>This week's signal</small>
+            <h3>Your latest result is moving upward.</h3>
+            <div class="signal-stats">
+              <div><b>03</b><span>Checked</span></div>
+              <div><b>+1%</b><span>Growth</span></div>
+              <div><b>00</b><span>In review</span></div>
+            </div>
+          </section>
+          <div class="section-row"><h3>Recent papers</h3><span>3 results</span></div>
+          <article class="paper-card">
+            <span class="paper-icon" data-paper-icon></span>
+            <span class="paper-copy"><b>JEE Main - Evening Shift</b><span>General - Jul 25, 2026</span></span>
+            <span class="score"><b>84</b><span>/ 300</span></span>
+          </article>
+          <article class="paper-card">
+            <span class="paper-icon" data-paper-icon></span>
+            <span class="paper-copy"><b>JEE Main - Morning Shift</b><span>General - Jul 21, 2026</span></span>
+            <span class="score"><b>71</b><span>/ 300</span></span>
+          </article>
+          <article class="paper-card">
+            <span class="paper-icon" data-paper-icon></span>
+            <span class="paper-copy"><b>Physics chapter test</b><span>Electrostatics - Jul 18, 2026</span></span>
+            <span class="score"><b>42</b><span>/ 60</span></span>
+          </article>
+        </div>
+        <div class="fade"></div>
+        <div class="dock-wrap"><nav class="dock" aria-label="Primary navigation" data-dock></nav></div>
+        <div class="home-indicator"></div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    const concepts = [
+      {
+        id: "signature",
+        name: "Signature Glass",
+        description: "A confident navy lens expands around the active destination. Strong brand recognition with excellent state clarity.",
+        traits: ["Recommended", "Ownable", "High clarity"],
+        badge: "Recommended"
+      },
+      {
+        id: "warm-lens",
+        name: "Warm Adaptive Lens",
+        description: "A softer orange-tinted lens keeps the footer warm and student-facing without turning the navigation into a CTA.",
+        traits: ["Warm", "Approachable", "Light"]
+      },
+      {
+        id: "island",
+        name: "Liquid Island",
+        description: "A compact pill-shaped dock with a horizontally expanding active island. Closest to current premium iPhone language.",
+        traits: ["iOS-forward", "Compact", "Fluid"],
+        badge: "Most iOS"
+      },
+      {
+        id: "editorial",
+        name: "Editorial Glass",
+        description: "A calm rectangular glass shelf with a precise orange crown. Serious, composed, and suitable for learners and institutions.",
+        traits: ["Refined", "Trustworthy", "Balanced"]
+      },
+      {
+        id: "halo",
+        name: "Learning Halo",
+        description: "The active icon receives a restrained warm halo while the glass surface stays quiet. Expressive without heavy blocks.",
+        traits: ["Airy", "Friendly", "Distinctive"]
+      },
+      {
+        id: "midnight",
+        name: "Midnight Glass",
+        description: "A deep translucent footer anchors information-heavy screens and gives Eduraa a mature, unmistakable navigation signature.",
+        traits: ["Premium", "High contrast", "Bold"]
+      },
+      {
+        id: "crystal",
+        name: "Layered Crystal",
+        description: "Double-layer refraction creates depth through material rather than color. The most literal interpretation of Liquid Glass.",
+        traits: ["Dimensional", "Polished", "Material-led"]
+      },
+      {
+        id: "precision",
+        name: "Precision Rail",
+        description: "A slim, efficient glass rail with an orange active underline. Ideal when maximum content space and stability matter.",
+        traits: ["Efficient", "Accessible", "Scalable"]
+      },
+      {
+        id: "notch",
+        name: "Constellation Notch",
+        description: "The selected floating notch now carries a sparse connected learning constellation through the glass, with one restrained orange signal in the active orb.",
+        traits: ["Your selection", "Tactile", "Eduraa signature"],
+        badge: "Selected mix"
+      },
+      {
+        id: "constellation",
+        name: "Eduraa Constellation",
+        description: "Subtle learning-signal points live inside the glass and navy active lens. The most ownable Eduraa-specific direction.",
+        traits: ["Brand story", "Memorable", "Expressive"],
+        badge: "Most ownable"
+      }
+    ];
+
+    const icons = {
+      home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.8 12 3l9 7.8"/><path d="M5.5 9.5V21h13V9.5"/><path d="M9.5 21v-6h5v6"/></svg>',
+      learn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5.5c3.7-1 6.5.2 8.5 2.3v12c-2-2.1-4.8-3.3-8.5-2.3z"/><path d="M20.5 5.5c-3.7-1-6.5.2-8.5 2.3v12c2-2.1 4.8-3.3 8.5-2.3z"/></svg>',
+      papers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2.8h8l4 4V21H6z"/><path d="M14 2.8v4h4M9 12h6M9 16h6"/></svg>',
+      results: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20V7"/><path d="M2 20h22"/></svg>',
+      profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.6-4.2 3.1-6.3 7.5-6.3s6.9 2.1 7.5 6.3"/></svg>',
+      paper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>'
+    };
+
+    const tabs = [
+      ["home", "Home"],
+      ["learn", "Learn"],
+      ["papers", "Papers"],
+      ["results", "Results"],
+      ["profile", "Profile"]
+    ];
+    const storageKey = "eduraa-footer-liquid-glass-theme";
+    const gallery = document.getElementById("gallery");
+    const selectedName = document.getElementById("selectedName");
+    const toast = document.getElementById("toast");
+    const modal = document.getElementById("modal");
+    const modalPreview = document.getElementById("modalPreview");
+    const phoneTemplate = document.getElementById("phoneTemplate");
+
+    function dockMarkup(active = "results") {
+      const constellation =
+        '<span class="constellation-field" aria-hidden="true">' +
+          '<svg viewBox="0 0 360 76" preserveAspectRatio="none">' +
+            '<path d="M18 51 62 24 112 43 158 18 206 48 252 28 302 49 344 19"/>' +
+            '<path d="M62 24 78 61M158 18l16 45M252 28l18 35M302 49l42-30"/>' +
+            '<circle cx="18" cy="51" r="1.4"/><circle cx="62" cy="24" r="1.8"/><circle cx="78" cy="61" r="1.2"/>' +
+            '<circle cx="112" cy="43" r="1.3"/><circle cx="158" cy="18" r="1.6"/><circle cx="174" cy="63" r="1.2"/>' +
+            '<circle class="signal" cx="206" cy="48" r="2"/><circle cx="252" cy="28" r="1.5"/><circle cx="270" cy="63" r="1.1"/>' +
+            '<circle cx="302" cy="49" r="1.5"/><circle cx="344" cy="19" r="1.7"/>' +
+          '</svg>' +
+        '</span>';
+      return constellation + tabs.map(([id, label]) => (
+        '<button class="tab ' + (id === active ? "active" : "") + '" type="button" data-tab="' + id + '" aria-label="' + label + '" aria-current="' + (id === active ? "page" : "false") + '">' +
+          icons[id] + '<span>' + label + '</span><i class="ping"></i>' +
+        '</button>'
+      )).join("");
+    }
+
+    function makePhone(styleId) {
+      const fragment = phoneTemplate.content.cloneNode(true);
+      const phone = fragment.querySelector(".phone");
+      phone.classList.add("style-" + styleId);
+      fragment.querySelectorAll("[data-paper-icon]").forEach((node) => { node.innerHTML = icons.paper; });
+      fragment.querySelector("[data-dock]").innerHTML = dockMarkup();
+      return fragment;
+    }
+
+    function buildGallery() {
+      concepts.forEach((concept, index) => {
+        const article = document.createElement("article");
+        article.className = "concept";
+        article.dataset.theme = concept.id;
+        article.innerHTML =
+          (concept.badge ? '<span class="badge">' + concept.badge + '</span>' : "") +
+          '<div class="phone-stage"></div>' +
+          '<div class="concept-info">' +
+            '<div class="index">Direction ' + String(index + 1).padStart(2, "0") + '</div>' +
+            '<h2>' + concept.name + '</h2>' +
+            '<p>' + concept.description + '</p>' +
+            '<div class="traits">' + concept.traits.map((trait) => '<span>' + trait + '</span>').join("") + '</div>' +
+            '<div class="decision">' +
+              '<button class="pick" type="button">Choose direction</button>' +
+              '<button class="inspect" type="button" aria-label="View ' + concept.name + ' full size">&#8599;</button>' +
+            '</div>' +
+          '</div>';
+        article.querySelector(".phone-stage").appendChild(makePhone(concept.id));
+        gallery.appendChild(article);
+      });
+    }
+
+    function conceptById(id) {
+      return concepts.find((concept) => concept.id === id) || concepts[0];
+    }
+
+    function selectConcept(id, announce = false) {
+      const concept = conceptById(id);
+      document.querySelectorAll(".concept").forEach((card) => {
+        const active = card.dataset.theme === concept.id;
+        card.classList.toggle("selected", active);
+        card.querySelector(".pick").textContent = active ? "Selected - saved" : "Choose direction";
+      });
+      selectedName.textContent = String(concepts.indexOf(concept) + 1).padStart(2, "0") + " - " + concept.name;
+      localStorage.setItem(storageKey, concept.id);
+      if (window.opener) {
+        window.opener.postMessage({ type: "eduraa-footer-theme", theme: concept.id }, window.location.origin);
+      }
+      if (announce) showToast(concept.name + " selected for footer implementation");
+    }
+
+    function switchTab(dock, tabId) {
+      dock.querySelectorAll(".tab").forEach((tab) => {
+        const active = tab.dataset.tab === tabId;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-current", active ? "page" : "false");
+      });
+    }
+
+    function openPreview(id) {
+      modalPreview.innerHTML = "";
+      modalPreview.appendChild(makePhone(id));
+      modal.classList.add("open");
+      document.body.style.overflow = "hidden";
+      document.getElementById("modalClose").focus();
+    }
+
+    function closePreview() {
+      modal.classList.remove("open");
+      document.body.style.overflow = "";
+      modalPreview.innerHTML = "";
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove("show"), 1900);
+    }
+
+    buildGallery();
+    const saved = localStorage.getItem(storageKey);
+    selectConcept(concepts.some((concept) => concept.id === saved) ? saved : "signature");
+
+    gallery.addEventListener("click", (event) => {
+      const tab = event.target.closest(".tab");
+      if (tab) {
+        switchTab(tab.closest(".dock"), tab.dataset.tab);
+        return;
+      }
+      const card = event.target.closest(".concept");
+      if (!card) return;
+      if (event.target.closest(".pick")) selectConcept(card.dataset.theme, true);
+      if (event.target.closest(".inspect")) openPreview(card.dataset.theme);
+    });
+
+    modal.addEventListener("click", (event) => {
+      const tab = event.target.closest(".tab");
+      if (tab) {
+        switchTab(tab.closest(".dock"), tab.dataset.tab);
+        return;
+      }
+      if (event.target === modal || event.target.closest("#modalClose")) closePreview();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && modal.classList.contains("open")) closePreview();
+    });
+    document.getElementById("viewSelected").addEventListener("click", () => {
+      openPreview(localStorage.getItem(storageKey) || "signature");
+    });
+  </script>
+</body>
+</html>

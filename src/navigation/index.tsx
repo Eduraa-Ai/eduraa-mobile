@@ -9,7 +9,7 @@ import { useAuthStore } from '../stores/authStore'
 import { colors } from '../theme/colors'
 import { fonts } from '../theme/fonts'
 import { spacing } from '../theme/spacing'
-import type { AccountMinimal } from '../types'
+import type { AccountMinimal, AuthToken } from '../types'
 import { resolveMobileLanding } from '../auth/landing'
 
 import LoginScreen from '../screens/auth/LoginScreen'
@@ -17,6 +17,7 @@ import RegisterScreen from '../screens/auth/RegisterScreen'
 import RegisterIndividualScreen from '../screens/auth/RegisterIndividualScreen'
 import RegisterSchoolScreen from '../screens/auth/RegisterSchoolScreen'
 import VerifyEmailScreen from '../screens/auth/VerifyEmailScreen'
+import RegistrationCompleteScreen from '../screens/auth/RegistrationCompleteScreen'
 import HomeScreen from '../screens/home/HomeScreen'
 import PapersScreen from '../screens/papers/PapersScreen'
 import GeneratePaperScreen from '../screens/papers/GeneratePaperScreen'
@@ -53,6 +54,7 @@ export type AuthStackParamList = {
   RegisterIndividual: undefined
   RegisterSchool: undefined
   VerifyEmail: { email: string; devOtp?: string; message?: string; deliveryChannel?: string }
+  RegistrationComplete: { authToken: AuthToken }
 }
 
 export type PapersStackParamList = {
@@ -162,6 +164,7 @@ function AuthNavigator() {
       <AuthStack.Screen name="RegisterIndividual" component={RegisterIndividualScreen} />
       <AuthStack.Screen name="RegisterSchool" component={RegisterSchoolScreen} />
       <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+      <AuthStack.Screen name="RegistrationComplete" component={RegistrationCompleteScreen} options={{ gestureEnabled: false }} />
     </AuthStack.Navigator>
   )
 }
