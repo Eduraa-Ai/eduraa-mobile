@@ -3,10 +3,11 @@ const { startBridge } = require('./dev-api-bridge.cjs')
 
 async function main() {
   const bridge = await startBridge()
+  const bridgeUrl = 'http://localhost:8001'
   const expoCli = require.resolve('expo/bin/cli')
   const expo = spawn(process.execPath, [expoCli, 'start', ...process.argv.slice(2)], {
     cwd: process.cwd(),
-    env: process.env,
+    env: { ...process.env, EXPO_PUBLIC_WEB_API_URL: bridgeUrl },
     stdio: 'inherit',
   })
 
@@ -30,6 +31,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`Could not start Eduraa web development: ${error.message}`)
+  console.error(`Could not start Eduraa development: ${error.message}`)
   process.exitCode = 1
 })

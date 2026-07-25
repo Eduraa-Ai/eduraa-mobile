@@ -6,69 +6,20 @@
 import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 import { Platform } from 'react-native'
 import { clearStoredAccessToken, readStoredAccessToken, writeStoredAccessToken } from '../auth/authStorage'
+import { resolveApiConfig } from './apiConfig'
 
-type ApiTarget = 'local' | 'prod'
+const resolvedApiConfig = resolveApiConfig({
+  platform: Platform.OS,
+  isDevelopment: __DEV__,
+  universalUrl: process.env.EXPO_PUBLIC_API_URL,
+  webUrl: process.env.EXPO_PUBLIC_WEB_API_URL,
+  nativeUrl: process.env.EXPO_PUBLIC_NATIVE_API_URL,
+  webHostname: typeof window === 'undefined' ? undefined : window.location?.hostname,
+  webProtocol: typeof window === 'undefined' ? undefined : window.location?.protocol,
+})
 
-const PROD_API_BASE_URL =
-  'https://eduraa-ai-dev-cin-api.gentleforest-0ad6efdc.centralindia.azurecontainerapps.io'
-const LOCAL_API_PORT = '8000'
-
-const normalizeApiTarget = (value?: string): ApiTarget => {
-  return value?.trim().toLowerCase() === 'prod' ? 'prod' : 'local'
-}
-
-const getWebLocalApiUrl = () => {
-  if (typeof window === 'undefined' || !window.location?.hostname) {
-    return `http://localhost:${LOCAL_API_PORT}`
-  }
-
-  return `${window.location.protocol}//${window.location.hostname}:${LOCAL_API_PORT}`
-}
-
-const normalizeUrl = (value?: string) => value?.trim().replace(/\/$/, '') || undefined
-
-const isLoopbackUrl = (value: string) => {
-  try {
-    const hostname = new URL(value).hostname.toLowerCase()
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-  } catch {
-    return false
-  }
-}
-
-const resolveApiBaseUrl = () => {
-  const target = normalizeApiTarget(process.env.EXPO_PUBLIC_API_TARGET)
-  const platformUrl = normalizeUrl(
-    Platform.OS === 'web'
-      ? process.env.EXPO_PUBLIC_WEB_API_URL
-      : process.env.EXPO_PUBLIC_NATIVE_API_URL
-  )
-  const legacyUniversalUrl = normalizeUrl(process.env.EXPO_PUBLIC_API_URL)
-  const explicitUrl = platformUrl ?? legacyUniversalUrl
-
-  if (explicitUrl) {
-    // A loopback URL in a shared .env points at the phone itself in Expo Go.
-    // Ignore it for production-native runs so a web-only bridge cannot break
-    // physical devices or emulators.
-    if (!(Platform.OS !== 'web' && target === 'prod' && isLoopbackUrl(explicitUrl))) {
-      return explicitUrl
-    }
-  }
-
-  if (target === 'prod') return PROD_API_BASE_URL
-
-  if (Platform.OS === 'web') return getWebLocalApiUrl()
-
-  // Android emulators expose the host machine through 10.0.2.2. Using
-  // localhost here points back to the emulator and makes every local API
-  // request fail even when the backend is healthy on Windows.
-  if (Platform.OS === 'android') return `http://10.0.2.2:${LOCAL_API_PORT}`
-
-  return `http://localhost:${LOCAL_API_PORT}`
-}
-
-export const API_TARGET = normalizeApiTarget(process.env.EXPO_PUBLIC_API_TARGET)
-export const API_BASE_URL = resolveApiBaseUrl()
+const API_TARGET = resolvedApiConfig.target
+export const API_BASE_URL = resolvedApiConfig.baseUrl
 
 var inMemoryAccessToken: string | null = null
 
