@@ -1,39 +1,59 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
-import { useNavigation, useRoute } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { RouteProp } from '@react-navigation/native'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import type { PapersStackParamList } from '../../navigation'
-import { papersApi } from '../../api/papers'
-import { API_BASE_URL } from '../../api/client'
-import type { AnswerEntry, MCQOption, QuestionInPaper } from '../../types'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, MathText } from '../../components/ui'
-import { colors, radius, shadows, spacing, typography } from '../../theme'
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import type { PapersStackParamList } from "../../navigation";
+import { papersApi } from "../../api/papers";
+import type { AnswerEntry, MCQOption, QuestionInPaper } from "../../types";
+import {
+  AnimatedButton,
+  AnimatedCard,
+  AppScreen,
+  ErrorState,
+  LatexText,
+  QuestionVisual,
+} from "../../components/ui";
+import { colors, radius, shadows, spacing, typography } from "../../theme";
+import { shouldShowQuestionStemText } from "../../utils/questionVisual";
 
-type Nav = NativeStackNavigationProp<PapersStackParamList, 'Quiz'>
-type Route = RouteProp<PapersStackParamList, 'Quiz'>
-type AssistMode = 'hint' | 'explain' | 'mistake'
-
-function resolveAssetUrl(url?: string | null) {
-  if (!url) return null
-  if (/^https?:\/\//i.test(url)) return url
-  return `${API_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`
-}
+type Nav = NativeStackNavigationProp<PapersStackParamList, "Quiz">;
+type Route = RouteProp<PapersStackParamList, "Quiz">;
+type AssistMode = "hint" | "explain" | "mistake";
 
 function optionLabel(index: number, option?: MCQOption) {
-  return option?.id || String.fromCharCode(65 + index)
+  return option?.id || String.fromCharCode(65 + index);
 }
 
 function answerPreview(answerKey?: string | Record<string, string> | null) {
-  if (!answerKey) return null
-  if (typeof answerKey === 'string') return answerKey
-  return Object.entries(answerKey).map(([key, value]) => `${key}: ${value}`).join(', ')
+  if (!answerKey) return null;
+  if (typeof answerKey === "string") return answerKey;
+  return Object.entries(answerKey)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(", ");
 }
 
-function isMcqOptions(options: QuestionInPaper['options']): options is MCQOption[] {
-  return Array.isArray(options)
+function isMcqOptions(
+  options: QuestionInPaper["options"],
+): options is MCQOption[] {
+  return Array.isArray(options);
 }
 
 function QuestionCard({
@@ -45,84 +65,149 @@ function QuestionCard({
   assistText,
   assistLoading,
 }: {
-  question: QuestionInPaper
-  index: number
-  answer?: string
-  onAnswer: (value: string) => void
-  onAssist: (mode: AssistMode) => void
-  assistText?: string
-  assistLoading?: boolean
+  question: QuestionInPaper;
+  index: number;
+  answer?: string;
+  onAnswer: (value: string) => void;
+  onAssist: (mode: AssistMode) => void;
+  assistText?: string;
+  assistLoading?: boolean;
 }) {
-  const imageUrl = resolveAssetUrl(question.visual_payload?.asset_url)
-  const expected = answerPreview(question.answer_key)
-  const answered = Boolean(answer?.trim())
+  const expected = answerPreview(question.answer_key);
+  const answered = Boolean(answer?.trim());
 
   return (
     <AnimatedCard style={styles.questionCard}>
       <View style={styles.questionHeader}>
         <View style={styles.questionTitleBlock}>
           <Text style={styles.questionKicker}>
-            Q{index + 1} / {[question.section, question.subject_name, question.chapter_title].filter(Boolean).join(' / ') || question.question_type}
+            Q{index + 1} /{" "}
+            {[question.section, question.subject_name, question.chapter_title]
+              .filter(Boolean)
+              .join(" / ") || question.question_type}
           </Text>
           <Text style={styles.questionMarks}>{question.marks} marks</Text>
         </View>
         <View style={[styles.statusDot, answered && styles.statusDotDone]} />
       </View>
 
-      {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.questionImage} resizeMode="contain" /> : null}
+      {question.visual_payload ? (
+        <QuestionVisual visual={question.visual_payload} />
+      ) : null}
 
-      <MathText style={styles.questionText} value={question.question_text} />
+      {shouldShowQuestionStemText(question.visual_payload, "interactive") ? (
+        <LatexText value={question.question_text} style={styles.questionText} />
+      ) : null}
 
-      {question.question_type === 'mcq' && isMcqOptions(question.options) ? (
+      {question.question_type === "mcq" && isMcqOptions(question.options) ? (
         <View style={styles.optionList}>
           {question.options.map((option, optionIndex) => {
-            const value = option.id || optionLabel(optionIndex)
-            const selected = answer === value
+            const value = option.id || optionLabel(optionIndex);
+            const selected = answer === value;
             return (
-              <Pressable key={`${question.id}-${value}`} onPress={() => onAnswer(value)} style={({ pressed }) => [styles.optionRow, selected && styles.optionSelected, pressed && styles.pressed]}>
-                <Text style={[styles.optionBadge, selected && styles.optionBadgeSelected]}>{optionLabel(optionIndex, option)}</Text>
-                <MathText style={[styles.optionText, selected && styles.optionTextSelected]} value={option.text} />
+              <Pressable
+                key={`${question.id}-${value}`}
+                onPress={() => onAnswer(value)}
+                style={({ pressed }) => [
+                  styles.optionRow,
+                  selected && styles.optionSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.optionBadge,
+                    selected && styles.optionBadgeSelected,
+                  ]}
+                >
+                  {optionLabel(optionIndex, option)}
+                </Text>
+                <LatexText
+                  value={option.text}
+                  style={[
+                    styles.optionText,
+                    selected && styles.optionTextSelected,
+                  ]}
+                  containerStyle={styles.optionTextContainer}
+                />
               </Pressable>
-            )
+            );
           })}
         </View>
       ) : null}
 
-      {question.question_type === 'true_false' ? (
+      {question.question_type === "true_false" ? (
         <View style={styles.booleanRow}>
-          {['True', 'False'].map((value) => {
-            const selected = answer === value
+          {["True", "False"].map((value) => {
+            const selected = answer === value;
             return (
-              <Pressable key={value} onPress={() => onAnswer(value)} style={({ pressed }) => [styles.booleanButton, selected && styles.booleanButtonSelected, pressed && styles.pressed]}>
-                <Text style={[styles.booleanText, selected && styles.booleanTextSelected]}>{value}</Text>
+              <Pressable
+                key={value}
+                onPress={() => onAnswer(value)}
+                style={({ pressed }) => [
+                  styles.booleanButton,
+                  selected && styles.booleanButtonSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.booleanText,
+                    selected && styles.booleanTextSelected,
+                  ]}
+                >
+                  {value}
+                </Text>
               </Pressable>
-            )
+            );
           })}
         </View>
       ) : null}
 
-      {question.question_type !== 'mcq' && question.question_type !== 'true_false' ? (
+      {question.question_type !== "mcq" &&
+      question.question_type !== "true_false" ? (
         <TextInput
-          value={answer || ''}
+          value={answer || ""}
           onChangeText={onAnswer}
           multiline
           textAlignVertical="top"
           placeholder="Write your answer"
           placeholderTextColor={colors.textSubtle}
-          style={[styles.textInput, question.question_type === 'long_answer' && styles.longInput]}
+          style={[
+            styles.textInput,
+            question.question_type === "long_answer" && styles.longInput,
+          ]}
         />
       ) : null}
 
       <View style={styles.assistRow}>
-        <Pressable onPress={() => onAssist('hint')} style={({ pressed }) => [styles.assistButton, pressed && styles.pressed]}>
+        <Pressable
+          onPress={() => onAssist("hint")}
+          style={({ pressed }) => [
+            styles.assistButton,
+            pressed && styles.pressed,
+          ]}
+        >
           <Ionicons name="bulb" size={15} color={colors.paperStudio.jee} />
           <Text style={styles.assistLabel}>Hint</Text>
         </Pressable>
-        <Pressable onPress={() => onAssist('explain')} style={({ pressed }) => [styles.assistButton, pressed && styles.pressed]}>
+        <Pressable
+          onPress={() => onAssist("explain")}
+          style={({ pressed }) => [
+            styles.assistButton,
+            pressed && styles.pressed,
+          ]}
+        >
           <Ionicons name="school" size={15} color={colors.paperStudio.jee} />
           <Text style={styles.assistLabel}>Explain</Text>
         </Pressable>
-        <Pressable onPress={() => onAssist('mistake')} style={({ pressed }) => [styles.assistButton, pressed && styles.pressed]}>
+        <Pressable
+          onPress={() => onAssist("mistake")}
+          style={({ pressed }) => [
+            styles.assistButton,
+            pressed && styles.pressed,
+          ]}
+        >
           <Ionicons name="analytics" size={15} color={colors.paperStudio.jee} />
           <Text style={styles.assistLabel}>Check</Text>
         </Pressable>
@@ -135,136 +220,174 @@ function QuestionCard({
         </View>
       ) : assistText ? (
         <View style={styles.assistPanel}>
-          <Text style={styles.assistText}>{assistText}</Text>
+          <LatexText value={assistText} style={styles.assistText} />
         </View>
       ) : null}
 
-      {expected ? <Text style={styles.answerKey}>Answer key: {expected}</Text> : null}
+      {expected ? (
+        <LatexText value={`Answer key: ${expected}`} style={styles.answerKey} />
+      ) : null}
     </AnimatedCard>
-  )
+  );
 }
 
 export default function QuizScreen() {
-  const navigation = useNavigation<Nav>()
-  const { params } = useRoute<Route>()
-  const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [assistByQuestion, setAssistByQuestion] = useState<Record<string, string>>({})
-  const [timeLeft, setTimeLeft] = useState<number | null>(null)
-  const [startTime] = useState(Date.now())
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const navigation = useNavigation<Nav>();
+  const { params } = useRoute<Route>();
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [assistByQuestion, setAssistByQuestion] = useState<
+    Record<string, string>
+  >({});
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [startTime] = useState(Date.now());
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const paperQuery = useQuery({
-    queryKey: ['interactive-paper', params.paperId],
+    queryKey: ["interactive-paper", params.paperId],
     queryFn: () => papersApi.getById(params.paperId),
-  })
+  });
 
-  const paper = paperQuery.data
+  const paper = paperQuery.data;
 
   useEffect(() => {
-    if (paper?.duration_minutes) setTimeLeft(paper.duration_minutes * 60)
-  }, [paper?.duration_minutes])
+    if (paper?.duration_minutes) setTimeLeft(paper.duration_minutes * 60);
+  }, [paper?.duration_minutes]);
 
   const answeredCount = useMemo(() => {
-    if (!paper) return 0
-    return paper.questions.filter((question) => answers[question.id]?.trim()).length
-  }, [answers, paper])
+    if (!paper) return 0;
+    return paper.questions.filter((question) => answers[question.id]?.trim())
+      .length;
+  }, [answers, paper]);
 
   const submitMutation = useMutation({
     mutationFn: (answerList: AnswerEntry[]) =>
       papersApi.submit(params.paperId, {
         answers: answerList,
         time_taken_seconds: Math.floor((Date.now() - startTime) / 1000),
-        mode: 'interactive',
+        mode: "interactive",
       }),
     onSuccess: (data) => {
-      Alert.alert('Quiz submitted', 'Your JEE practice quiz has been graded.', [
+      Alert.alert("Quiz submitted", "Your JEE practice quiz has been graded.", [
         {
-          text: 'View result',
-          onPress: () => navigation.getParent()?.navigate('Results', {
-            screen: 'ResultDetail',
-            params: { checkedPaperId: data.id },
-          }),
+          text: "View result",
+          onPress: () =>
+            navigation.getParent()?.navigate("Results", {
+              screen: "ResultDetail",
+              params: { checkedPaperId: data.id },
+            }),
         },
-        { text: 'Papers', onPress: () => navigation.navigate('PapersList') },
-      ])
+        { text: "Papers", onPress: () => navigation.navigate("PapersList") },
+      ]);
     },
     onError: async (error: any) => {
-      const status = error?.response?.status
-      const detail = error?.response?.data?.detail
+      const status = error?.response?.status;
+      const detail = error?.response?.data?.detail;
       if (status === 500) {
         try {
-          const existing = await papersApi.getSubmission(params.paperId)
+          const existing = await papersApi.getSubmission(params.paperId);
           if (existing?.id) {
-            Alert.alert('Quiz saved', 'Your answers were saved. Open Results to review grading.', [
-              {
-                text: 'View result',
-                onPress: () => navigation.getParent()?.navigate('Results', {
-                  screen: 'ResultDetail',
-                  params: { checkedPaperId: existing.id },
-                }),
-              },
-              { text: 'OK' },
-            ])
-            return
+            Alert.alert(
+              "Quiz saved",
+              "Your answers were saved. Open Results to review grading.",
+              [
+                {
+                  text: "View result",
+                  onPress: () =>
+                    navigation.getParent()?.navigate("Results", {
+                      screen: "ResultDetail",
+                      params: { checkedPaperId: existing.id },
+                    }),
+                },
+                { text: "OK" },
+              ],
+            );
+            return;
           }
         } catch (_) {
           // fall through to the normal error message
         }
       }
-      Alert.alert('Submission failed', typeof detail === 'string' ? detail : 'Please try again.')
+      Alert.alert(
+        "Submission failed",
+        typeof detail === "string" ? detail : "Please try again.",
+      );
     },
-  })
+  });
 
   const assistMutation = useMutation({
-    mutationFn: ({ questionId, mode }: { questionId: string; mode: AssistMode }) =>
+    mutationFn: ({
+      questionId,
+      mode,
+    }: {
+      questionId: string;
+      mode: AssistMode;
+    }) =>
       papersApi.getInteractiveAssist(params.paperId, {
         question_id: questionId,
         mode,
         student_answer: answers[questionId],
       }),
     onSuccess: (response, variables) => {
-      setAssistByQuestion((current) => ({ ...current, [variables.questionId]: response.content }))
+      setAssistByQuestion((current) => ({
+        ...current,
+        [variables.questionId]: response.content,
+      }));
     },
     onError: () => {
-      Alert.alert('AI support unavailable', 'Could not load help for this question.')
+      Alert.alert(
+        "AI support unavailable",
+        "Could not load help for this question.",
+      );
     },
-  })
+  });
 
-  const submit = useCallback((autoSubmit = false) => {
-    if (!paper) return
-    const answerList = paper.questions.map((question) => ({
-      question_id: question.id,
-      response: answers[question.id] || '',
-    }))
+  const submit = useCallback(
+    (autoSubmit = false) => {
+      if (!paper) return;
+      const answerList = paper.questions.map((question) => ({
+        question_id: question.id,
+        response: answers[question.id] || "",
+      }));
 
-    if (autoSubmit) {
-      submitMutation.mutate(answerList)
-      return
-    }
+      if (autoSubmit) {
+        submitMutation.mutate(answerList);
+        return;
+      }
 
-    Alert.alert('Submit quiz', `You answered ${answeredCount} of ${paper.questions.length} questions.`, [
-      { text: 'Keep working', style: 'cancel' },
-      { text: 'Submit', onPress: () => submitMutation.mutate(answerList) },
-    ])
-  }, [answeredCount, answers, paper, submitMutation])
+      Alert.alert(
+        "Submit quiz",
+        `You answered ${answeredCount} of ${paper.questions.length} questions.`,
+        [
+          { text: "Keep working", style: "cancel" },
+          { text: "Submit", onPress: () => submitMutation.mutate(answerList) },
+        ],
+      );
+    },
+    [answeredCount, answers, paper, submitMutation],
+  );
 
   useEffect(() => {
-    if (timeLeft === null || submitMutation.isPending) return
+    if (timeLeft === null || submitMutation.isPending) return;
     if (timeLeft <= 0) {
-      submit(true)
-      return
+      submit(true);
+      return;
     }
-    timerRef.current = setInterval(() => setTimeLeft((current) => (current ?? 0) - 1), 1000)
+    timerRef.current = setInterval(
+      () => setTimeLeft((current) => (current ?? 0) - 1),
+      1000,
+    );
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [submit, submitMutation.isPending, timeLeft])
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [submit, submitMutation.isPending, timeLeft]);
 
   const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60).toString().padStart(2, '0')
-    const secs = (seconds % 60).toString().padStart(2, '0')
-    return `${minutes}:${secs}`
-  }
+    const minutes = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const secs = (seconds % 60).toString().padStart(2, "0");
+    return `${minutes}:${secs}`;
+  };
 
   if (paperQuery.isLoading) {
     return (
@@ -272,47 +395,75 @@ export default function QuizScreen() {
         <ActivityIndicator color={colors.paperStudio.jee} />
         <Text style={styles.loadingText}>Loading interactive quiz</Text>
       </AppScreen>
-    )
+    );
   }
 
   if (paperQuery.isError || !paper) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
-        <ErrorState title="Could not load quiz" message="Refresh and try again." onAction={() => void paperQuery.refetch()} />
+        <ErrorState
+          title="Could not load quiz"
+          message="Refresh and try again."
+          onAction={() => void paperQuery.refetch()}
+        />
       </AppScreen>
-    )
+    );
   }
 
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={({ pressed }) => [
+            styles.headerIcon,
+            pressed && styles.pressed,
+          ]}
+        >
           <Ionicons name="chevron-back" size={22} color={colors.white} />
         </Pressable>
         <View style={styles.headerCopy}>
           <Text style={styles.headerKicker}>JEE interactive quiz</Text>
-          <Text style={styles.headerTitle} numberOfLines={1}>{paper.title}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {paper.title}
+          </Text>
         </View>
         {timeLeft !== null ? (
-          <View style={[styles.timerPill, timeLeft < 300 && styles.timerPillWarning]}>
+          <View
+            style={[
+              styles.timerPill,
+              timeLeft < 300 && styles.timerPillWarning,
+            ]}
+          >
             <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
           </View>
         ) : null}
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <AnimatedCard style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <View>
               <Text style={styles.summaryKicker}>Progress</Text>
-              <Text style={styles.summaryTitle}>{answeredCount}/{paper.questions.length} answered</Text>
+              <Text style={styles.summaryTitle}>
+                {answeredCount}/{paper.questions.length} answered
+              </Text>
             </View>
             <View style={styles.marksPill}>
               <Text style={styles.marksText}>{paper.total_marks} marks</Text>
             </View>
           </View>
-          {paper.instructions ? <Text style={styles.instructions}>{paper.instructions}</Text> : null}
-          <AnimatedButton label={submitMutation.isPending ? 'Submitting...' : 'Submit quiz'} loading={submitMutation.isPending} onPress={() => submit()} />
+          {paper.instructions ? (
+            <Text style={styles.instructions}>{paper.instructions}</Text>
+          ) : null}
+          <AnimatedButton
+            label={submitMutation.isPending ? "Submitting..." : "Submit quiz"}
+            loading={submitMutation.isPending}
+            onPress={() => submit()}
+          />
         </AnimatedCard>
 
         {paper.questions.map((question, index) => (
@@ -321,15 +472,22 @@ export default function QuizScreen() {
             question={question}
             index={index}
             answer={answers[question.id]}
-            onAnswer={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))}
-            onAssist={(mode) => assistMutation.mutate({ questionId: question.id, mode })}
+            onAnswer={(value) =>
+              setAnswers((current) => ({ ...current, [question.id]: value }))
+            }
+            onAssist={(mode) =>
+              assistMutation.mutate({ questionId: question.id, mode })
+            }
             assistText={assistByQuestion[question.id]}
-            assistLoading={assistMutation.isPending && assistMutation.variables?.questionId === question.id}
+            assistLoading={
+              assistMutation.isPending &&
+              assistMutation.variables?.questionId === question.id
+            }
           />
         ))}
       </ScrollView>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -338,8 +496,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   center: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing[3],
   },
   loadingText: {
@@ -347,8 +505,8 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[3],
     paddingTop: spacing[8],
     paddingHorizontal: spacing[4],
@@ -359,18 +517,18 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
   },
   headerCopy: {
     flex: 1,
   },
   headerKicker: {
-    color: 'rgba(255,255,255,0.72)',
+    color: "rgba(255,255,255,0.72)",
     fontFamily: typography.fonts.bodyBold,
     fontSize: 11,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   headerTitle: {
     color: colors.white,
@@ -379,12 +537,12 @@ const styles = StyleSheet.create({
   },
   timerPill: {
     borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: "rgba(255,255,255,0.16)",
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
   },
   timerPillWarning: {
-    backgroundColor: 'rgba(239,68,68,0.35)',
+    backgroundColor: "rgba(239,68,68,0.35)",
   },
   timerText: {
     color: colors.white,
@@ -400,9 +558,9 @@ const styles = StyleSheet.create({
     gap: spacing[4],
   },
   summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     gap: spacing[3],
   },
   summaryKicker: {
@@ -433,8 +591,8 @@ const styles = StyleSheet.create({
     gap: spacing[3],
   },
   questionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     gap: spacing[3],
   },
   questionTitleBlock: {
@@ -444,7 +602,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
     fontSize: 11,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   questionMarks: {
     color: colors.paperStudio.jee,
@@ -462,12 +620,6 @@ const styles = StyleSheet.create({
   statusDotDone: {
     backgroundColor: colors.success,
   },
-  questionImage: {
-    width: '100%',
-    minHeight: 220,
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
-  },
   questionText: {
     ...typography.roles.body,
     color: colors.text,
@@ -476,8 +628,8 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   optionRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: spacing[3],
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -493,7 +645,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: radius.full,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 26,
     color: colors.textMuted,
     backgroundColor: colors.surface3,
@@ -505,18 +657,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paperStudio.jee,
   },
   optionText: {
-    flex: 1,
     color: colors.textSecondary,
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 14,
     lineHeight: 20,
+  },
+  optionTextContainer: {
+    flex: 1,
   },
   optionTextSelected: {
     color: colors.text,
     fontFamily: typography.fonts.bodyBold,
   },
   booleanRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing[3],
   },
   booleanButton: {
@@ -526,8 +680,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   booleanButtonSelected: {
     backgroundColor: colors.paperStudio.jee,
@@ -557,7 +711,7 @@ const styles = StyleSheet.create({
     minHeight: 140,
   },
   assistRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing[2],
   },
   assistButton: {
@@ -565,9 +719,9 @@ const styles = StyleSheet.create({
     minHeight: 40,
     borderRadius: radius.full,
     backgroundColor: colors.warningSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
     gap: spacing[1],
   },
   assistLabel: {
@@ -593,4 +747,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.78,
   },
-})
+});

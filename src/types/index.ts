@@ -127,8 +127,13 @@ export interface RubricItem {
 export interface QuestionVisualPayload {
   kind: string;
   asset_url?: string | null;
+  asset_urls?: string[];
   alt_text?: string | null;
   source_figure_id?: string | null;
+  source_figure_ids?: string[];
+  captions?: string[];
+  placement?: string | null;
+  layout?: string | null;
   figure_type?: string | null;
   page_number?: number | null;
 }
@@ -236,13 +241,16 @@ export interface PaperGenerateRequest {
     target_marks?: number;
   };
   blueprint_sections?: Array<{
-    id?: string;
+    id: string;
     title: string;
     question_type: string;
-    custom_type_name?: string;
-    marks: number;
-    count: number;
     order?: number;
+    slots: Array<{
+      id: string;
+      question_type: string;
+      marks: number;
+      is_placeholder?: boolean;
+    }>;
   }>;
 }
 
