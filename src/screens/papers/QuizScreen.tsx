@@ -4,13 +4,15 @@ import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RouteProp } from '@react-navigation/native'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PapersStackParamList } from '../../navigation'
 import { papersApi } from '../../api/papers'
 import { API_BASE_URL } from '../../api/client'
 import type { AnswerEntry, MCQOption, QuestionInPaper } from '../../types'
 import { AnimatedButton, AnimatedCard, AppScreen, ErrorState } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
+import { readableMathText } from '../../utils/mathText'
+import { selectNewestInProgressAttempt, toggleSelectableAnswer } from './paperAttemptModel'
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, 'Quiz'>
 type Route = RouteProp<PapersStackParamList, 'Quiz'>
@@ -24,12 +26,6 @@ function resolveAssetUrl(url?: string | null) {
 
 function optionLabel(index: number, option?: MCQOption) {
   return option?.id || String.fromCharCode(65 + index)
-}
-
-function answerPreview(answerKey?: string | Record<string, string> | null) {
-  if (!answerKey) return null
-  if (typeof answerKey === 'string') return answerKey
-  return Object.entries(answerKey).map(([key, value]) => `${key}: ${value}`).join(', ')
 }
 
 function isMcqOptions(options: QuestionInPaper['options']): options is MCQOption[] {
@@ -54,7 +50,6 @@ function QuestionCard({
   assistLoading?: boolean
 }) {
   const imageUrl = resolveAssetUrl(question.visual_payload?.asset_url)
-  const expected = answerPreview(question.answer_key)
   const answered = Boolean(answer?.trim())
 
   return (
@@ -71,7 +66,7 @@ function QuestionCard({
 
       {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.questionImage} resizeMode="contain" /> : null}
 
-      <Text style={styles.questionText}>{question.question_text}</Text>
+      <Text style={styles.questionText}>{readableMathText(question.question_text)}</Text>
 
       {question.question_type === 'mcq' && isMcqOptions(question.options) ? (
         <View style={styles.optionList}>
@@ -79,9 +74,17 @@ function QuestionCard({
             const value = option.id || optionLabel(optionIndex)
             const selected = answer === value
             return (
-              <Pressable key={`${question.id}-${value}`} onPress={() => onAnswer(value)} style={({ pressed }) => [styles.optionRow, selected && styles.optionSelected, pressed && styles.pressed]}>
+              <Pressable
+                key={`${question.id}-${value}`}
+                onPress={() => onAnswer(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Question ${index + 1}, option ${optionLabel(optionIndex, option)}: ${readableMathText(option.text)}`}
+                accessibilityHint={selected ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
+                style={({ pressed }) => [styles.optionRow, selected && styles.optionSelected, pressed && styles.pressed]}
+              >
                 <Text style={[styles.optionBadge, selected && styles.optionBadgeSelected]}>{optionLabel(optionIndex, option)}</Text>
-                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{option.text}</Text>
+                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{readableMathText(option.text)}</Text>
               </Pressable>
             )
           })}
@@ -93,7 +96,14 @@ function QuestionCard({
           {['True', 'False'].map((value) => {
             const selected = answer === value
             return (
-              <Pressable key={value} onPress={() => onAnswer(value)} style={({ pressed }) => [styles.booleanButton, selected && styles.booleanButtonSelected, pressed && styles.pressed]}>
+              <Pressable
+                key={value}
+                onPress={() => onAnswer(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityHint={selected ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
+                style={({ pressed }) => [styles.booleanButton, selected && styles.booleanButtonSelected, pressed && styles.pressed]}
+              >
                 <Text style={[styles.booleanText, selected && styles.booleanTextSelected]}>{value}</Text>
               </Pressable>
             )
@@ -135,11 +145,10 @@ function QuestionCard({
         </View>
       ) : assistText ? (
         <View style={styles.assistPanel}>
-          <Text style={styles.assistText}>{assistText}</Text>
+          <Text style={styles.assistText}>{readableMathText(assistText)}</Text>
         </View>
       ) : null}
 
-      {expected ? <Text style={styles.answerKey}>Answer key: {expected}</Text> : null}
     </AnimatedCard>
   )
 }
@@ -147,10 +156,10 @@ function QuestionCard({
 export default function QuizScreen() {
   const navigation = useNavigation<Nav>()
   const { params } = useRoute<Route>()
+  const queryClient = useQueryClient()
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [assistByQuestion, setAssistByQuestion] = useState<Record<string, string>>({})
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
-  const [startTime] = useState(Date.now())
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const paperQuery = useQuery({
@@ -160,9 +169,37 @@ export default function QuizScreen() {
 
   const paper = paperQuery.data
 
+  const attemptQuery = useQuery({
+    queryKey: ['paper-attempt', params.paperId, params.examId, 'interactive-quiz'],
+    queryFn: async () => {
+      const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
+      const inProgress = selectNewestInProgressAttempt(attempts.items)
+      return inProgress ?? papersApi.createAttempt(params.paperId, {
+        exam_id: params.examId,
+        reason: 'interactive_quiz',
+      })
+    },
+    enabled: Boolean(paper),
+  })
+
+  const activeAttempt = attemptQuery.data
+
   useEffect(() => {
-    if (paper?.duration_minutes) setTimeLeft(paper.duration_minutes * 60)
-  }, [paper?.duration_minutes])
+    if (!paper?.duration_minutes || !activeAttempt) {
+      setTimeLeft(null)
+      return
+    }
+    const startedAt = Date.parse(activeAttempt.started_at || activeAttempt.created_at)
+    const elapsedSeconds = Number.isFinite(startedAt) ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0
+    setTimeLeft(Math.max(0, paper.duration_minutes * 60 - elapsedSeconds))
+  }, [activeAttempt, paper?.duration_minutes])
+
+  const elapsedSeconds = useCallback(() => {
+    if (!activeAttempt) return 0
+    const startedAt = Date.parse(activeAttempt.started_at || activeAttempt.created_at)
+    if (!Number.isFinite(startedAt)) return 0
+    return Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+  }, [activeAttempt])
 
   const answeredCount = useMemo(() => {
     if (!paper) return 0
@@ -170,13 +207,20 @@ export default function QuizScreen() {
   }, [answers, paper])
 
   const submitMutation = useMutation({
-    mutationFn: (answerList: AnswerEntry[]) =>
+    mutationFn: (answerList: AnswerEntry[]) => {
+      if (!activeAttempt) throw new Error('Quiz attempt is not ready')
+      return (
       papersApi.submit(params.paperId, {
         answers: answerList,
-        time_taken_seconds: Math.floor((Date.now() - startTime) / 1000),
-        mode: 'interactive',
-      }),
-    onSuccess: (data) => {
+        attempt_id: activeAttempt.id,
+        exam_id: params.examId,
+        time_taken_seconds: elapsedSeconds(),
+        mode: 'interactive_quiz',
+      })
+      )
+    },
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ['paper-attempt', params.paperId] })
       Alert.alert('Quiz submitted', 'Your JEE practice quiz has been graded.', [
         {
           text: 'View result',
@@ -193,8 +237,11 @@ export default function QuizScreen() {
       const detail = error?.response?.data?.detail
       if (status === 500) {
         try {
-          const existing = await papersApi.getSubmission(params.paperId)
-          if (existing?.id) {
+          const existing = await papersApi.getSubmission(params.paperId, {
+            exam_id: params.examId,
+            attempt_id: activeAttempt?.id,
+          })
+          if (existing?.id && existing.id === activeAttempt?.id) {
             Alert.alert('Quiz saved', 'Your answers were saved. Open Results to review grading.', [
               {
                 text: 'View result',
@@ -266,19 +313,23 @@ export default function QuizScreen() {
     return `${minutes}:${secs}`
   }
 
-  if (paperQuery.isLoading) {
+  if (paperQuery.isLoading || attemptQuery.isLoading) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
         <ActivityIndicator color={colors.paperStudio.jee} />
-        <Text style={styles.loadingText}>Loading interactive quiz</Text>
+        <Text style={styles.loadingText}>{paperQuery.isLoading ? 'Loading interactive quiz' : 'Preparing your quiz attempt'}</Text>
       </AppScreen>
     )
   }
 
-  if (paperQuery.isError || !paper) {
+  if (paperQuery.isError || !paper || attemptQuery.isError || !activeAttempt) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
-        <ErrorState title="Could not load quiz" message="Refresh and try again." onAction={() => void paperQuery.refetch()} />
+        <ErrorState
+          title={paperQuery.isError || !paper ? 'Could not load quiz' : 'Could not prepare this attempt'}
+          message="Your answers are safe. Refresh and try again."
+          onAction={() => void (paperQuery.isError || !paper ? paperQuery.refetch() : attemptQuery.refetch())}
+        />
       </AppScreen>
     )
   }
@@ -311,7 +362,7 @@ export default function QuizScreen() {
               <Text style={styles.marksText}>{paper.total_marks} marks</Text>
             </View>
           </View>
-          {paper.instructions ? <Text style={styles.instructions}>{paper.instructions}</Text> : null}
+          {paper.instructions ? <Text style={styles.instructions}>{readableMathText(paper.instructions)}</Text> : null}
           <AnimatedButton label={submitMutation.isPending ? 'Submitting...' : 'Submit quiz'} loading={submitMutation.isPending} onPress={() => submit()} />
         </AnimatedCard>
 
@@ -321,7 +372,14 @@ export default function QuizScreen() {
             question={question}
             index={index}
             answer={answers[question.id]}
-            onAnswer={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))}
+            onAnswer={(value) => {
+              const isSelectable = question.question_type === 'mcq' || question.question_type === 'true_false'
+              setAnswers((current) => (
+                isSelectable
+                  ? toggleSelectableAnswer(current, question.id, value)
+                  : { ...current, [question.id]: value }
+              ))
+            }}
             onAssist={(mode) => assistMutation.mutate({ questionId: question.id, mode })}
             assistText={assistByQuestion[question.id]}
             assistLoading={assistMutation.isPending && assistMutation.variables?.questionId === question.id}

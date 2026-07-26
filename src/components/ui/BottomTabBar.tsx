@@ -22,6 +22,7 @@ const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   Exams: 'calendar-outline',
   Papers: 'document-text-outline',
   Results: 'bar-chart-outline',
+  PreviousPapers: 'documents-outline',
   ScanUpload: 'scan-outline',
   Attendance: 'today-outline',
   AIStudio: 'sparkles-outline',
@@ -34,6 +35,28 @@ const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   StaffPapers: 'document-text-outline',
   StaffResults: 'bar-chart-outline',
   StaffAIStudio: 'sparkles-outline',
+}
+
+function RouteIcon({
+  color,
+  routeName,
+}: {
+  color: string
+  routeName?: string
+}) {
+  const icon = iconByRoute[routeName ?? ''] ?? 'ellipse-outline'
+  if (routeName !== 'PreviousPapers') {
+    return <Ionicons name={icon} size={20} color={color} />
+  }
+
+  return (
+    <View style={styles.previousPapersIcon}>
+      <Ionicons name={icon} size={20} color={color} />
+      <View style={[styles.previousPapersClock, color === 'transparent' && styles.iconHidden]}>
+        <Ionicons name="time" size={8} color={colors.white} />
+      </View>
+    </View>
+  )
 }
 
 const fullScreenNestedRoutes = new Set(['AttemptPaper', 'Quiz', 'AIStudio', 'StaffAIStudio'])
@@ -102,24 +125,35 @@ function ConstellationField() {
 }
 
 interface TabItemProps {
-  icon: keyof typeof Ionicons.glyphMap
+  accessibilityLabel: string
   isFocused: boolean
   isPreviewed: boolean
   label: string
   onLongPress: () => void
   onPress: () => void
+  routeName: string
   testID?: string
   width: number
 }
 
-function TabItem({ icon, isFocused, isPreviewed, label, onLongPress, onPress, testID, width }: TabItemProps) {
+function TabItem({
+  accessibilityLabel,
+  isFocused,
+  isPreviewed,
+  label,
+  onLongPress,
+  onPress,
+  routeName,
+  testID,
+  width,
+}: TabItemProps) {
   return (
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityRole="tab"
       accessibilityState={{ selected: isFocused }}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel}
       hitSlop={{ top: 10, bottom: 2, left: 2, right: 2 }}
       testID={testID}
       style={({ pressed }) => [
@@ -129,9 +163,8 @@ function TabItem({ icon, isFocused, isPreviewed, label, onLongPress, onPress, te
       ]}
     >
       <View pointerEvents="none" style={styles.iconStage}>
-        <Ionicons
-          name={icon}
-          size={20}
+        <RouteIcon
+          routeName={routeName}
           color={isPreviewed ? 'transparent' : colors.textSecondary}
         />
       </View>
@@ -159,7 +192,7 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   const shellWidth = Math.min(MAX_SHELL_WIDTH, Math.max(MIN_SHELL_WIDTH, windowWidth - SHELL_INSET * 2))
   const availableTabWidth = shellWidth - SHELL_EDGE_PADDING * 2
-  const fitsWithoutScrolling = state.routes.length <= 5
+  const fitsWithoutScrolling = state.routes.length <= 6
   const itemWidth = fitsWithoutScrolling
     ? availableTabWidth / Math.max(1, state.routes.length)
     : SCROLLING_ITEM_WIDTH
@@ -171,7 +204,7 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
       SHELL_EDGE_PADDING + state.index * itemWidth + (itemWidth - ACTIVE_ORB_SIZE) / 2,
     ),
   ).current
-  const activeIcon = iconByRoute[state.routes[previewIndex]?.name] ?? 'ellipse-outline'
+  const activeRouteName = state.routes[previewIndex]?.name
   const indicatorPositionForIndex = useCallback(
     (index: number) => SHELL_EDGE_PADDING + index * itemWidth + (itemWidth - ACTIVE_ORB_SIZE) / 2,
     [itemWidth],
@@ -367,7 +400,7 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
               <View style={styles.orbWhiteStar} />
               <View style={styles.orbWhiteStarSmall} />
               <View style={styles.orbOrangeSignal} />
-              <Ionicons name={activeIcon} size={20} color={colors.white} />
+              <RouteIcon routeName={activeRouteName} color={colors.white} />
             </LinearGradient>
           </Animated.View>
           {state.routes.map((route, index) => {
@@ -380,6 +413,8 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
                 : typeof options?.title === 'string'
                   ? options.title
                   : route.name
+            const accessibilityLabel =
+              options?.tabBarAccessibilityLabel ?? label
 
             const onPress = () => {
               const event = navigation.emit({
@@ -403,12 +438,13 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
             return (
               <TabItem
                 key={route.key}
-                icon={iconByRoute[route.name] ?? 'ellipse-outline'}
+                accessibilityLabel={accessibilityLabel}
                 isFocused={isFocused}
                 isPreviewed={isPreviewed}
                 label={label}
                 onLongPress={onLongPress}
                 onPress={onPress}
+                routeName={route.name}
                 testID={options?.tabBarTestID}
                 width={itemWidth}
               />
@@ -480,7 +516,7 @@ const styles = StyleSheet.create({
   item: {
     position: 'relative',
     height: SHELL_HEIGHT,
-    minWidth: 52,
+    minWidth: 44,
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: 6,
@@ -501,7 +537,7 @@ const styles = StyleSheet.create({
   slidingIndicator: {
     position: 'absolute',
     left: 0,
-    top: -6,
+    top: 1,
     width: ACTIVE_ORB_SIZE,
     height: ACTIVE_ORB_SIZE,
     zIndex: 4,
@@ -573,6 +609,29 @@ const styles = StyleSheet.create({
   labelFocused: {
     color: '#07152d',
     fontWeight: '900',
+  },
+  previousPapersIcon: {
+    position: 'relative',
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previousPapersClock: {
+    position: 'absolute',
+    right: -2,
+    bottom: -1,
+    width: 12,
+    height: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.backgroundElevated,
+    backgroundColor: colors.accent,
+  },
+  iconHidden: {
+    opacity: 0,
   },
 })
 

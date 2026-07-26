@@ -188,6 +188,7 @@ export interface PaperListItem {
   status: PaperStatus;
   created_at: string;
   question_count?: number;
+  is_submitted_by_me?: boolean;
 }
 
 export interface PaperGenerateRequest {
@@ -255,6 +256,7 @@ export interface AnswerEntry {
 
 export interface PaperSubmissionCreate {
   answers: AnswerEntry[];
+  attempt_id?: string;
   exam_id?: string;
   misconduct_report?: Record<string, unknown>;
   mode?: string;
@@ -276,6 +278,11 @@ export interface PaperSubmissionRead {
   student_id?: string;
   b2c_student_id?: string;
   exam_id?: string;
+  attempt_number?: number;
+  retest_of_submission_id?: string;
+  started_at?: string;
+  submitted_at?: string;
+  checked_at?: string;
   answers: AnswerEntry[];
   total_score?: number;
   max_score?: number;
@@ -285,9 +292,15 @@ export interface PaperSubmissionRead {
   feedback?: string;
   results: QuestionResult[];
   results_visible_to_student: boolean;
+  grading_status?: string;
+  checking_progress_percent?: number;
   misconduct_report?: Record<string, unknown>;
   misconduct_score?: number;
   created_at: string;
+}
+
+export interface PaperAttemptsResponse {
+  items: PaperSubmissionRead[];
 }
 
 // ─── Exams ────────────────────────────────────────────────────────────────────

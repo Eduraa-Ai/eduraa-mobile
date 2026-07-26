@@ -1,23 +1,42 @@
 import React, { ReactNode, useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectField, SelectableChip, TextInputField } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectField, SelectableChip, SkeletonCard, TextInputField } from '../../components/ui'
 import { examsApi, ExamPayload } from '../../api/exams'
+import { checkedPapersApi } from '../../api/checkedPapers'
+import { papersApi } from '../../api/papers'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import type { Exam, PaperListItem, Role, StudentExamRead, StudentExamPaper } from '../../types'
+import { presentPdf } from '../../utils/pdfDownload'
+import {
+  selectNewestDownloadableAttempt,
+  selectNewestRetestableAttempt,
+} from './examWorkspaceModel'
 
 type ExamTab = 'teacher' | 'practice'
+type LearnerPaperTarget = {
+  paperId: string
+  title: string
+  examId?: string
+  submitted: boolean
+  ownedPractice: boolean
+}
+type LearnerPaperAction = 'download' | 'retest' | 'delete'
+type ActionNotice = {
+  tone: 'success' | 'error'
+  message: string
+}
+type ActionConfirmation = {
+  action: 'retest' | 'delete'
+  target: LearnerPaperTarget
+}
 type SubjectVisual = {
   icon: keyof typeof Ionicons.glyphMap
   tone: string
 }
-
-const papersHeaderImage = require('../../../assets/papers-header-bg.png')
 
 const adminRoles: Role[] = ['admin', 'developer', 'principal', 'school_super_admin', 'branch_admin']
 const fallbackSubjectVisual: SubjectVisual = { icon: 'document-text-outline', tone: colors.accent }
@@ -49,7 +68,10 @@ function formatDate(value?: string | null) {
 }
 
 function extractDetail(error: unknown, fallback: string) {
-  return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || fallback
+  const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (error instanceof Error && error.message.trim()) return error.message
+  return fallback
 }
 
 function compact(parts: Array<string | number | null | undefined>) {
@@ -101,8 +123,14 @@ function SectionHeader({ title, subtitle, count }: { title: string; subtitle: st
 
 function ExamModeButton({ label, icon, selected, onPress }: { label: string; icon: keyof typeof Ionicons.glyphMap; selected: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.examModeButton, selected && styles.examModeButtonActive, pressed && styles.pressed]}>
-      <Ionicons name={icon} size={16} color={selected ? colors.white : colors.textMuted} />
+    <Pressable
+      accessibilityLabel={`${label} exams`}
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.examModeButton, selected && styles.examModeButtonActive, pressed && styles.pressed]}
+    >
+      <Ionicons name={icon} size={16} color={selected ? colors.accent : colors.textMuted} />
       <Text style={[styles.examModeText, selected && styles.examModeTextActive]}>{label}</Text>
     </Pressable>
   )
@@ -113,8 +141,8 @@ function ExamWorkspaceHero({
   isB2C,
   teacherCount,
   practiceCount,
-  paperCount,
-  completedCount,
+  teacherCompletedCount,
+  practiceCompletedCount,
   onTeacher,
   onPractice,
 }: {
@@ -122,42 +150,30 @@ function ExamWorkspaceHero({
   isB2C: boolean
   teacherCount: number
   practiceCount: number
-  paperCount: number
-  completedCount: number
+  teacherCompletedCount: number
+  practiceCompletedCount: number
   onTeacher: () => void
   onPractice: () => void
 }) {
-  const totalItems = teacherCount + practiceCount
-  const focusLabel = activeTab === 'practice' || isB2C ? 'Practice workspace' : 'Teacher assessment'
-  const focusBody = activeTab === 'practice' || isB2C
-    ? 'Open generated papers, keep pace, and submit when your review is clean.'
-    : 'Start assigned exams with a focused timer, paper selection, and review flow.'
+  const focusLabel = activeTab === 'practice' || isB2C ? 'Practice papers' : 'Teacher papers'
+  const queueSummary = activeTab === 'practice' || isB2C
+    ? practiceCount
+      ? `${practiceCount} practice ${practiceCount === 1 ? 'paper' : 'papers'} · ${practiceCompletedCount} submitted`
+      : 'Your practice queue is clear'
+    : teacherCount
+      ? `${teacherCount} assigned ${teacherCount === 1 ? 'exam' : 'exams'} · ${teacherCompletedCount} ${teacherCompletedCount === 1 ? 'paper' : 'papers'} submitted`
+      : 'No teacher exams assigned'
 
   return (
-    <LinearGradient colors={[colors.slate[950], colors.slate[900], '#20130d']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.examHero}>
+    <View style={styles.examHero}>
+      <View style={styles.examQueueRail} />
       <View style={styles.examHeroTop}>
         <View style={styles.examHeroIcon}>
           <Ionicons name="school-outline" size={20} color={colors.accent} />
         </View>
         <View style={styles.examHeroCopy}>
-          <Text style={styles.examHeroKicker}>Exam workspace</Text>
+          <Text style={styles.examHeroKicker}>Exam queue · {queueSummary}</Text>
           <Text style={styles.examHeroTitle}>{focusLabel}</Text>
-        </View>
-      </View>
-      <Text style={styles.examHeroBody}>{focusBody}</Text>
-
-      <View style={styles.examHeroStats}>
-        <View style={styles.examHeroStat}>
-          <Text style={styles.examHeroValue}>{totalItems}</Text>
-          <Text style={styles.examHeroLabel}>Exams</Text>
-        </View>
-        <View style={styles.examHeroStat}>
-          <Text style={styles.examHeroValue}>{paperCount}</Text>
-          <Text style={styles.examHeroLabel}>Papers</Text>
-        </View>
-        <View style={styles.examHeroStat}>
-          <Text style={styles.examHeroValue}>{completedCount}</Text>
-          <Text style={styles.examHeroLabel}>Done</Text>
         </View>
       </View>
 
@@ -167,41 +183,13 @@ function ExamWorkspaceHero({
           <ExamModeButton label="Practice" icon="flash-outline" selected={activeTab === 'practice'} onPress={onPractice} />
         </View>
       ) : null}
-    </LinearGradient>
-  )
-}
-
-function ExamsPhotoHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  const insets = useSafeAreaInsets()
-
-  return (
-    <View style={[styles.photoHeaderWrap, { paddingTop: insets.top }]}>
-      <View style={styles.headerImage}>
-        <Image source={papersHeaderImage} resizeMode="cover" style={styles.headerPhoto} />
-        <LinearGradient
-          colors={['rgba(2,6,23,0.90)', 'rgba(15,23,42,0.38)', 'rgba(194,65,12,0)']}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View pointerEvents="none" style={styles.headerWarmVeil} />
-        <View style={styles.photoHeaderContent}>
-          <View style={styles.photoHeaderCopy}>
-            <Text style={styles.photoHeaderTitle}>{title}</Text>
-            <Text style={styles.photoHeaderSubtitle}>{subtitle}</Text>
-          </View>
-          <View style={styles.photoHeaderIcon}>
-            <Ionicons name="document-text-outline" size={20} color={colors.white} />
-          </View>
-        </View>
-      </View>
     </View>
   )
 }
 
-function openPaperAttempt(navigation: any, paperId: string, examId?: string | null) {
+function openPaperAttempt(navigation: any, paperId: string, examId?: string | null, launchKey?: string) {
   const parent = navigation.getParent?.()
-  const params = { screen: 'AttemptPaper', params: { paperId, examId: examId || undefined } }
+  const params = { screen: 'AttemptPaper', params: { paperId, examId: examId || undefined, launchKey } }
 
   if (routeNames(navigation).includes('Papers')) {
     navigation.navigate('Papers', params)
@@ -219,10 +207,282 @@ function openPaperAttempt(navigation: any, paperId: string, examId?: string | nu
     parent.navigate('StaffPapers', params)
     return
   }
-  navigation.navigate('AttemptPaper', { paperId, examId: examId || undefined })
+  navigation.navigate('AttemptPaper', { paperId, examId: examId || undefined, launchKey })
 }
 
-function LearnerExamCard({ exam, onOpenPaper }: { exam: StudentExamRead; onOpenPaper: (paper: StudentExamPaper) => void }) {
+function PaperActionButton({
+  label,
+  icon,
+  tone = 'default',
+  disabled,
+  loading,
+  onPress,
+  hint,
+}: {
+  label: string
+  icon: keyof typeof Ionicons.glyphMap
+  tone?: 'default' | 'primary' | 'danger'
+  disabled?: boolean
+  loading?: boolean
+  onPress: () => void
+  hint?: string
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
+      accessibilityState={{ disabled: Boolean(disabled), busy: Boolean(loading) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.paperActionButton,
+        tone === 'danger' && styles.paperActionButtonDanger,
+        disabled && styles.paperActionButtonDisabled,
+        pressed && !disabled && styles.pressed,
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={tone === 'danger' ? colors.danger : tone === 'primary' ? colors.accent : colors.text} />
+      ) : (
+        <Ionicons name={icon} size={16} color={tone === 'danger' ? colors.danger : tone === 'primary' ? colors.accent : colors.textMuted} />
+      )}
+      <Text style={[styles.paperActionText, tone === 'primary' && styles.paperActionTextPrimary, tone === 'danger' && styles.paperActionTextDanger]}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
+function LearnerPaperActions({
+  target,
+  busyAction,
+  onOpen,
+  onMore,
+}: {
+  target: LearnerPaperTarget
+  busyAction?: LearnerPaperAction
+  onOpen: () => void
+  onMore: () => void
+}) {
+  const hasSecondaryActions = target.submitted || target.ownedPractice
+
+  return (
+    <View style={styles.paperActions}>
+      <PaperActionButton
+        label={target.submitted ? 'Open' : 'Start'}
+        icon="arrow-forward-outline"
+        tone="primary"
+        onPress={onOpen}
+      />
+      {hasSecondaryActions ? (
+        <PaperActionButton
+          label="More"
+          icon="ellipsis-horizontal-outline"
+          disabled={Boolean(busyAction)}
+          hint="Shows download, retest, and owned-paper controls."
+          onPress={onMore}
+        />
+      ) : null}
+    </View>
+  )
+}
+
+function PaperActionsSheet({
+  target,
+  busyAction,
+  onClose,
+  onDownload,
+  onRetest,
+  onDelete,
+}: {
+  target: LearnerPaperTarget | null
+  busyAction?: LearnerPaperAction
+  onClose: () => void
+  onDownload: (target: LearnerPaperTarget) => void
+  onRetest: (target: LearnerPaperTarget) => void
+  onDelete: (target: LearnerPaperTarget) => void
+}) {
+  if (!target) return null
+
+  const action = (
+    label: string,
+    body: string,
+    icon: keyof typeof Ionicons.glyphMap,
+    actionKey: LearnerPaperAction,
+    onPress: () => void,
+    danger = false,
+  ) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ busy: busyAction === actionKey, disabled: Boolean(busyAction) }}
+      disabled={Boolean(busyAction)}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.sheetAction,
+        danger && styles.sheetActionDanger,
+        pressed && !busyAction && styles.pressed,
+      ]}
+    >
+      <View style={[styles.sheetActionIcon, danger && styles.sheetActionIconDanger]}>
+        {busyAction === actionKey ? (
+          <ActivityIndicator size="small" color={danger ? colors.danger : colors.accent} />
+        ) : (
+          <Ionicons name={icon} size={20} color={danger ? colors.danger : colors.accent} />
+        )}
+      </View>
+      <View style={styles.sheetActionCopy}>
+        <Text style={[styles.sheetActionTitle, danger && styles.sheetActionTitleDanger]}>{label}</Text>
+        <Text style={styles.sheetActionBody}>{body}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={danger ? colors.danger : colors.textSoft} />
+    </Pressable>
+  )
+
+  return (
+    <Modal animationType="slide" transparent visible onRequestClose={onClose} statusBarTranslucent>
+      <View style={styles.confirmationOverlay}>
+        <Pressable
+          accessibilityLabel="Close paper actions"
+          accessibilityRole="button"
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+        />
+        <View accessibilityViewIsModal style={styles.paperActionsSheet}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <View style={styles.sheetHeaderCopy}>
+              <Text style={styles.sheetKicker}>Paper actions</Text>
+              <Text style={styles.sheetTitle}>{target.title}</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Close paper actions"
+              accessibilityRole="button"
+              onPress={onClose}
+              style={({ pressed }) => [styles.sheetClose, pressed && styles.pressed]}
+            >
+              <Ionicons name="close" size={20} color={colors.text} />
+            </Pressable>
+          </View>
+          <View style={styles.sheetActionList}>
+            {target.submitted
+              ? action(
+                'Download checked PDF',
+                'Save the latest released result and teacher feedback.',
+                'download-outline',
+                'download',
+                () => onDownload(target),
+              )
+              : null}
+            {target.submitted
+              ? action(
+                'Start a fresh retest',
+                'Create a blank attempt while keeping every previous result.',
+                'refresh-outline',
+                'retest',
+                () => onRetest(target),
+              )
+              : null}
+            {target.ownedPractice
+              ? action(
+                'Delete practice paper',
+                'Remove this owned paper and its linked attempts.',
+                'trash-outline',
+                'delete',
+                () => onDelete(target),
+                true,
+              )
+              : null}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+function ActionConfirmationSheet({
+  confirmation,
+  onCancel,
+  onConfirm,
+}: {
+  confirmation: ActionConfirmation | null
+  onCancel: () => void
+  onConfirm: (confirmation: ActionConfirmation) => void
+}) {
+  if (!confirmation) return null
+
+  const isDelete = confirmation.action === 'delete'
+  const title = isDelete ? 'Delete practice paper?' : 'Start a fresh retest?'
+  const body = isDelete
+    ? `“${confirmation.target.title}” and its linked attempts will be permanently removed. Teacher-assigned exams are never deleted here.`
+    : 'This creates a new attempt of the same paper. Your previous result remains saved.'
+
+  return (
+    <Modal
+      animationType="fade"
+      transparent
+      visible
+      onRequestClose={onCancel}
+      statusBarTranslucent
+    >
+      <View style={styles.confirmationOverlay}>
+        <Pressable
+          accessibilityLabel="Close confirmation"
+          accessibilityRole="button"
+          onPress={onCancel}
+          style={StyleSheet.absoluteFill}
+        />
+        <View accessibilityViewIsModal style={styles.confirmationSheet}>
+          <View style={[styles.confirmationIcon, isDelete && styles.confirmationIconDanger]}>
+            <Ionicons
+              name={isDelete ? 'trash-outline' : 'refresh-outline'}
+              size={23}
+              color={isDelete ? colors.danger : colors.accent}
+            />
+          </View>
+          <Text style={styles.confirmationTitle}>{title}</Text>
+          <Text style={styles.confirmationBody}>{body}</Text>
+          <View style={styles.confirmationActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onCancel}
+              style={({ pressed }) => [styles.confirmationButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.confirmationButtonText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onConfirm(confirmation)}
+              style={({ pressed }) => [
+                styles.confirmationButton,
+                styles.confirmationPrimary,
+                isDelete && styles.confirmationPrimaryDanger,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.confirmationPrimaryText}>
+                {isDelete ? 'Delete paper' : 'Start retest'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+function LearnerExamCard({
+  exam,
+  onOpenPaper,
+  onMore,
+  busyFor,
+}: {
+  exam: StudentExamRead
+  onOpenPaper: (paper: StudentExamPaper) => void
+  onMore: (target: LearnerPaperTarget) => void
+  busyFor: (target: LearnerPaperTarget) => LearnerPaperAction | undefined
+}) {
   const completed = exam.papers.filter((paper) => paper.is_submitted_by_me).length
   const progress = exam.papers.length ? Math.round((completed / exam.papers.length) * 100) : 0
   const visual = resolveSubjectVisual(compact([exam.subject_name, exam.name]))
@@ -258,26 +518,60 @@ function LearnerExamCard({ exam, onOpenPaper }: { exam: StudentExamRead; onOpenP
       </View>
 
       <View style={styles.paperList}>
-        {exam.papers.map((paper) => (
-          <Pressable key={paper.id} onPress={() => onOpenPaper(paper)} style={({ pressed }) => [styles.paperRow, pressed && styles.pressed]}>
-            <View style={styles.paperRowCopy}>
-              <Text style={styles.paperRowTitle}>{paper.title}</Text>
-              <Text style={styles.paperRowMeta}>{paper.total_marks} marks / {paper.is_submitted_by_me ? 'Submitted' : 'Not submitted'}</Text>
+        {exam.papers.map((paper) => {
+          const target: LearnerPaperTarget = {
+            paperId: paper.id,
+            title: paper.title,
+            examId: exam.id,
+            submitted: Boolean(paper.is_submitted_by_me),
+            ownedPractice: false,
+          }
+          return (
+            <View key={paper.id} style={styles.paperRow}>
+              <View style={styles.paperRowHeader}>
+                <View style={styles.paperRowCopy}>
+                  <Text style={styles.paperRowTitle}>{paper.title}</Text>
+                  <Text style={styles.paperRowMeta}>{paper.total_marks} marks / {paper.is_submitted_by_me ? 'Submitted' : 'Not submitted'}</Text>
+                </View>
+                <View style={[styles.paperStateDot, paper.is_submitted_by_me && styles.paperStateDotDone]} />
+              </View>
+              <LearnerPaperActions
+                target={target}
+                busyAction={busyFor(target)}
+                onOpen={() => onOpenPaper(paper)}
+                onMore={() => onMore(target)}
+              />
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSoft} />
-          </Pressable>
-        ))}
+          )
+        })}
       </View>
     </AnimatedCard>
   )
 }
 
-function PracticePaperCard({ paper, onOpen }: { paper: PaperListItem; onOpen: () => void }) {
+function PracticePaperCard({
+  paper,
+  onOpen,
+  onMore,
+  busyAction,
+}: {
+  paper: PaperListItem
+  onOpen: () => void
+  onMore: (target: LearnerPaperTarget) => void
+  busyAction?: LearnerPaperAction
+}) {
   const subject = paper.subject_name || 'Practice paper'
   const subjectVisual = resolveSubjectVisual(compact([paper.subject_name, paper.title, paper.category]))
 
+  const target: LearnerPaperTarget = {
+    paperId: paper.id,
+    title: paper.title,
+    submitted: Boolean(paper.is_submitted_by_me),
+    ownedPractice: true,
+  }
+
   return (
-    <Pressable onPress={onOpen} style={({ pressed }) => [styles.practiceCard, pressed && styles.pressed]}>
+    <View style={styles.practiceCard}>
       <View style={[styles.practiceAccent, { backgroundColor: subjectVisual.tone }]} />
       <View style={styles.practiceTop}>
         <View style={[styles.practiceIcon, { backgroundColor: `${subjectVisual.tone}14`, borderColor: `${subjectVisual.tone}35` }]}>
@@ -285,27 +579,87 @@ function PracticePaperCard({ paper, onOpen }: { paper: PaperListItem; onOpen: ()
         </View>
         <View style={styles.practiceCopy}>
           <Text style={[styles.practiceSubject, { color: subjectVisual.tone }]}>{subject}</Text>
-          <Text style={styles.practiceTitle} numberOfLines={1}>{paper.title}</Text>
+          <Text style={styles.practiceTitle}>{paper.title}</Text>
           <Text style={styles.practiceMeta}>{compact([`${paper.total_marks} marks`, formatDate(paper.created_at)])}</Text>
         </View>
-        <View style={styles.practiceArrow}>
-          <Ionicons name="arrow-forward" size={17} color={colors.white} />
-        </View>
+        <View style={[styles.paperStateDot, paper.is_submitted_by_me && styles.paperStateDotDone]} />
       </View>
       <View style={styles.practiceFooter}>
-        <View style={styles.readyPill}>
-          <View style={styles.readyDot} />
-          <Text style={styles.readyText}>Ready</Text>
+        <View style={[styles.readyPill, paper.is_submitted_by_me && styles.readyPillSubmitted]}>
+          <View style={[styles.readyDot, paper.is_submitted_by_me && styles.readyDotSubmitted]} />
+          <Text style={[styles.readyText, paper.is_submitted_by_me && styles.readyTextSubmitted]}>
+            {paper.is_submitted_by_me ? 'Submitted' : 'Ready'}
+          </Text>
         </View>
-        <Text style={styles.openText}>Open paper</Text>
+        <Text style={styles.openText}>{paper.is_submitted_by_me ? 'Attempt saved' : 'Ready to begin'}</Text>
       </View>
-    </Pressable>
+      <LearnerPaperActions
+        target={target}
+        busyAction={busyAction}
+        onOpen={onOpen}
+        onMore={() => onMore(target)}
+      />
+    </View>
+  )
+}
+
+function LearnerExamLoading() {
+  return (
+    <AppScreen contentStyle={styles.learnerScreen} padded>
+      <View accessibilityLabel="Loading exam workspace" style={styles.examSkeletonHero}>
+        <View style={styles.examSkeletonTitle} />
+        <View style={styles.examSkeletonMeta} />
+        <View style={styles.examSkeletonSwitch} />
+      </View>
+      <View style={styles.section}>
+        <View style={styles.examSkeletonSectionTitle} />
+        <SkeletonCard lines={2} style={styles.examSkeletonCard} />
+        <SkeletonCard lines={2} style={styles.examSkeletonCard} />
+      </View>
+    </AppScreen>
+  )
+}
+
+function LearnerEmptyState({
+  kind,
+  onAction,
+}: {
+  kind: 'teacher' | 'practice'
+  onAction: () => void
+}) {
+  const isTeacher = kind === 'teacher'
+  return (
+    <AnimatedCard style={styles.learnerEmptyCard}>
+      <View style={styles.learnerEmptyIcon}>
+        <Ionicons name={isTeacher ? 'calendar-clear-outline' : 'flash-outline'} size={21} color={colors.accent} />
+      </View>
+      <View style={styles.learnerEmptyCopy}>
+        <Text style={styles.learnerEmptyTitle}>{isTeacher ? 'You are all caught up' : 'Build your first practice paper'}</Text>
+        <Text style={styles.learnerEmptyBody}>
+          {isTeacher
+            ? 'Your teacher’s next assessment will appear here automatically. Personal practice is ready now.'
+            : 'Generate a focused paper, then return here to start, download, retest, or remove it.'}
+        </Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onAction}
+        style={({ pressed }) => [styles.learnerEmptyAction, pressed && styles.pressed]}
+      >
+        <Text style={styles.learnerEmptyActionText}>{isTeacher ? 'Open practice papers' : 'Generate a paper'}</Text>
+        <Ionicons name="arrow-forward-outline" size={16} color={colors.white} />
+      </Pressable>
+    </AnimatedCard>
   )
 }
 
 function StudentExamsView({ role }: { role?: Role }) {
   const navigation = useNavigation<any>()
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<ExamTab>(role === 'b2c_student' ? 'practice' : 'teacher')
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null)
+  const [confirmation, setConfirmation] = useState<ActionConfirmation | null>(null)
+  const [actionTarget, setActionTarget] = useState<LearnerPaperTarget | null>(null)
   const isB2C = role === 'b2c_student'
 
   const teacherExamsQuery = useQuery({
@@ -321,22 +675,101 @@ function StudentExamsView({ role }: { role?: Role }) {
 
   const teacherExams = teacherExamsQuery.data ?? []
   const practicePapers = practiceQuery.data ?? []
-  const assignedPaperCount = teacherExams.reduce((sum, exam) => sum + exam.papers.length, 0)
   const completedAssignedCount = teacherExams.reduce((sum, exam) => sum + exam.papers.filter((paper) => paper.is_submitted_by_me).length, 0)
+  const completedPracticeCount = practicePapers.filter((paper) => paper.is_submitted_by_me).length
   const isLoading = teacherExamsQuery.isLoading || practiceQuery.isLoading
-  const isError = teacherExamsQuery.isError || practiceQuery.isError
   const refreshing = teacherExamsQuery.isRefetching || practiceQuery.isRefetching
 
-  if (isLoading) {
-    return (
-      <AppScreen scroll={false} contentStyle={styles.center}>
-        <ActivityIndicator color={colors.accent} />
-        <Text style={styles.loadingText}>Loading exams</Text>
-      </AppScreen>
-    )
+  const downloadMutation = useMutation({
+    mutationFn: async (target: LearnerPaperTarget) => {
+      const attempts = await papersApi.listAttempts(target.paperId, { exam_id: target.examId })
+      const downloadableAttempt = selectNewestDownloadableAttempt(attempts.items)
+      if (!downloadableAttempt) {
+        throw new Error('The checked PDF will be available after checking finishes and results are released.')
+      }
+      const pdf = await checkedPapersApi.downloadPdf(downloadableAttempt.id)
+      await presentPdf(pdf)
+      return target
+    },
+    onMutate: () => setActionNotice(null),
+    onSuccess: (target) => {
+      setActionNotice({ tone: 'success', message: `Downloaded the latest checked result for “${target.title}”.` })
+    },
+    onError: (error) => {
+      setActionNotice({ tone: 'error', message: extractDetail(error, 'Unable to download this checked paper.') })
+    },
+  })
+
+  const retestMutation = useMutation({
+    mutationFn: async (target: LearnerPaperTarget) => {
+      const attempts = await papersApi.listAttempts(target.paperId, { exam_id: target.examId })
+      if (!selectNewestRetestableAttempt(attempts.items)) {
+        throw new Error('Finish and submit the current attempt before starting a retest.')
+      }
+      const attempt = await papersApi.createAttempt(target.paperId, {
+        exam_id: target.examId,
+        reason: 'retest',
+      })
+      return { target, attempt }
+    },
+    onMutate: () => setActionNotice(null),
+    onSuccess: ({ target, attempt }) => {
+      queryClient.setQueryData(
+        ['paper-attempt', target.paperId, target.examId],
+        attempt,
+      )
+      setActionNotice({ tone: 'success', message: 'Fresh retest started. Your previous result remains saved.' })
+      openPaperAttempt(navigation, target.paperId, target.examId, `retest-${attempt.id}`)
+    },
+    onError: (error) => {
+      setActionNotice({ tone: 'error', message: extractDetail(error, 'Could not start this retest. Please try again.') })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (target: LearnerPaperTarget) => {
+      await examsApi.deletePracticePaper(target.paperId)
+      return target
+    },
+    onMutate: () => setActionNotice(null),
+    onSuccess: async (target) => {
+      await queryClient.invalidateQueries({ queryKey: ['exams', 'practice'] })
+      setActionNotice({ tone: 'success', message: `Deleted “${target.title}”. Teacher exams were not affected.` })
+    },
+    onError: (error) => {
+      setActionNotice({ tone: 'error', message: extractDetail(error, 'Unable to delete this practice paper.') })
+    },
+  })
+
+  const busyFor = (target: LearnerPaperTarget): LearnerPaperAction | undefined => {
+    if (downloadMutation.isPending && downloadMutation.variables?.paperId === target.paperId) return 'download'
+    if (retestMutation.isPending && retestMutation.variables?.paperId === target.paperId) return 'retest'
+    if (deleteMutation.isPending && deleteMutation.variables?.paperId === target.paperId) return 'delete'
+    return undefined
   }
 
-  if (isError) {
+  const confirmRetest = (target: LearnerPaperTarget) => {
+    setConfirmation({ action: 'retest', target })
+  }
+
+  const confirmDelete = (target: LearnerPaperTarget) => {
+    setConfirmation({ action: 'delete', target })
+  }
+
+  const runConfirmedAction = (nextConfirmation: ActionConfirmation) => {
+    setConfirmation(null)
+    if (nextConfirmation.action === 'delete') {
+      deleteMutation.mutate(nextConfirmation.target)
+      return
+    }
+    retestMutation.mutate(nextConfirmation.target)
+  }
+
+  if (isLoading) {
+    return <LearnerExamLoading />
+  }
+
+  if ((isB2C || teacherExamsQuery.isError) && practiceQuery.isError) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
         <ErrorState title="Exams unavailable" message="Unable to load exams." onAction={() => {
@@ -349,10 +782,6 @@ function StudentExamsView({ role }: { role?: Role }) {
 
   return (
     <View style={styles.root}>
-      <ExamsPhotoHeader
-        title={isB2C ? 'Practice papers' : 'Teacher exams'}
-        subtitle={isB2C ? 'Practice library' : 'Assigned exams'}
-      />
       <AppScreen
         contentStyle={styles.learnerScreen}
         padded
@@ -367,40 +796,120 @@ function StudentExamsView({ role }: { role?: Role }) {
         isB2C={isB2C}
         teacherCount={teacherExams.length}
         practiceCount={practicePapers.length}
-        paperCount={assignedPaperCount + practicePapers.length}
-        completedCount={completedAssignedCount}
-        onTeacher={() => setActiveTab('teacher')}
-        onPractice={() => setActiveTab('practice')}
+        teacherCompletedCount={completedAssignedCount}
+        practiceCompletedCount={completedPracticeCount}
+        onTeacher={() => {
+          setActionNotice(null)
+          setActionTarget(null)
+          setActiveTab('teacher')
+        }}
+        onPractice={() => {
+          setActionNotice(null)
+          setActionTarget(null)
+          setActiveTab('practice')
+        }}
       />
+
+      {actionNotice ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={[styles.actionNotice, actionNotice.tone === 'error' && styles.actionNoticeError]}
+        >
+          <Ionicons
+            name={actionNotice.tone === 'error' ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+            size={17}
+            color={actionNotice.tone === 'error' ? colors.danger : colors.success}
+          />
+          <Text style={[styles.actionNoticeText, actionNotice.tone === 'error' && styles.actionNoticeTextError]}>
+            {actionNotice.message}
+          </Text>
+        </View>
+      ) : null}
 
       {activeTab === 'teacher' && !isB2C ? (
         <View style={styles.section}>
           <SectionHeader title="Assigned exams" subtitle="Teacher-created exams matched to your class and subjects." count={teacherExams.length} />
-          {teacherExams.length === 0 ? (
-            <AnimatedCard style={styles.emptyCard}>
-              <Text style={styles.emptyText}>No assigned exams yet.</Text>
-            </AnimatedCard>
+          {teacherExamsQuery.isError ? (
+            <ErrorState
+              title="Teacher exams unavailable"
+              message="Practice papers are still available. Retry this section when your connection settles."
+              onAction={() => void teacherExamsQuery.refetch()}
+            />
+          ) : teacherExams.length === 0 ? (
+            <LearnerEmptyState
+              kind="teacher"
+              onAction={() => {
+                setActionTarget(null)
+                setActiveTab('practice')
+              }}
+            />
           ) : (
             teacherExams.map((exam) => (
-              <LearnerExamCard key={exam.id} exam={exam} onOpenPaper={(paper) => openPaperAttempt(navigation, paper.id, exam.id)} />
+              <LearnerExamCard
+                key={exam.id}
+                exam={exam}
+                onOpenPaper={(paper) => openPaperAttempt(navigation, paper.id, exam.id)}
+                onMore={setActionTarget}
+                busyFor={busyFor}
+              />
             ))
           )}
         </View>
       ) : (
         <View style={styles.section}>
           <SectionHeader title="Practice papers" subtitle="Recent generated papers ready to attempt." count={practicePapers.length} />
-          {practicePapers.length === 0 ? (
-            <AnimatedCard style={styles.emptyCard}>
-              <Text style={styles.emptyText}>No practice papers yet. Generate a paper first.</Text>
-            </AnimatedCard>
+          {practiceQuery.isError ? (
+            <ErrorState
+              title="Practice papers unavailable"
+              message={isB2C ? 'Check your connection and retry.' : 'Teacher exams are still available in the other tab.'}
+              onAction={() => void practiceQuery.refetch()}
+            />
+          ) : practicePapers.length === 0 ? (
+            <LearnerEmptyState
+              kind="practice"
+              onAction={() => navigation.getParent?.()?.navigate('Papers', { screen: 'GeneratePaper' })}
+            />
           ) : (
             practicePapers.map((paper) => (
-              <PracticePaperCard key={paper.id} paper={paper} onOpen={() => openPaperAttempt(navigation, paper.id)} />
+              <PracticePaperCard
+                key={paper.id}
+                paper={paper}
+                onOpen={() => openPaperAttempt(navigation, paper.id)}
+                onMore={setActionTarget}
+                busyAction={busyFor({
+                  paperId: paper.id,
+                  title: paper.title,
+                  submitted: Boolean(paper.is_submitted_by_me),
+                  ownedPractice: true,
+                })}
+              />
             ))
           )}
         </View>
       )}
       </AppScreen>
+      <PaperActionsSheet
+        target={actionTarget}
+        busyAction={actionTarget ? busyFor(actionTarget) : undefined}
+        onClose={() => setActionTarget(null)}
+        onDownload={(target) => {
+          setActionTarget(null)
+          downloadMutation.mutate(target)
+        }}
+        onRetest={(target) => {
+          setActionTarget(null)
+          confirmRetest(target)
+        }}
+        onDelete={(target) => {
+          setActionTarget(null)
+          confirmDelete(target)
+        }}
+      />
+      <ActionConfirmationSheet
+        confirmation={confirmation}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={runConfirmedAction}
+      />
     </View>
   )
 }
@@ -784,67 +1293,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[20],
   },
   learnerScreen: {
-    gap: spacing[4],
-    paddingTop: spacing[4],
-    paddingBottom: spacing[20],
-  },
-  photoHeaderWrap: {
-    height: 118,
-    overflow: 'hidden',
-    backgroundColor: colors.slate[950],
-  },
-  headerImage: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  headerPhoto: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-    opacity: 0.98,
-  },
-  headerWarmVeil: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 3,
-    backgroundColor: 'rgba(249,115,22,0.72)',
-  },
-  photoHeaderContent: {
-    minHeight: 76,
-    paddingHorizontal: spacing[5],
-    paddingBottom: spacing[3],
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  photoHeaderCopy: {
-    gap: 1,
-  },
-  photoHeaderTitle: {
-    color: colors.white,
-    fontFamily: typography.fonts.heading,
-    fontSize: 20,
-    lineHeight: 24,
-  },
-  photoHeaderSubtitle: {
-    color: 'rgba(255,255,255,0.76)',
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    lineHeight: 12,
-    textTransform: 'uppercase',
-  },
-  photoHeaderIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.20)',
+    gap: spacing[3],
+    paddingTop: spacing[3],
+    paddingBottom: 120,
   },
   center: {
     alignItems: 'center',
@@ -937,12 +1388,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   countPill: {
-    minWidth: 38,
+    minWidth: 24,
     height: 30,
-    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
   },
   countText: {
     color: colors.accent,
@@ -950,11 +1399,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   examHero: {
-    borderRadius: radius['2xl'],
-    padding: spacing[4],
-    gap: spacing[4],
+    position: 'relative',
+    paddingLeft: spacing[4],
+    paddingRight: spacing[1],
+    paddingVertical: spacing[2],
+    gap: spacing[3],
     overflow: 'hidden',
-    ...shadows.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderStrong,
+  },
+  examQueueRail: {
+    position: 'absolute',
+    left: 0,
+    top: spacing[2],
+    bottom: spacing[2],
+    width: 3,
+    borderRadius: radius.full,
+    backgroundColor: colors.accent,
   },
   examHeroTop: {
     flexDirection: 'row',
@@ -962,94 +1423,58 @@ const styles = StyleSheet.create({
     gap: spacing[3],
   },
   examHeroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 17,
+    width: 38,
+    height: 38,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.accentSurface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: colors.borderBrand,
   },
   examHeroCopy: {
     flex: 1,
   },
   examHeroKicker: {
-    color: 'rgba(255,255,255,0.50)',
+    color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-    letterSpacing: 1.2,
+    fontSize: 9,
+    lineHeight: 13,
+    letterSpacing: 0.7,
     textTransform: 'uppercase',
   },
   examHeroTitle: {
-    color: colors.white,
+    color: colors.text,
     fontFamily: typography.fonts.heading,
-    fontSize: 22,
-    lineHeight: 27,
+    fontSize: 24,
+    lineHeight: 28,
     marginTop: 2,
   },
-  examHeroBody: {
-    color: 'rgba(255,255,255,0.72)',
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  examHeroStats: {
-    flexDirection: 'row',
-    gap: spacing[2],
-  },
-  examHeroStat: {
-    flex: 1,
-    minHeight: 68,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[3],
-  },
-  examHeroValue: {
-    color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 21,
-    lineHeight: 24,
-  },
-  examHeroLabel: {
-    color: 'rgba(255,255,255,0.52)',
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
-    letterSpacing: 0.9,
-    textTransform: 'uppercase',
-    marginTop: spacing[1],
-  },
   examModeSwitch: {
-    minHeight: 52,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    padding: spacing[1],
+    minHeight: 44,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
     flexDirection: 'row',
-    gap: spacing[1],
   },
   examModeButton: {
     flex: 1,
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: spacing[2],
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   examModeButtonActive: {
-    backgroundColor: colors.accent,
+    borderBottomColor: colors.accent,
   },
   examModeText: {
-    color: 'rgba(255,255,255,0.62)',
+    color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
     fontSize: 12,
   },
   examModeTextActive: {
-    color: colors.white,
+    color: colors.accent,
   },
   card: {
     gap: spacing[4],
@@ -1058,6 +1483,9 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     backgroundColor: colors.backgroundElevated,
     borderColor: colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.accent,
+    padding: spacing[4],
   },
   examCardTop: {
     flexDirection: 'row',
@@ -1082,17 +1510,11 @@ const styles = StyleSheet.create({
   },
   examStatusPill: {
     minHeight: 30,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing[3],
+    paddingHorizontal: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
   },
   examStatusPillDone: {
-    backgroundColor: colors.successSurface,
-    borderColor: colors.successBorder,
   },
   examStatusText: {
     color: colors.accent,
@@ -1136,6 +1558,32 @@ const styles = StyleSheet.create({
   examProgressFill: {
     height: '100%',
     borderRadius: radius.full,
+  },
+  actionNotice: {
+    minHeight: 52,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: `${colors.success}35`,
+    backgroundColor: colors.successSurface,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  actionNoticeError: {
+    borderColor: `${colors.danger}35`,
+    backgroundColor: colors.dangerSurface,
+  },
+  actionNoticeText: {
+    flex: 1,
+    color: colors.success,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  actionNoticeTextError: {
+    color: colors.danger,
   },
   practiceCard: {
     position: 'relative',
@@ -1204,21 +1652,16 @@ const styles = StyleSheet.create({
   },
   practiceFooter: {
     marginTop: spacing[4],
-    paddingTop: spacing[3],
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSubtle,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   readyPill: {
-    minHeight: 28,
-    borderRadius: radius.full,
-    backgroundColor: colors.accentSurface,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
-    paddingHorizontal: spacing[3],
+  },
+  readyPillSubmitted: {
   },
   readyDot: {
     width: 6,
@@ -1226,10 +1669,16 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: colors.accent,
   },
+  readyDotSubmitted: {
+    backgroundColor: colors.success,
+  },
   readyText: {
     color: colors.accent,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
+    fontSize: 12,
+  },
+  readyTextSubmitted: {
+    color: colors.success,
   },
   openText: {
     color: colors.text,
@@ -1278,10 +1727,12 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   paperRow: {
-    minHeight: 58,
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
-    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: spacing[2],
+  },
+  paperRowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
@@ -1299,6 +1750,308 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 12,
     marginTop: 2,
+  },
+  paperStateDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.borderStrong,
+  },
+  paperStateDotDone: {
+    backgroundColor: colors.success,
+  },
+  paperActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing[4],
+  },
+  paperActionButton: {
+    minWidth: 76,
+    minHeight: 44,
+    paddingHorizontal: spacing[2],
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing[2],
+  },
+  paperActionButtonDanger: {
+    borderColor: `${colors.danger}35`,
+    backgroundColor: colors.dangerSurface,
+  },
+  paperActionButtonDisabled: {
+    opacity: 0.42,
+  },
+  paperActionText: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  paperActionTextPrimary: {
+    color: colors.accent,
+  },
+  paperActionTextDanger: {
+    color: colors.danger,
+  },
+  examSkeletonHero: {
+    minHeight: 128,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    gap: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderStrong,
+  },
+  examSkeletonTitle: {
+    width: '58%',
+    height: 24,
+    borderRadius: radius.full,
+    backgroundColor: colors.backgroundMuted,
+  },
+  examSkeletonMeta: {
+    width: '82%',
+    height: 14,
+    borderRadius: radius.full,
+    backgroundColor: colors.backgroundMuted,
+  },
+  examSkeletonSwitch: {
+    height: 44,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.borderStrong,
+    backgroundColor: colors.backgroundMuted,
+  },
+  examSkeletonSectionTitle: {
+    width: '42%',
+    height: 22,
+    borderRadius: radius.full,
+    backgroundColor: colors.backgroundMuted,
+  },
+  examSkeletonCard: {
+    minHeight: 150,
+  },
+  learnerEmptyCard: {
+    padding: spacing[4],
+    gap: spacing[3],
+    backgroundColor: colors.backgroundElevated,
+  },
+  learnerEmptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentSurface,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+  },
+  learnerEmptyCopy: {
+    gap: spacing[1],
+  },
+  learnerEmptyTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 18,
+    lineHeight: 23,
+  },
+  learnerEmptyBody: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  learnerEmptyAction: {
+    minHeight: 48,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[4],
+    backgroundColor: colors.accent,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+  },
+  learnerEmptyActionText: {
+    color: colors.white,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+  },
+  paperActionsSheet: {
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing[4],
+    gap: spacing[4],
+    ...shadows.lg,
+  },
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: radius.full,
+    alignSelf: 'center',
+    backgroundColor: colors.borderStrong,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+  },
+  sheetHeaderCopy: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  sheetKicker: {
+    color: colors.accent,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  sheetTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 20,
+    lineHeight: 25,
+  },
+  sheetClose: {
+    width: 44,
+    height: 44,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetActionList: {
+    gap: spacing[2],
+  },
+  sheetAction: {
+    minHeight: 72,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundMuted,
+    padding: spacing[3],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  sheetActionDanger: {
+    borderColor: `${colors.danger}35`,
+    backgroundColor: colors.dangerSurface,
+  },
+  sheetActionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentSurface,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+  },
+  sheetActionIconDanger: {
+    backgroundColor: colors.backgroundElevated,
+    borderColor: `${colors.danger}35`,
+  },
+  sheetActionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  sheetActionTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  sheetActionTitleDanger: {
+    color: colors.danger,
+  },
+  sheetActionBody: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  confirmationOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: spacing[4],
+    backgroundColor: 'rgba(2, 6, 23, 0.56)',
+  },
+  confirmationSheet: {
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing[5],
+    gap: spacing[3],
+    ...shadows.lg,
+  },
+  confirmationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentSurface,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+  },
+  confirmationIconDanger: {
+    backgroundColor: colors.dangerSurface,
+    borderColor: `${colors.danger}35`,
+  },
+  confirmationTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 21,
+    lineHeight: 25,
+  },
+  confirmationBody: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  confirmationActions: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    marginTop: 2,
+  },
+  confirmationButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[3],
+  },
+  confirmationButtonText: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+  },
+  confirmationPrimary: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
+  },
+  confirmationPrimaryDanger: {
+    borderColor: colors.danger,
+    backgroundColor: colors.danger,
+  },
+  confirmationPrimaryText: {
+    color: colors.white,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
   },
   emptyCard: {
     backgroundColor: colors.backgroundElevated,
