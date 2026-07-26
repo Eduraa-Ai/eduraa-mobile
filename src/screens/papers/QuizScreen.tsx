@@ -314,7 +314,7 @@ export default function QuizScreen() {
         reason: 'interactive_quiz',
       })
     },
-    enabled: Boolean(paper && userId),
+    enabled: Boolean(userId),
   })
 
   const activeAttempt = attemptQuery.data

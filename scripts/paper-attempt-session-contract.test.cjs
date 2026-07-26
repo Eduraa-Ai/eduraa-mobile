@@ -54,3 +54,18 @@ test('selectable answers update card feedback and shared progress from the same 
     assert.match(source, /pressInSelectionRef\.current === value/)
   }
 })
+
+test('paper data and attempt identity load in parallel on mobile', () => {
+  for (const source of [standardAttempt, interactiveQuiz]) {
+    assert.match(source, /enabled:\s*Boolean\(userId\)/)
+    assert.doesNotMatch(source, /enabled:\s*Boolean\(paper && userId\)/)
+  }
+})
+
+test('standard attempts do not duplicate requests on their initial focus', () => {
+  assert.match(standardAttempt, /const didHandleInitialFocusRef = useRef\(false\)/)
+  assert.match(standardAttempt, /if \(!didHandleInitialFocusRef\.current\) \{/)
+  assert.match(standardAttempt, /didHandleInitialFocusRef\.current = true/)
+  assert.match(standardAttempt, /void paperQuery\.refetch\(\)/)
+  assert.match(standardAttempt, /void attemptQuery\.refetch\(\)/)
+})

@@ -359,6 +359,7 @@ export default function AttemptPaperScreen() {
   );
   const didAutoSubmitRef = useRef(false);
   const attemptScrollRef = useRef<ScrollView>(null);
+  const didHandleInitialFocusRef = useRef(false);
 
   useLayoutEffect(() => {
     const parent = navigation.getParent();
@@ -395,7 +396,7 @@ export default function AttemptPaperScreen() {
   const attemptQueryKey = ['paper-attempt', userId, params.paperId, params.examId, 'standard'] as const
   const attemptQuery = useQuery({
     queryKey: attemptQueryKey,
-    enabled: Boolean(paper && userId),
+    enabled: Boolean(userId),
     staleTime: Infinity,
     queryFn: async () => {
       const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
@@ -423,6 +424,10 @@ export default function AttemptPaperScreen() {
 
   useEffect(() => {
     if (!isFocused) return
+    if (!didHandleInitialFocusRef.current) {
+      didHandleInitialFocusRef.current = true
+      return
+    }
     void paperQuery.refetch()
     void attemptQuery.refetch()
   }, [isFocused, params.launchKey])
