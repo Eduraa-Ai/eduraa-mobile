@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -31,6 +31,7 @@ import { openProtectedDocument } from '../../utils/openProtectedDocument'
 import {
   buildQuestionReview,
   findEvidenceQuestion,
+  findNextEvidenceQuestion,
   questionStatus,
   questionTypeLabel,
   readableMathText,
@@ -288,6 +289,7 @@ export default function QuestionEvidenceScreen() {
   const user = useAuthStore((state) => state.user)
   const isStaff = Boolean(user && !isLearnerRole(user.role))
   const compact = width < 380
+  const scrollRef = useRef<ScrollView>(null)
   const [activeTab, setActiveTab] = useState<QuestionEvidenceTab>('feedback')
   const [reviewNote, setReviewNote] = useState('')
   const [scanError, setScanError] = useState<string | null>(null)
@@ -319,6 +321,14 @@ export default function QuestionEvidenceScreen() {
       ])
     },
   })
+
+  useEffect(() => {
+    setActiveTab('feedback')
+    setReviewNote('')
+    setScanError(null)
+    reviewMutation.reset()
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }))
+  }, [params.questionId, params.questionIndex])
 
   if (!data || !evidence || !review) {
     return (
@@ -354,6 +364,7 @@ export default function QuestionEvidenceScreen() {
   const item = evidence.item
   const questionNumber = item.question_number ?? evidence.index + 1
   const totalQuestions = data.grading_results?.length ?? 0
+  const nextEvidence = findNextEvidenceQuestion(data, params.questionId, params.questionIndex)
   const status = questionStatus(item)
   const statusMeta = STATUS_META[status]
   const isStrong = status === 'correct'
@@ -365,6 +376,18 @@ export default function QuestionEvidenceScreen() {
   const canSubmitReview = reviewNote.trim().length >= 10 && !reviewMutation.isPending && !reviewSent
   const tabs = isStaff ? TAB_CONFIG.filter((tab) => tab.key !== 'review') : TAB_CONFIG
   const hasScan = Boolean(String(data.scanned_pdf_url || '').trim())
+
+  const goToNextQuestion = () => {
+    if (!nextEvidence) {
+      navigation.goBack()
+      return
+    }
+    navigation.setParams({
+      checkedPaperId: params.checkedPaperId,
+      questionId: nextEvidence.item.question_id || undefined,
+      questionIndex: nextEvidence.index,
+    })
+  }
 
   const openPaperWorkspace = () => {
     if (isStaff) navigation.getParent()?.navigate('StaffPapers')
@@ -418,7 +441,7 @@ export default function QuestionEvidenceScreen() {
               <Text style={styles.identityTitle}>Question {String(questionNumber).padStart(2, '0')} of {String(totalQuestions).padStart(2, '0')}</Text>
               <Text style={styles.identityMeta}>{questionTypeLabel(item)} · {item.score ?? '-'}/{item.max_score ?? '-'}</Text>
             </View>
-            <View accessible accessibilityLabel={`Question status: ${statusMeta.label}`} style={styles.statusPill}>
+            <View key={`status-${evidence.index}`} accessible accessibilityLabel={`Question status: ${statusMeta.label}`} style={styles.statusPill}>
               <View style={[styles.statusDot, { backgroundColor: statusMeta.tone }]} />
               <Text style={[styles.statusPillText, { color: statusMeta.tone }]}>{statusMeta.label}</Text>
             </View>
@@ -437,7 +460,7 @@ export default function QuestionEvidenceScreen() {
               const selected = activeTab === tab.key
               return (
                 <Pressable
-                  key={tab.key}
+                  key={`${evidence.index}-${tab.key}`}
                   accessibilityRole="tab"
                   accessibilityLabel={tab.label}
                   accessibilityState={{ selected }}
@@ -452,11 +475,36 @@ export default function QuestionEvidenceScreen() {
           </View>
 
           <ScrollView
+            ref={scrollRef}
             style={styles.sheetScroll}
             contentContainerStyle={[styles.sheetContent, { paddingBottom: layout.bottomTabHeight + insets.bottom + spacing[10] }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
+            <Pressable
+              key={`next-question-${evidence.index}`}
+              accessibilityRole="button"
+              accessibilityLabel={nextEvidence
+                ? `Next question, Question ${nextEvidence.index + 1} of ${totalQuestions}`
+                : 'Back to report, last question'}
+              accessibilityHint={nextEvidence
+                ? 'Shows the next reviewed question from the top of Feedback.'
+                : 'Returns to the checked-paper report.'}
+              onPress={goToNextQuestion}
+              style={({ pressed }) => [
+                styles.nextQuestionAction,
+                pressed && styles.nextQuestionActionPressed,
+              ]}
+            >
+              <Text style={styles.nextQuestionLabel}>{nextEvidence ? 'Next question' : 'Back to report'}</Text>
+              <View style={styles.nextQuestionDestination}>
+                <Text numberOfLines={1} style={styles.nextQuestionProgress}>
+                  {nextEvidence ? `Question ${nextEvidence.index + 1} of ${totalQuestions}` : 'Review complete'}
+                </Text>
+                <Ionicons name={nextEvidence ? 'arrow-forward' : 'checkmark'} size={18} color={nextEvidence ? colors.accentStrong : colors.success} />
+              </View>
+            </Pressable>
+
             {activeTab === 'feedback' ? (
               <View style={[styles.panel, compact && styles.panelCompact]}>
                 <View style={styles.questionBlock}>
@@ -655,6 +703,11 @@ const styles = StyleSheet.create({
   tabIndicator: { position: 'absolute', bottom: -1, left: spacing[1], right: spacing[1], height: 3, borderRadius: 2, backgroundColor: colors.accent },
   sheetScroll: { flex: 1 },
   sheetContent: { paddingHorizontal: spacing[4], paddingTop: spacing[3] },
+  nextQuestionAction: { width: '100%', maxWidth: 760, minHeight: 48, alignSelf: 'center', marginBottom: spacing[3], paddingVertical: spacing[2], paddingHorizontal: spacing[2], borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#dfd2c2', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], backgroundColor: 'transparent' },
+  nextQuestionActionPressed: { backgroundColor: colors.accentSurface },
+  nextQuestionLabel: { flex: 1, minWidth: 0, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 17 },
+  nextQuestionDestination: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing[2] },
+  nextQuestionProgress: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14, textAlign: 'right' },
   panel: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: spacing[3] },
   panelCompact: { gap: spacing[2] },
   questionBlock: { paddingBottom: spacing[4], borderBottomWidth: 1, borderBottomColor: '#eadfd1' },

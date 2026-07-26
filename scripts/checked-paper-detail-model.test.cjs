@@ -68,9 +68,39 @@ test('question evidence resolves by stable id before index', () => {
   assert.equal(evidence.item.question_number, 7)
 })
 
+test('question evidence survives refreshed data when a unique stable id moves', () => {
+  const fixture = paper()
+  const moved = fixture.grading_results.splice(6, 1)[0]
+  fixture.grading_results.splice(2, 0, moved)
+  const evidence = model.findEvidenceQuestion(fixture, 'question-7', 6)
+  assert.equal(evidence.index, 2)
+  assert.equal(evidence.item.question_number, 7)
+})
+
+test('question evidence falls back to the stable index for missing and duplicate ids', () => {
+  const fixture = paper()
+  fixture.grading_results[4].question_id = 'question-1'
+  assert.equal(model.findEvidenceQuestion(fixture, 'missing-question', 3).item.question_number, 4)
+  assert.equal(model.findEvidenceQuestion(fixture, 'question-1', 4).item.question_number, 5)
+})
+
 test('question evidence clamps stale indexes and handles an empty result', () => {
   assert.equal(model.findEvidenceQuestion(paper(), undefined, 999).item.question_number, 20)
   assert.equal(model.findEvidenceQuestion(paper({ grading_results: null }), undefined, 0), null)
+})
+
+test('next question navigation handles first, middle, and final questions', () => {
+  const fixture = paper()
+  assert.equal(model.findNextEvidenceQuestion(fixture, 'question-1', 0).item.question_number, 2)
+  assert.equal(model.findNextEvidenceQuestion(fixture, 'question-10', 9).item.question_number, 11)
+  assert.equal(model.findNextEvidenceQuestion(fixture, 'question-20', 19), null)
+})
+
+test('next question navigation uses the safe index when ids are missing or duplicated', () => {
+  const fixture = paper()
+  fixture.grading_results[1].question_id = 'question-1'
+  assert.equal(model.findNextEvidenceQuestion(fixture, 'question-1', 1).item.question_number, 3)
+  assert.equal(model.findNextEvidenceQuestion(fixture, 'missing-question', 7).item.question_number, 9)
 })
 
 test('question status is expressed with text and not color alone', () => {
