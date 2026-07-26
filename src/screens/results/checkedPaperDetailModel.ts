@@ -467,9 +467,23 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
 export function findEvidenceQuestion(paper: CheckedPaper, questionId?: string, questionIndex?: number) {
   const questions = paper.grading_results ?? []
   if (questionId) {
-    const match = questions.find((item) => item.question_id === questionId)
-    if (match) return { item: match, index: questions.indexOf(match) }
+    const matchingIndexes = questions.reduce<number[]>((indexes, item, index) => {
+      if (item.question_id === questionId) indexes.push(index)
+      return indexes
+    }, [])
+    if (matchingIndexes.length === 1) {
+      const index = matchingIndexes[0]
+      return { item: questions[index], index }
+    }
   }
   const safeIndex = Math.max(0, Math.min(questions.length - 1, questionIndex ?? 0))
   return questions[safeIndex] ? { item: questions[safeIndex], index: safeIndex } : null
+}
+
+export function findNextEvidenceQuestion(paper: CheckedPaper, questionId?: string, questionIndex?: number) {
+  const current = findEvidenceQuestion(paper, questionId, questionIndex)
+  if (!current) return null
+  const questions = paper.grading_results ?? []
+  const nextIndex = current.index + 1
+  return questions[nextIndex] ? { item: questions[nextIndex], index: nextIndex } : null
 }
