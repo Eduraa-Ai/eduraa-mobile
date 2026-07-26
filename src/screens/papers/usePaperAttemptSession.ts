@@ -180,18 +180,21 @@ export function usePaperAttemptSession({
             identityKey,
           })
       if (migratedLegacy) {
-        try {
-          await AsyncStorage.setItem(
-            paperAttemptDraftKey(identity),
-            JSON.stringify(paperAttemptDraftFromState(hydrated)),
-          )
-          await AsyncStorage.removeItem(legacyPaperAttemptDraftKey(identity))
-          lastSavedRevisionRef.current = hydrated.revision
-        } catch {
-          // Keep the legacy draft so migration can retry safely.
-        }
+        const migratedRaw = JSON.stringify(paperAttemptDraftFromState(hydrated))
+        writeChainRef.current = writeChainRef.current
+          .catch(() => undefined)
+          .then(() => AsyncStorage.setItem(paperAttemptDraftKey(identity), migratedRaw))
+          .then(() => AsyncStorage.removeItem(legacyPaperAttemptDraftKey(identity)))
+          .then(() => {
+            lastSavedRevisionRef.current = Math.max(
+              lastSavedRevisionRef.current,
+              hydrated.revision,
+            )
+          })
+          .catch(() => undefined)
       }
       publishState(hydrated)
+      if (migratedLegacy) await writeChainRef.current
     })()
   }, [identityKey, publishState])
 
