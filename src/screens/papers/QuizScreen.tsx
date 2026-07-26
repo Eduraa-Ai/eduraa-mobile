@@ -22,6 +22,7 @@ import type { RouteProp } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PapersStackParamList } from "../../navigation";
 import { papersApi } from "../../api/papers";
+import { useAuthStore } from "../../stores/authStore";
 import type { AnswerEntry, MCQOption, QuestionInPaper } from "../../types";
 import {
   AnimatedButton,
@@ -35,9 +36,10 @@ import { colors, radius, shadows, spacing, typography } from "../../theme";
 import { shouldShowQuestionStemText } from "../../utils/questionVisual";
 import { latexToPlainText } from "../../utils/latex";
 import {
+  buildPaperAnswerEntries,
   selectNewestInProgressAttempt,
-  toggleSelectableAnswer,
 } from "./paperAttemptModel";
+import { usePaperAttemptSession } from "./usePaperAttemptSession";
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "Quiz">;
 type Route = RouteProp<PapersStackParamList, "Quiz">;
@@ -242,12 +244,13 @@ export default function QuizScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Route>();
   const queryClient = useQueryClient();
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const userId = useAuthStore((state) => state.user?.id);
   const [assistByQuestion, setAssistByQuestion] = useState<
     Record<string, string>
   >({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const didAutoSubmitRef = useRef(false);
 
   const paperQuery = useQuery({
     queryKey: ["interactive-paper", params.paperId],
@@ -257,7 +260,7 @@ export default function QuizScreen() {
   const paper = paperQuery.data;
 
   const attemptQuery = useQuery({
-    queryKey: ['paper-attempt', params.paperId, params.examId, 'interactive-quiz'],
+    queryKey: ['paper-attempt', userId, params.paperId, params.examId, 'interactive_quiz'],
     queryFn: async () => {
       const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
       const inProgress = selectNewestInProgressAttempt(attempts.items)
@@ -266,10 +269,41 @@ export default function QuizScreen() {
         reason: 'interactive_quiz',
       })
     },
-    enabled: Boolean(paper),
+    enabled: Boolean(paper && userId),
   })
 
   const activeAttempt = attemptQuery.data
+  const serverAnswers = useMemo(
+    () => (activeAttempt?.answers ?? []).reduce<Record<string, string>>((result, answer) => {
+      result[answer.question_id] = answer.response
+      return result
+    }, {}),
+    [activeAttempt],
+  )
+  const attemptIdentity = useMemo(
+    () => userId && activeAttempt?.id
+      ? {
+          userId,
+          paperId: params.paperId,
+          examId: params.examId,
+          attemptId: activeAttempt.id,
+          mode: 'interactive_quiz' as const,
+        }
+      : null,
+    [activeAttempt?.id, params.examId, params.paperId, userId],
+  )
+  const attemptSession = usePaperAttemptSession({
+    identity: attemptIdentity,
+    serverAnswers,
+  })
+  const {
+    answers,
+    selectAnswer,
+    setTextAnswer,
+    getAnswerSnapshot,
+    flushDraft,
+    clearDraft,
+  } = attemptSession
 
   useEffect(() => {
     if (!paper?.duration_minutes || !activeAttempt) {
@@ -284,6 +318,10 @@ export default function QuizScreen() {
       : 0;
     setTimeLeft(Math.max(0, paper.duration_minutes * 60 - elapsedSeconds));
   }, [activeAttempt, paper?.duration_minutes]);
+
+  useEffect(() => {
+    didAutoSubmitRef.current = false
+  }, [activeAttempt?.id])
 
   const elapsedSeconds = useCallback(() => {
     if (!activeAttempt) return 0;
@@ -314,8 +352,9 @@ export default function QuizScreen() {
       );
     },
     onSuccess: async (data) => {
+      await clearDraft()
       await queryClient.invalidateQueries({
-        queryKey: ["paper-attempt", params.paperId],
+        queryKey: ["paper-attempt", userId, params.paperId],
       });
       Alert.alert("Quiz submitted", "Your JEE practice quiz has been graded.", [
         {
@@ -339,6 +378,7 @@ export default function QuizScreen() {
             attempt_id: activeAttempt?.id,
           });
           if (existing?.id && existing.id === activeAttempt?.id) {
+            await clearDraft()
             Alert.alert(
               "Quiz saved",
               "Your answers were saved. Open Results to review grading.",
@@ -396,13 +436,24 @@ export default function QuizScreen() {
 
   const submit = useCallback(
     (autoSubmit = false) => {
-      if (!paper) return;
-      const answerList = paper.questions.map((question) => ({
-        question_id: question.id,
-        response: answers[question.id] || "",
-      }));
+      if (!paper || submitMutation.isPending) return;
+      if (autoSubmit && didAutoSubmitRef.current) return
+      let answerList: AnswerEntry[]
+      try {
+        answerList = buildPaperAnswerEntries(
+          paper.questions.map((question) => question.id),
+          getAnswerSnapshot(),
+        )
+      } catch (error) {
+        Alert.alert(
+          "Quiz cannot be submitted",
+          error instanceof Error ? error.message : "This quiz contains invalid questions.",
+        )
+        return
+      }
 
       if (autoSubmit) {
+        didAutoSubmitRef.current = true
         submitMutation.mutate(answerList);
         return;
       }
@@ -416,7 +467,7 @@ export default function QuizScreen() {
         ],
       );
     },
-    [answeredCount, answers, paper, submitMutation],
+    [answeredCount, getAnswerSnapshot, paper, submitMutation],
   );
 
   useEffect(() => {
@@ -442,7 +493,11 @@ export default function QuizScreen() {
     return `${minutes}:${secs}`;
   };
 
-  if (paperQuery.isLoading || attemptQuery.isLoading) {
+  if (
+    paperQuery.isLoading
+    || attemptQuery.isLoading
+    || Boolean(activeAttempt && !attemptSession.isReady)
+  ) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
         <ActivityIndicator color={colors.paperStudio.jee} />
@@ -475,7 +530,9 @@ export default function QuizScreen() {
     <View style={styles.root}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            void flushDraft().finally(() => navigation.goBack())
+          }}
           style={({ pressed }) => [
             styles.headerIcon,
             pressed && styles.pressed,
@@ -537,11 +594,11 @@ export default function QuizScreen() {
               const isSelectable =
                 question.question_type === "mcq" ||
                 question.question_type === "true_false";
-              setAnswers((current) =>
-                isSelectable
-                  ? toggleSelectableAnswer(current, question.id, value)
-                  : { ...current, [question.id]: value },
-              );
+              if (isSelectable) {
+                selectAnswer(question.id, value)
+              } else {
+                setTextAnswer(question.id, value)
+              }
             }}
             onAssist={(mode) =>
               assistMutation.mutate({ questionId: question.id, mode })
