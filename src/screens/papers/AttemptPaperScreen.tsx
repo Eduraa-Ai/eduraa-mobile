@@ -9,7 +9,7 @@ import React, {
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   StyleSheet,
   TouchableOpacity,
   Pressable,
@@ -49,6 +49,10 @@ import {
   selectNewestInProgressAttempt,
 } from "./paperAttemptModel";
 import { usePaperAttemptSession } from "./usePaperAttemptSession";
+
+const MemoLatexText = React.memo(LatexText)
+const MemoQuestionVisual = React.memo(QuestionVisual)
+
 type Nav = NativeStackNavigationProp<PapersStackParamList, "AttemptPaper">;
 type Route = RouteProp<PapersStackParamList, "AttemptPaper">;
 type SubmitOutcome = {
@@ -188,13 +192,13 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
         </TouchableOpacity>
       </View>
       {question.visual_payload ? (
-        <QuestionVisual
+        <MemoQuestionVisual
           visual={question.visual_payload}
           containerStyle={styles.questionVisual}
         />
       ) : null}
       {shouldShowQuestionStemText(question.visual_payload, "interactive") ? (
-        <LatexText
+        <MemoLatexText
           value={question.question_text}
           style={styles.questionText}
           containerStyle={styles.questionTextContainer}
@@ -225,14 +229,12 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
                 >
                   {String.fromCharCode(65 + optionIndex)}
                 </Text>
-                <LatexText
-                  value={option.text}
-                  style={[
-                    styles.mcqText,
-                    selected && styles.mcqTextSelected,
-                  ]}
-                  containerStyle={styles.mcqTextContainer}
-                />
+                <View pointerEvents="none" style={styles.mcqTextContainer}>
+                  <MemoLatexText
+                    value={option.text}
+                    style={styles.mcqText}
+                  />
+                </View>
                 {selected ? (
                   <Ionicons
                     name="checkmark-circle"
@@ -304,7 +306,7 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
           <View style={styles.matchColumn}>
             <Text style={styles.matchLabel}>Column A</Text>
             {question.options.left.map((item, itemIndex) => (
-              <LatexText
+              <MemoLatexText
                 key={`${item}-${itemIndex}`}
                 value={`${itemIndex + 1}. ${item}`}
                 style={styles.matchItem}
@@ -314,7 +316,7 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
           <View style={styles.matchColumn}>
             <Text style={styles.matchLabel}>Column B</Text>
             {question.options.right.map((item, itemIndex) => (
-              <LatexText
+              <MemoLatexText
                 key={`${item}-${itemIndex}`}
                 value={`${String.fromCharCode(65 + itemIndex)}. ${item}`}
                 style={styles.matchItem}
@@ -358,7 +360,7 @@ export default function AttemptPaperScreen() {
     null,
   );
   const didAutoSubmitRef = useRef(false);
-  const attemptScrollRef = useRef<ScrollView>(null);
+  const attemptScrollRef = useRef<FlatList<QuestionInPaper>>(null);
   const didHandleInitialFocusRef = useRef(false);
 
   useLayoutEffect(() => {
@@ -500,7 +502,7 @@ export default function AttemptPaperScreen() {
       setSubmitOutcome(null)
       setSubmitReviewOpen(false)
       requestAnimationFrame(() => {
-        attemptScrollRef.current?.scrollTo({ y: 0, animated: false })
+        attemptScrollRef.current?.scrollToOffset({ offset: 0, animated: false })
       })
     },
     onError: () => {
@@ -721,6 +723,32 @@ export default function AttemptPaperScreen() {
     return `${m}:${s}`;
   };
 
+  const renderQuestion = useCallback(({
+    item,
+    index,
+  }: {
+    item: QuestionInPaper
+    index: number
+  }) => (
+    <StandardQuestionCard
+      question={item}
+      index={index}
+      answer={answers[item.id]}
+      flagged={Boolean(flagged[item.id])}
+      disabled={submitMutation.isPending}
+      onSelectAnswer={selectAnswer}
+      onTextAnswer={setTextAnswer}
+      onToggleFlag={toggleFlag}
+    />
+  ), [
+    answers,
+    flagged,
+    selectAnswer,
+    setTextAnswer,
+    submitMutation.isPending,
+    toggleFlag,
+  ])
+
   if (
     paperQuery.isLoading
     || attemptQuery.isLoading
@@ -836,40 +864,40 @@ export default function AttemptPaperScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView ref={attemptScrollRef} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 112 }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.examSummary}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{totalMarks}</Text>
-            <Text style={styles.summaryLabel}>Marks</Text>
+      <FlatList
+        ref={attemptScrollRef}
+        data={paper.questions}
+        keyExtractor={(question) => question.id}
+        renderItem={renderQuestion}
+        ListHeaderComponent={(
+          <View style={styles.examSummary}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{totalMarks}</Text>
+              <Text style={styles.summaryLabel}>Marks</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{flaggedCount}</Text>
+              <Text style={styles.summaryLabel}>Flagged</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>
+                {Math.max(0, totalQuestions - answeredCount)}
+              </Text>
+              <Text style={styles.summaryLabel}>Left</Text>
+            </View>
           </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{flaggedCount}</Text>
-            <Text style={styles.summaryLabel}>Flagged</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>
-              {Math.max(0, totalQuestions - answeredCount)}
-            </Text>
-            <Text style={styles.summaryLabel}>Left</Text>
-          </View>
-        </View>
-
-        {paper.questions.map((q, index) => (
-          <StandardQuestionCard
-            key={q.id}
-            question={q}
-            index={index}
-            answer={answers[q.id]}
-            flagged={Boolean(flagged[q.id])}
-            disabled={submitMutation.isPending}
-            onSelectAnswer={selectAnswer}
-            onTextAnswer={setTextAnswer}
-            onToggleFlag={toggleFlag}
-          />
-        ))}
-      </ScrollView>
+        )}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 112 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={2}
+        maxToRenderPerBatch={3}
+        updateCellsBatchingPeriod={40}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS === 'android'}
+      />
 
       <View
         style={[

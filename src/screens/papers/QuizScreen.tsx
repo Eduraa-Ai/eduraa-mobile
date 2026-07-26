@@ -8,8 +8,9 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -40,6 +41,9 @@ import {
   selectNewestInProgressAttempt,
 } from "./paperAttemptModel";
 import { usePaperAttemptSession } from "./usePaperAttemptSession";
+
+const MemoLatexText = React.memo(LatexText);
+const MemoQuestionVisual = React.memo(QuestionVisual);
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "Quiz">;
 type Route = RouteProp<PapersStackParamList, "Quiz">;
@@ -127,11 +131,11 @@ const QuestionCard = React.memo(function QuestionCard({
       </View>
 
       {question.visual_payload ? (
-        <QuestionVisual visual={question.visual_payload} />
+        <MemoQuestionVisual visual={question.visual_payload} />
       ) : null}
 
       {shouldShowQuestionStemText(question.visual_payload, "interactive") ? (
-        <LatexText value={question.question_text} style={styles.questionText} />
+        <MemoLatexText value={question.question_text} style={styles.questionText} />
       ) : null}
 
       {question.question_type === "mcq" && isMcqOptions(question.options) ? (
@@ -167,14 +171,12 @@ const QuestionCard = React.memo(function QuestionCard({
                 >
                   {optionLabel(optionIndex, option)}
                 </Text>
-                <LatexText
-                  value={option.text}
-                  style={[
-                    styles.optionText,
-                    selected && styles.optionTextSelected,
-                  ]}
-                  containerStyle={styles.optionTextContainer}
-                />
+                <View pointerEvents="none" style={styles.optionTextContainer}>
+                  <MemoLatexText
+                    value={option.text}
+                    style={styles.optionText}
+                  />
+                </View>
               </Pressable>
             );
           })}
@@ -278,7 +280,7 @@ const QuestionCard = React.memo(function QuestionCard({
         </View>
       ) : assistText ? (
         <View style={styles.assistPanel}>
-          <LatexText value={assistText} style={styles.assistText} />
+          <MemoLatexText value={assistText} style={styles.assistText} />
         </View>
       ) : null}
     </AnimatedCard>
@@ -554,6 +556,36 @@ export default function QuizScreen() {
     return `${minutes}:${secs}`;
   };
 
+  const renderQuestion = useCallback(({
+    item,
+    index,
+  }: {
+    item: QuestionInPaper;
+    index: number;
+  }) => (
+    <QuestionCard
+      question={item}
+      index={index}
+      answer={answers[item.id]}
+      disabled={submitMutation.isPending}
+      onAnswer={handleAnswer}
+      onAssist={handleAssist}
+      assistText={assistByQuestion[item.id]}
+      assistLoading={
+        assistMutation.isPending &&
+        assistMutation.variables?.questionId === item.id
+      }
+    />
+  ), [
+    answers,
+    assistByQuestion,
+    assistMutation.isPending,
+    assistMutation.variables?.questionId,
+    handleAnswer,
+    handleAssist,
+    submitMutation.isPending,
+  ]);
+
   if (
     paperQuery.isLoading
     || attemptQuery.isLoading
@@ -619,49 +651,42 @@ export default function QuizScreen() {
         ) : null}
       </View>
 
-      <ScrollView
+      <FlatList
+        data={paper.questions}
+        keyExtractor={(question) => question.id}
+        renderItem={renderQuestion}
+        ListHeaderComponent={(
+          <AnimatedCard style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <View>
+                <Text style={styles.summaryKicker}>Progress</Text>
+                <Text style={styles.summaryTitle}>
+                  {answeredCount}/{paper.questions.length} answered
+                </Text>
+              </View>
+              <View style={styles.marksPill}>
+                <Text style={styles.marksText}>{paper.total_marks} marks</Text>
+              </View>
+            </View>
+            {paper.instructions ? (
+              <LatexText value={paper.instructions} style={styles.instructions} />
+            ) : null}
+            <AnimatedButton
+              label={submitMutation.isPending ? "Submitting..." : "Submit quiz"}
+              loading={submitMutation.isPending}
+              onPress={() => submit()}
+            />
+          </AnimatedCard>
+        )}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-      >
-        <AnimatedCard style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <View>
-              <Text style={styles.summaryKicker}>Progress</Text>
-              <Text style={styles.summaryTitle}>
-                {answeredCount}/{paper.questions.length} answered
-              </Text>
-            </View>
-            <View style={styles.marksPill}>
-              <Text style={styles.marksText}>{paper.total_marks} marks</Text>
-            </View>
-          </View>
-          {paper.instructions ? (
-            <LatexText value={paper.instructions} style={styles.instructions} />
-          ) : null}
-          <AnimatedButton
-            label={submitMutation.isPending ? "Submitting..." : "Submit quiz"}
-            loading={submitMutation.isPending}
-            onPress={() => submit()}
-          />
-        </AnimatedCard>
-
-        {paper.questions.map((question, index) => (
-          <QuestionCard
-            key={question.id}
-            question={question}
-            index={index}
-            answer={answers[question.id]}
-            disabled={submitMutation.isPending}
-            onAnswer={handleAnswer}
-            onAssist={handleAssist}
-            assistText={assistByQuestion[question.id]}
-            assistLoading={
-              assistMutation.isPending &&
-              assistMutation.variables?.questionId === question.id
-            }
-          />
-        ))}
-      </ScrollView>
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={2}
+        maxToRenderPerBatch={3}
+        updateCellsBatchingPeriod={40}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS === "android"}
+      />
     </View>
   );
 }

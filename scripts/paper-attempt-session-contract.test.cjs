@@ -45,6 +45,18 @@ test('question cards are memoized and receive stable shared callbacks', () => {
   assert.match(interactiveQuiz, /onAnswer=\{handleAnswer\}/)
 })
 
+test('latex-heavy mobile attempts virtualize question cards', () => {
+  for (const source of [standardAttempt, interactiveQuiz]) {
+    assert.match(source, /const MemoLatexText = React\.memo\(LatexText\)/)
+    assert.match(source, /const MemoQuestionVisual = React\.memo\(QuestionVisual\)/)
+    assert.match(source, /<FlatList/)
+    assert.match(source, /initialNumToRender=\{2\}/)
+    assert.match(source, /maxToRenderPerBatch=\{3\}/)
+    assert.match(source, /windowSize=\{3\}/)
+    assert.doesNotMatch(source, /paper\.questions\.map\(\(question, index\) =>/)
+  }
+})
+
 test('selectable answers update card feedback and shared progress from the same press-in', () => {
   for (const source of [standardAttempt, interactiveQuiz]) {
     assert.match(source, /const \[optimisticAnswer, setOptimisticAnswer\] = useState\(answer\)/)
@@ -52,6 +64,7 @@ test('selectable answers update card feedback and shared progress from the same 
     assert.match(source, /onPressIn=\{\(\) => commitImmediateSelection\(/)
     assert.match(source, /onPress=\{\(\) => finishSelection\(/)
     assert.match(source, /pressInSelectionRef\.current === value/)
+    assert.match(source, /<View pointerEvents="none" style=\{styles\.(?:mcq|option)TextContainer\}>/)
   }
 })
 
