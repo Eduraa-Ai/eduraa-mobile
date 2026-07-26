@@ -16,6 +16,9 @@ const models = [
   'src/screens/learning/agenticLearningModel.ts',
   'src/utils/mathContent.ts',
   'src/utils/protectedDocumentModel.ts',
+  'src/utils/latex.ts',
+  'src/utils/questionVisual.ts',
+  'src/utils/bookPaperGeneration.ts',
   'src/auth/queryCacheScope.ts',
   'src/auth/roles.ts',
 ]
@@ -47,6 +50,18 @@ const suites = [
   {
     file: 'scripts/query-cache-scope.test.cjs',
     env: { QUERY_CACHE_SCOPE_PATH: path.join(outDir, 'auth/queryCacheScope.js') },
+  },
+  {
+    file: 'scripts/latex.test.cjs',
+    env: { LATEX_MODEL_PATH: path.join(outDir, 'utils/latex.js') },
+  },
+  {
+    file: 'scripts/question-visual.test.cjs',
+    env: { QUESTION_VISUAL_MODEL_PATH: path.join(outDir, 'utils/questionVisual.js') },
+  },
+  {
+    file: 'scripts/book-paper-generation.test.cjs',
+    env: { BOOK_PAPER_GENERATION_MODEL_PATH: path.join(outDir, 'utils/bookPaperGeneration.js') },
   },
 ]
 
