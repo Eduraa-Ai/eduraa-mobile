@@ -67,7 +67,7 @@ export default function StudyPackScreen() {
   const isWide = width >= WIDE_SCREEN_BREAKPOINT
 
   const workspaceQuery = useQuery({
-    queryKey: ['study-pack-workspace', slugifyKey(subject, chapter, standard)],
+    queryKey: ['study-pack-workspace', user?.id ?? null, slugifyKey(subject, chapter, standard)],
     queryFn: () =>
       competitiveExamApi.getWorkspace({
         subject_name: subject,
@@ -83,7 +83,22 @@ export default function StudyPackScreen() {
     retry: 1,
   })
 
-  const remotePayload = workspaceQuery.data
+  // Coalesce every array field the UI reads. A real backend can legitimately
+  // omit a section or return null for memory_tips; without this guard,
+  // .length on undefined crashes the screen.
+  const remotePayload: CompetitiveWorkspacePayload | undefined = useMemo(() => {
+    const raw = workspaceQuery.data
+    if (!raw) return undefined
+    return {
+      ...raw,
+      formula_sheet: Array.isArray(raw.formula_sheet) ? raw.formula_sheet : [],
+      hacks: Array.isArray(raw.hacks) ? raw.hacks : [],
+      real_life: Array.isArray(raw.real_life) ? raw.real_life : [],
+      revision_notes: Array.isArray(raw.revision_notes) ? raw.revision_notes : [],
+      memory_tips: Array.isArray(raw.memory_tips) ? raw.memory_tips : [],
+      summary: typeof raw.summary === 'string' ? raw.summary : '',
+    }
+  }, [workspaceQuery.data])
   const fallbackPayload = useMemo<CompetitiveWorkspacePayload>(
     () =>
       buildFallbackStudyPack({

@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import {
   Alert,
-  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -22,6 +21,8 @@ import {
   CheatSheetPayloadChapter,
   resolveCheatSheetPdfUrl,
 } from '../../api/cheatSheets'
+import { useAuthStore } from '../../stores/authStore'
+import { openProtectedDocument } from '../../utils/openProtectedDocument'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 
 const MONO_FAMILY = Platform.select({
@@ -33,14 +34,9 @@ const MONO_FAMILY = Platform.select({
 const READING_MAX_WIDTH = 720
 const WIDE_SCREEN_BREAKPOINT = 720
 
-async function openPdf(url: string) {
+async function openCheatSheetPdf(url: string, fileStem: string) {
   try {
-    const canOpen = await Linking.canOpenURL(url)
-    if (!canOpen) {
-      Alert.alert('Cannot open PDF', 'No app is available to open this PDF.')
-      return
-    }
-    await Linking.openURL(url)
+    await openProtectedDocument(url, fileStem)
   } catch {
     Alert.alert('Cannot open PDF', 'Something went wrong opening the PDF.')
   }
@@ -48,34 +44,74 @@ async function openPdf(url: string) {
 
 type SubjectHint = 'physics' | 'chemistry' | 'mathematics' | 'biology' | null
 
-const SUBJECT_KEYWORDS: { hint: SubjectHint; label: string; keywords: string[] }[] = [
-  { hint: 'physics', label: 'Physics', keywords: ['physics', 'mechanic', 'electro', 'magnet', 'optic', 'thermodyn', 'kinemat'] },
-  { hint: 'chemistry', label: 'Chemistry', keywords: ['chemistry', 'organic', 'inorganic', 'reaction', 'chemical', 'compound', 'molecule'] },
-  { hint: 'mathematics', label: 'Mathematics', keywords: ['math', 'algebra', 'calculus', 'trigonometry', 'geometry', 'integral', 'derivative'] },
-  { hint: 'biology', label: 'Biology', keywords: ['biology', 'cell', 'plant', 'animal', 'genetic', 'evolution'] },
+// Keyword weights: exact subject names (10) rank above signature terms (3) above
+// generic prefixes (1). Prevents "electrochemistry" from matching physics via
+// the shared "electro" root — chemistry's specific "electrochem" wins.
+const SUBJECT_KEYWORDS: {
+  hint: SubjectHint
+  label: string
+  strong: string[]
+  weak: string[]
+}[] = [
+  {
+    hint: 'chemistry',
+    label: 'Chemistry',
+    strong: ['chemistry', 'electrochem', 'organic', 'inorganic'],
+    weak: ['reaction', 'chemical', 'compound', 'molecule', 'periodic', 'valence'],
+  },
+  {
+    hint: 'physics',
+    label: 'Physics',
+    strong: ['physics', 'electrostat', 'electromagn', 'mechanic', 'thermodyn', 'kinemat'],
+    weak: ['magnet', 'optic', 'newton', 'friction', 'gravitation'],
+  },
+  {
+    hint: 'mathematics',
+    label: 'Mathematics',
+    strong: ['mathematics', 'algebra', 'calculus', 'trigonometry', 'geometry'],
+    weak: ['integral', 'derivative', 'matrix', 'vector', 'probability'],
+  },
+  {
+    hint: 'biology',
+    label: 'Biology',
+    strong: ['biology', 'botany', 'zoology'],
+    weak: ['cell', 'plant', 'animal', 'genetic', 'evolution', 'organism'],
+  },
 ]
+
+const STRONG_WEIGHT = 10
+const WEAK_WEIGHT = 3
+
+function scoreSubject(haystack: string): { hint: SubjectHint; label: string } | null {
+  const lowered = haystack.toLowerCase()
+  let best: { entry: typeof SUBJECT_KEYWORDS[number]; score: number } | null = null
+  for (const entry of SUBJECT_KEYWORDS) {
+    let score = 0
+    for (const k of entry.strong) if (lowered.includes(k)) score += STRONG_WEIGHT
+    for (const k of entry.weak) if (lowered.includes(k)) score += WEAK_WEIGHT
+    if (score > 0 && (best === null || score > best.score)) best = { entry, score }
+  }
+  return best ? { hint: best.entry.hint, label: best.entry.label } : null
+}
 
 function deriveSubject(sheet: CheatSheet): { label: string; hint: SubjectHint } | null {
   const metaSubject = ((sheet.source_meta || {}) as Record<string, unknown>)['subject_name']
   if (typeof metaSubject === 'string' && metaSubject.trim()) {
-    return { label: metaSubject.trim(), hint: matchSubject(metaSubject) }
+    const scored = scoreSubject(metaSubject)
+    return { label: metaSubject.trim(), hint: scored ? scored.hint : null }
   }
   const haystack = [
     sheet.title,
     sheet.payload?.scope_summary,
-    ...(sheet.payload?.chapters || []).flatMap((c) => [c.chapter_title, c.book_title, ...c.topics.map((t) => t.topic_name)]),
+    ...(sheet.payload?.chapters || []).flatMap((c) => [
+      c.chapter_title,
+      c.book_title,
+      ...(c.topics || []).map((t) => t.topic_name),
+    ]),
   ]
-    .filter((value): value is string => typeof value === 'string')
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
     .join(' ')
-    .toLowerCase()
-  const match = SUBJECT_KEYWORDS.find(({ keywords }) => keywords.some((keyword) => haystack.includes(keyword)))
-  return match ? { label: match.label, hint: match.hint } : null
-}
-
-function matchSubject(name: string): SubjectHint {
-  const lowered = name.toLowerCase()
-  const match = SUBJECT_KEYWORDS.find(({ keywords }) => keywords.some((keyword) => lowered.includes(keyword)))
-  return match ? match.hint : null
+  return scoreSubject(haystack)
 }
 
 type SectionTone = 'diamond' | 'trap' | 'check' | 'idea' | 'star' | 'brain'
@@ -148,9 +184,10 @@ export default function CheatSheetDetailScreen() {
   const [chapterIndex, setChapterIndex] = useState(0)
   const { width } = useWindowDimensions()
   const isWide = width >= WIDE_SCREEN_BREAKPOINT
+  const userId = useAuthStore((state) => state.user?.id ?? null)
 
   const listQuery = useQuery({
-    queryKey: ['cheat-sheets-detail'],
+    queryKey: ['cheat-sheets-detail', userId],
     queryFn: () => cheatSheetsApi.list(),
     enabled: Boolean(cheatSheetId),
   })
@@ -304,7 +341,7 @@ export default function CheatSheetDetailScreen() {
           label={canDownload ? 'Download cheat sheet PDF' : 'PDF not ready yet'}
           variant="primary"
           disabled={!canDownload}
-          onPress={() => void openPdf(pdfUrl)}
+          onPress={() => void openCheatSheetPdf(pdfUrl, `cheat-sheet-${sheet.id}`)}
           style={styles.actionButton}
         />
         {canOpenStudyPack && subject && chapter ? (
