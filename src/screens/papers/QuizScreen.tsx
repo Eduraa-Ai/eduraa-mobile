@@ -75,6 +75,7 @@ const QuestionCard = React.memo(function QuestionCard({
   assistLoading?: boolean;
 }) {
   const [optimisticAnswer, setOptimisticAnswer] = useState(answer);
+  const pressInSelectionRef = useRef<string | null>(null);
   const selectable =
     question.question_type === "mcq" ||
     question.question_type === "true_false";
@@ -88,6 +89,27 @@ const QuestionCard = React.memo(function QuestionCard({
   const showImmediateSelection = useCallback((value: string) => {
     setOptimisticAnswer((current) => (current === value ? undefined : value));
   }, []);
+
+  const commitImmediateSelection = useCallback(
+    (value: string) => {
+      pressInSelectionRef.current = value;
+      showImmediateSelection(value);
+      onAnswer(question.id, value, true);
+    },
+    [onAnswer, question.id, showImmediateSelection],
+  );
+
+  const finishSelection = useCallback(
+    (value: string) => {
+      if (pressInSelectionRef.current === value) {
+        pressInSelectionRef.current = null;
+        return;
+      }
+      showImmediateSelection(value);
+      onAnswer(question.id, value, true);
+    },
+    [onAnswer, question.id, showImmediateSelection],
+  );
 
   return (
     <AnimatedCard style={styles.questionCard}>
@@ -121,9 +143,8 @@ const QuestionCard = React.memo(function QuestionCard({
               <Pressable
                 key={`${question.id}-${value}`}
                 disabled={disabled}
-                onTouchStart={() => showImmediateSelection(value)}
-                onTouchCancel={() => setOptimisticAnswer(answer)}
-                onPress={() => onAnswer(question.id, value, true)}
+                onPressIn={() => commitImmediateSelection(value)}
+                onPress={() => finishSelection(value)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected, disabled }}
                 accessibilityLabel={`Question ${index + 1}, option ${optionLabel(optionIndex, option)}: ${latexToPlainText(option.text)}`}
@@ -168,9 +189,8 @@ const QuestionCard = React.memo(function QuestionCard({
               <Pressable
                 key={value}
                 disabled={disabled}
-                onTouchStart={() => showImmediateSelection(value)}
-                onTouchCancel={() => setOptimisticAnswer(answer)}
-                onPress={() => onAnswer(question.id, value, true)}
+                onPressIn={() => commitImmediateSelection(value)}
+                onPress={() => finishSelection(value)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected, disabled }}
                 accessibilityHint={

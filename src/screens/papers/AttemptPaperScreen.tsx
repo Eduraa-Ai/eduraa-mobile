@@ -109,6 +109,7 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
   onToggleFlag: (questionId: string) => void
 }) {
   const [optimisticAnswer, setOptimisticAnswer] = useState(answer)
+  const pressInSelectionRef = useRef<string | null>(null)
   const selectable =
     question.question_type === "mcq" ||
     question.question_type === "true_false"
@@ -121,6 +122,21 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
   const showImmediateSelection = useCallback((value: string) => {
     setOptimisticAnswer((current) => (current === value ? undefined : value))
   }, [])
+
+  const commitImmediateSelection = useCallback((value: string) => {
+    pressInSelectionRef.current = value
+    showImmediateSelection(value)
+    onSelectAnswer(question.id, value)
+  }, [onSelectAnswer, question.id, showImmediateSelection])
+
+  const finishSelection = useCallback((value: string) => {
+    if (pressInSelectionRef.current === value) {
+      pressInSelectionRef.current = null
+      return
+    }
+    showImmediateSelection(value)
+    onSelectAnswer(question.id, value)
+  }, [onSelectAnswer, question.id, showImmediateSelection])
 
   return (
     <View
@@ -194,9 +210,8 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
                 key={option.id}
                 disabled={disabled}
                 style={[styles.mcqOption, selected && styles.mcqOptionSelected]}
-                onTouchStart={() => showImmediateSelection(option.id)}
-                onTouchCancel={() => setOptimisticAnswer(answer)}
-                onPress={() => onSelectAnswer(question.id, option.id)}
+                onPressIn={() => commitImmediateSelection(option.id)}
+                onPress={() => finishSelection(option.id)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected, disabled }}
                 accessibilityLabel={`Question ${index + 1}, option ${String.fromCharCode(65 + optionIndex)}: ${latexToPlainText(option.text)}`}
@@ -240,9 +255,8 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
                 key={value}
                 disabled={disabled}
                 style={[styles.tfBtn, selected && styles.tfBtnSelected]}
-                onTouchStart={() => showImmediateSelection(value)}
-                onTouchCancel={() => setOptimisticAnswer(answer)}
-                onPress={() => onSelectAnswer(question.id, value)}
+                onPressIn={() => commitImmediateSelection(value)}
+                onPress={() => finishSelection(value)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected, disabled }}
                 accessibilityLabel={`Question ${index + 1}, ${value}`}
