@@ -5,7 +5,7 @@ export type QuestionEvidenceTab = 'feedback' | 'details' | 'review'
 export type CheckedPaperQuestionStatus = 'correct' | 'wrong' | 'missed' | 'pending'
 
 export const CHECKED_PAPER_POLL_INTERVAL_MS = 3000
-export const CHECKING_ESTIMATE_MS = 2 * 60 * 1000
+export const CHECKING_ESTIMATE_MS = 60 * 1000
 
 export interface QuestionReviewOption {
   key: string
@@ -231,7 +231,7 @@ export function buildCheckingEstimate(createdAt?: string | null, now = Date.now(
   const createdTime = createdAt ? new Date(createdAt).getTime() : now
   const elapsedMs = Number.isFinite(createdTime) ? Math.max(0, now - createdTime) : 0
   const rawProgress = (elapsedMs / CHECKING_ESTIMATE_MS) * 100
-  const percent = Math.max(8, Math.min(94, Math.round(8 + rawProgress * 0.86)))
+  const percent = Math.max(10, Math.min(94, Math.round(10 + rawProgress * 0.84)))
   const remainingSeconds = Math.max(0, Math.ceil((CHECKING_ESTIMATE_MS - elapsedMs) / 1000))
   const isOverdue = remainingSeconds <= 0
   const timeLabel = remainingSeconds <= 0

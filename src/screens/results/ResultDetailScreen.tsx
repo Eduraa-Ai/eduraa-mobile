@@ -45,7 +45,7 @@ function ReportScoreRing({
   score,
   max,
   checkingPercent,
-  checkingTimeLabel,
+  checkingEstimated,
   checkingOverdue,
   checkingPaused,
 }: {
@@ -53,7 +53,7 @@ function ReportScoreRing({
   score: number | null
   max: number | null
   checkingPercent: number
-  checkingTimeLabel: string
+  checkingEstimated: boolean
   checkingOverdue: boolean
   checkingPaused: boolean
 }) {
@@ -62,13 +62,15 @@ function ReportScoreRing({
   const ringRadius = (size - stroke) / 2
   const circumference = Math.PI * 2 * ringRadius
   const isChecking = percent == null
-  const checkingUncertain = isChecking && (checkingOverdue || checkingPaused)
-  const progress = percent ?? (checkingUncertain ? 0 : checkingPercent)
-  const estimateValue = checkingTimeLabel === 'Finishing up'
-    ? 'Almost'
-    : checkingTimeLabel.replace('≈ ', '').replace(' left', '')
-  const checkingValue = checkingPaused ? 'Paused' : checkingOverdue ? 'Still' : estimateValue
-  const checkingLabel = checkingPaused ? 'RETRYING' : checkingOverdue ? 'CHECKING' : 'EST. LEFT'
+  const progress = percent ?? checkingPercent
+  const checkingValue = `${Math.round(checkingPercent)}%`
+  const checkingLabel = checkingPaused
+    ? 'RETRYING'
+    : checkingOverdue
+      ? 'STILL CHECKING'
+      : checkingEstimated
+        ? 'EST. CHECKED'
+        : 'CHECKED'
   return (
     <View
       style={styles.scoreRing}
@@ -77,7 +79,7 @@ function ReportScoreRing({
           ? 'Checking progress paused while Eduraa retries the connection'
           : checkingOverdue
             ? 'Still checking, taking longer than the original estimate'
-            : `Checking progress, estimated ${checkingPercent} percent, ${checkingTimeLabel}`
+            : `Checking progress, ${checkingEstimated ? 'estimated ' : ''}${Math.round(checkingPercent)} percent complete`
         : `${percent} percent, ${score} out of ${max} marks`}
     >
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -97,7 +99,7 @@ function ReportScoreRing({
         />
       </Svg>
       <View style={styles.scoreRingCenter}>
-        <Text style={[styles.scoreRingPercent, isChecking && styles.checkingTimeValue]}>
+        <Text style={styles.scoreRingPercent}>
           {isChecking ? checkingValue : `${percent}%`}
         </Text>
         <Text style={styles.scoreRingMarks}>{isChecking ? checkingLabel : `${score ?? '-'} / ${max ?? '-'}`}</Text>
@@ -172,6 +174,7 @@ export default function ResultDetailScreen() {
   const id = params.checkedPaperId || params.submissionId || ''
   const focusedOnce = useRef(false)
   const completionNotified = useRef(false)
+  const [progressClock, setProgressClock] = useState(() => Date.now())
   const [manualRefreshing, setManualRefreshing] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -195,21 +198,36 @@ export default function ResultDetailScreen() {
   const report = useMemo(() => data ? buildCheckedPaperReport(data) : null, [data])
   const isChecking = Boolean(data && isCheckedPaperChecking(data))
   const checkFailed = Boolean(data && isCheckedPaperCheckFailed(data))
+  const reportedCheckingPercent = typeof data?.checking_progress_percent === 'number'
+    && Number.isFinite(data.checking_progress_percent)
+    ? Math.max(0, Math.min(100, Math.round(data.checking_progress_percent)))
+    : null
   const checkingEstimate = useMemo(
-    () => buildCheckingEstimate(data?.created_at),
-    [data?.created_at],
+    () => buildCheckingEstimate(data?.created_at, progressClock),
+    [data?.created_at, progressClock],
   )
+  const checkingPercent = reportedCheckingPercent ?? checkingEstimate.percent
+  const checkingProgressEstimated = reportedCheckingPercent == null
   const pollingIssue = isChecking && isError
   const checkingContextLabel = pollingIssue
     ? 'Connection status'
-    : checkingEstimate.isOverdue
+    : checkingProgressEstimated && checkingEstimate.isOverdue
       ? 'Grading status'
-      : 'Estimated progress'
+      : checkingProgressEstimated
+        ? 'Estimated progress'
+        : 'Checking progress'
   const checkingContextValue = pollingIssue
     ? 'Retrying'
-    : checkingEstimate.isOverdue
+    : checkingProgressEstimated && checkingEstimate.isOverdue
       ? 'Still checking'
       : 'Checking'
+
+  useEffect(() => {
+    if (!isChecking || reportedCheckingPercent != null) return undefined
+    setProgressClock(Date.now())
+    const timer = setInterval(() => setProgressClock(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [isChecking, reportedCheckingPercent])
 
   useEffect(() => {
     if (!data || isChecking || completionNotified.current || report?.percent == null) return
@@ -289,7 +307,7 @@ export default function ResultDetailScreen() {
   const rawStatusLabel = (data.status || 'graded').replace(/_/g, ' ')
   const statusLabel = pollingIssue
     ? 'retrying'
-    : isChecking && checkingEstimate.isOverdue
+    : isChecking && checkingProgressEstimated && checkingEstimate.isOverdue
       ? 'still checking'
       : isChecking
         ? 'checking'
@@ -356,9 +374,9 @@ export default function ResultDetailScreen() {
                 percent={report.percent}
                 score={report.totalScore}
                 max={report.maxScore}
-                checkingPercent={checkingEstimate.percent}
-                checkingTimeLabel={checkingEstimate.timeLabel}
-                checkingOverdue={checkingEstimate.isOverdue}
+                checkingPercent={checkingPercent}
+                checkingEstimated={checkingProgressEstimated}
+                checkingOverdue={checkingProgressEstimated && checkingEstimate.isOverdue}
                 checkingPaused={pollingIssue}
               />
               <View style={styles.scoreContext}>
@@ -382,12 +400,12 @@ export default function ResultDetailScreen() {
               </View>
               <View style={styles.diagnosisCopy}>
                 <Text style={styles.diagnosisTitle}>
-                  {pollingIssue ? 'Connection paused.' : isChecking && checkingEstimate.isOverdue ? 'Taking a little longer.' : report.diagnosisTitle}
+                  {pollingIssue ? 'Connection paused.' : isChecking && checkingProgressEstimated && checkingEstimate.isOverdue ? 'Taking a little longer.' : report.diagnosisTitle}
                 </Text>
                 <Text style={styles.diagnosisText} numberOfLines={4}>
                   {pollingIssue
                     ? 'Your paper is safe. Eduraa will retry automatically when the connection returns.'
-                    : isChecking && checkingEstimate.isOverdue
+                    : isChecking && checkingProgressEstimated && checkingEstimate.isOverdue
                       ? 'Your paper is still checking. This report will update automatically when it is ready.'
                       : report.diagnosisBody}
                 </Text>
@@ -468,7 +486,6 @@ const styles = StyleSheet.create({
   scoreRing: { width: 88, height: 88, alignItems: 'center', justifyContent: 'center' },
   scoreRingCenter: { position: 'absolute', alignItems: 'center' },
   scoreRingPercent: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 22, lineHeight: 24 },
-  checkingTimeValue: { color: '#d7ffea', fontSize: 19, lineHeight: 22 },
   scoreRingMarks: { maxWidth: 72, color: 'rgba(255,255,255,0.76)', fontFamily: typography.fonts.bodyBold, fontSize: 9, lineHeight: 11, marginTop: 2, textAlign: 'center' },
   scoreContext: { width: 142, gap: spacing[1] },
   scoreContextLabel: { color: 'rgba(255,255,255,0.62)', fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 13 },
