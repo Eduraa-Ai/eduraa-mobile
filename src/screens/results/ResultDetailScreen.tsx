@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { prefetchAgenticLearning } from '../../api/agenticLearning'
 import { isLearnerRole } from '../../auth/roles'
-import { AuthLogoMark } from '../../components/ui'
+import { AuthLogoMark, MathText } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
@@ -24,10 +24,10 @@ import {
   CHECKED_PAPER_POLL_INTERVAL_MS,
   checkedPaperTitle,
   formatReportDate,
+  isCheckedPaperCheckFailed,
   isCheckedPaperChecking,
   questionStatus,
   questionTypeLabel,
-  readableMathText,
 } from './checkedPaperDetailModel'
 
 type Route = RouteProp<ResultsStackParamList, 'ResultDetail'>
@@ -120,12 +120,12 @@ function ReportQuestionRow({ item, index, onPress }: { item: GradingResultItem; 
   const status = questionStatus(item)
   const meta = STATUS_META[status]
   const number = item.question_number ?? index + 1
-  const title = item.question_text ? readableMathText(item.question_text) : questionTypeLabel(item)
+  const title = item.question_text || questionTypeLabel(item)
   const expected = answerDisplay(item.expected_answer)
   const detail = status === 'missed'
-    ? `Not attempted${expected ? ` · Expected: ${readableMathText(expected)}` : ''}`
+    ? `Not attempted${expected ? ` · Expected: ${expected}` : ''}`
     : item.feedback || item.recommendation || `${meta.label} response`
-  const preview = readableMathText(detail)
+  const preview = String(detail)
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
   return (
@@ -139,8 +139,8 @@ function ReportQuestionRow({ item, index, onPress }: { item: GradingResultItem; 
         <Text style={[styles.questionIndexText, { color: meta.tone }]}>{String(number).padStart(2, '0')}</Text>
       </View>
       <View style={styles.questionCopy}>
-        <Text style={styles.questionTitle} numberOfLines={2}>{title}</Text>
-        <Text style={styles.questionDetail} numberOfLines={2}>{preview}</Text>
+        <MathText style={styles.questionTitle} value={title} />
+        <MathText style={styles.questionDetail} value={preview} />
       </View>
       <View style={styles.questionScore}>
         <Text style={styles.questionScoreText}>{item.score ?? '-'}/{item.max_score ?? '-'}</Text>
@@ -172,10 +172,10 @@ export default function ResultDetailScreen() {
   const id = params.checkedPaperId || params.submissionId || ''
   const focusedOnce = useRef(false)
   const completionNotified = useRef(false)
-  const [progressClock, setProgressClock] = useState(() => Date.now())
+  const [manualRefreshing, setManualRefreshing] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
-  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['checked-paper', id],
     queryFn: () => checkedPapersApi.getById(id),
     enabled: Boolean(id),
@@ -194,9 +194,10 @@ export default function ResultDetailScreen() {
 
   const report = useMemo(() => data ? buildCheckedPaperReport(data) : null, [data])
   const isChecking = Boolean(data && isCheckedPaperChecking(data))
+  const checkFailed = Boolean(data && isCheckedPaperCheckFailed(data))
   const checkingEstimate = useMemo(
-    () => buildCheckingEstimate(data?.created_at, progressClock),
-    [data?.created_at, progressClock],
+    () => buildCheckingEstimate(data?.created_at),
+    [data?.created_at],
   )
   const pollingIssue = isChecking && isError
   const checkingContextLabel = pollingIssue
@@ -211,13 +212,6 @@ export default function ResultDetailScreen() {
       : 'Checking'
 
   useEffect(() => {
-    if (!isChecking) return undefined
-    setProgressClock(Date.now())
-    const timer = setInterval(() => setProgressClock(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [isChecking])
-
-  useEffect(() => {
     if (!data || isChecking || completionNotified.current || report?.percent == null) return
     completionNotified.current = true
     void queryClient.invalidateQueries({ queryKey: ['checked-papers'] })
@@ -225,6 +219,15 @@ export default function ResultDetailScreen() {
     void prefetchAgenticLearning(queryClient, data.id, topicIds)
   }, [data, isChecking, queryClient, report?.percent])
   const goBack = () => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('ResultsList')
+  const refreshManually = async () => {
+    if (manualRefreshing) return
+    setManualRefreshing(true)
+    try {
+      await refetch()
+    } finally {
+      setManualRefreshing(false)
+    }
+  }
   const openQuestion = (item: GradingResultItem, index: number) => navigation.navigate('QuestionEvidence', {
     checkedPaperId: id,
     questionId: item.question_id,
@@ -262,6 +265,21 @@ export default function ResultDetailScreen() {
               onAction={!id ? () => navigation.navigate('ResultsList') : () => void refetch()}
             />
           )}
+        </View>
+      </View>
+    )
+  }
+
+  if (checkFailed) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
+        <View style={styles.stateSurface}>
+          <ResultState
+            title="Checking needs another try"
+            message="Your submitted paper is safe, but checking did not finish. Return to Checked papers and open it again after checking is retried."
+            action="Back to checked papers"
+            onAction={() => navigation.navigate('ResultsList')}
+          />
         </View>
       </View>
     )
@@ -319,7 +337,7 @@ export default function ResultDetailScreen() {
           style={styles.reportScroll}
           contentContainerStyle={[styles.reportContent, { paddingBottom: layout.bottomTabHeight + insets.bottom + spacing[10] }]}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={() => void refetch()} colors={[colors.accent]} tintColor={colors.accent} />}
+          refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={() => void refreshManually()} colors={[colors.accent]} tintColor={colors.accent} />}
         >
           {downloadError ? (
             <View style={styles.downloadErrorBanner} accessibilityRole="alert">

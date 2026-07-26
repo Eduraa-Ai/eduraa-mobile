@@ -212,10 +212,19 @@ export function questionTypeLabel(item: GradingResultItem) {
 
 export function isCheckedPaperChecking(paper: CheckedPaper) {
   const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
+  if (['failed', 'error', 'grading_failed', 'checking_failed'].includes(status)) return false
   if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review' || status === 'needs_review') {
     return false
   }
-  return paper.total_score == null || paper.max_score == null || paper.max_score <= 0
+  return ['submitted', 'checking', 'processing', 'uploaded'].includes(status)
+    || paper.total_score == null
+    || paper.max_score == null
+    || paper.max_score <= 0
+}
+
+export function isCheckedPaperCheckFailed(paper: CheckedPaper) {
+  const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
+  return ['failed', 'error', 'grading_failed', 'checking_failed'].includes(status)
 }
 
 export function buildCheckingEstimate(createdAt?: string | null, now = Date.now()) {
@@ -392,7 +401,7 @@ export function buildDetailedExplanation(item: GradingResultItem): DetailedExpla
   const sections: DetailedExplanationSection[] = []
 
   if (whyMarksCut) sections.push({ key: 'why_marks_cut', title: 'Why Marks Cut', content: [whyMarksCut], list: false })
-  if (potentialSolutions.length) sections.push({ key: 'potential_solutions', title: 'Potential Solutions', content: potentialSolutions, list: true })
+  if (potentialSolutions.length) sections.push({ key: 'potential_solutions', title: 'Solution Steps', content: potentialSolutions, list: true })
   if (hints.length) sections.push({ key: 'hints', title: 'Hints', content: hints, list: true })
   if (easyExample.length) sections.push({ key: 'easy_example', title: 'Easy Example', content: easyExample, list: false })
   if (recommendation.length) sections.push({ key: 'recommendation', title: 'Recommendation', content: recommendation, list: false })
@@ -402,10 +411,8 @@ export function buildDetailedExplanation(item: GradingResultItem): DetailedExpla
 export function buildQuestionReview(item: GradingResultItem) {
   const responseValue = item.response ?? item.student_answer ?? item.selected_answer
   const nestedQuestion = recordValue(item, ['question', 'question_data', 'question_details'])
-  const questionText = readableMathText(
-    answerDisplay(recordValue(item, ['question_text', 'text', 'prompt']))
-      || answerDisplay(recordValue(nestedQuestion, ['question_text', 'text', 'prompt'])),
-  )
+  const questionText = answerDisplay(recordValue(item, ['question_text', 'text', 'prompt']))
+    || answerDisplay(recordValue(nestedQuestion, ['question_text', 'text', 'prompt']))
   const options = normalizeQuestionOptions(item)
   const questionFigure = normalizeQuestionFigure(item)
   const optionBased = ['mcq', 'true_false'].includes(normalizedToken(item.question_type).replace(/\s+/g, '_'))
@@ -486,4 +493,12 @@ export function findNextEvidenceQuestion(paper: CheckedPaper, questionId?: strin
   const questions = paper.grading_results ?? []
   const nextIndex = current.index + 1
   return questions[nextIndex] ? { item: questions[nextIndex], index: nextIndex } : null
+}
+
+export function findPreviousEvidenceQuestion(paper: CheckedPaper, questionId?: string, questionIndex?: number) {
+  const current = findEvidenceQuestion(paper, questionId, questionIndex)
+  if (!current) return null
+  const questions = paper.grading_results ?? []
+  const previousIndex = current.index - 1
+  return questions[previousIndex] ? { item: questions[previousIndex], index: previousIndex } : null
 }

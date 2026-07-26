@@ -4,8 +4,7 @@ const EXPLICIT_MATH_RE =
   /\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)/;
 const EXPLICIT_MATH_SPLIT_RE =
   /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\))/g;
-const TEX_COMMAND_RE =
-  /\\(?:begin|ce|dfrac|frac|mathrm|operatorname|sqrt|text|tfrac)\b/;
+const TEX_COMMAND_RE = /^\\[A-Za-z]+\b/;
 const MATH_SIGNAL_RE =
   /\\[A-Za-z]+|[_^{}]|(?:\d|[A-Za-z])\s*[=<>+\-*/]\s*(?:\d|[A-Za-z])/;
 
@@ -43,6 +42,19 @@ function normalizeDuplicatedDelimiters(value: string) {
     .replace(/\\\(\s*\$([^$]+?)\$\s*\\\)/g, String.raw`\($1\)`);
 
   return normalized;
+}
+
+function wrapImplicitLatexAtoms(value: string) {
+  const groupedAtom =
+    /\\(?:dfrac|tfrac|frac)\s*\{[^{}\n]+\}\s*\{[^{}\n]+\}|\\[A-Za-z]+\s*(?:\{[^{}\n]*\}|[A-Za-z0-9])(?:\s*[_^]\s*(?:\{[^{}\n]*\}|[A-Za-z0-9+\-=()]))*/g;
+
+  return value
+    .split(EXPLICIT_MATH_SPLIT_RE)
+    .map((part) => {
+      if (!part || EXPLICIT_MATH_RE.test(part)) return part;
+      return part.replace(groupedAtom, (atom) => `$${atom}$`);
+    })
+    .join("");
 }
 
 function wrapStandaloneMathLine(line: string) {
@@ -95,7 +107,7 @@ export function normalizeLatexContent(value?: string | null) {
     },
   );
 
-  return wrapStandaloneMath(normalized).trim();
+  return wrapImplicitLatexAtoms(wrapStandaloneMath(normalized)).trim();
 }
 
 export function containsLatex(value?: string | null) {

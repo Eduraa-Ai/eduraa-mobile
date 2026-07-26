@@ -6,6 +6,8 @@ export type CheckedPaperTab = 'all' | 'needs_attention' | 'strong'
 // persisted scores, grading outcomes, submission state, or API semantics.
 export const STRONG_PERCENT = 65
 export const CHECKED_PAPERS_POLL_INTERVAL_MS = 4000
+const checkingStatuses = new Set(['submitted', 'checking', 'processing', 'uploaded'])
+const failedStatuses = new Set(['failed', 'error', 'grading_failed', 'checking_failed'])
 
 export function normalize(value?: string | null) {
   return String(value ?? '').trim().toLowerCase()
@@ -35,10 +37,11 @@ export function scoreLabel(paper: CheckedPaper) {
 
 export function isPaperChecking(paper: CheckedPaper) {
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  if (failedStatuses.has(status)) return false
   if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review' || status === 'needs_review') {
     return false
   }
-  return scorePercent(paper) == null
+  return checkingStatuses.has(status) || scorePercent(paper) == null
 }
 
 export function paperAccessibilityLabel(paper: CheckedPaper, dateLabel: string) {
@@ -57,8 +60,10 @@ export function formatPaperCount(count: number) {
 
 export function isNeedsAttention(paper: CheckedPaper) {
   const percent = scorePercent(paper)
+  const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  if (failedStatuses.has(status)) return true
   if (paper.manual_review_requested || paper.needs_review || paper.status === 'pending_manual_review') return true
-  if (paper.status === 'processing' || paper.status === 'uploaded') return true
+  if (checkingStatuses.has(status)) return true
   return percent != null ? percent < STRONG_PERCENT : false
 }
 
@@ -69,9 +74,11 @@ export function isStrong(paper: CheckedPaper) {
 }
 
 export function paperStatusLabel(paper: CheckedPaper) {
+  const status = normalize(paper.status).replace(/[\s-]+/g, '_')
   if (paper.manual_review_requested) return 'Manual review requested'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'Needs review'
-  if (paper.status === 'processing' || paper.status === 'uploaded') return 'Checking in progress'
+  if (failedStatuses.has(status)) return 'Checking failed'
+  if (checkingStatuses.has(status)) return 'Checking in progress'
   if (isStrong(paper)) return 'Strong'
   if (scorePercent(paper) != null) return 'Needs attention'
   return 'Score pending'
@@ -79,9 +86,11 @@ export function paperStatusLabel(paper: CheckedPaper) {
 
 export function paperInsight(paper: CheckedPaper) {
   const percent = scorePercent(paper)
+  const status = normalize(paper.status).replace(/[\s-]+/g, '_')
   if (paper.manual_review_requested) return 'Awaiting a manual review.'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'The reviewer needs to look at this paper.'
-  if (paper.status === 'processing' || paper.status === 'uploaded') return 'Eduraa is still checking this result.'
+  if (failedStatuses.has(status)) return 'Checking did not finish. Open this paper for a safe recovery path.'
+  if (checkingStatuses.has(status)) return 'Eduraa is still checking this result.'
   if (percent == null) return 'Score will appear after checking completes.'
   if (percent >= STRONG_PERCENT) return 'Strong performance with a clear next step.'
   if (percent >= 40) return 'Repairable gaps showed up here.'
