@@ -35,7 +35,7 @@ test('submission refreshes every paper state surface and suppresses checking pla
 test('result and fresh-attempt actions are explicit rather than conflated', () => {
   assert.match(detailSource, /primaryAction === 'view_results'/)
   assert.match(detailSource, /primaryAction === 'attempt_again'/)
-  assert.match(detailSource, /View My Results/)
-  assert.match(detailSource, /Attempt Again/)
+  assert.match(detailSource, /View Results/)
+  assert.match(detailSource, /Retest/)
   assert.match(detailSource, /reason: 'retest'/)
 })

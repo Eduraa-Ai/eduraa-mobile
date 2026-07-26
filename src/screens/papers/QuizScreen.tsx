@@ -8,8 +8,9 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -22,6 +23,7 @@ import type { RouteProp } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PapersStackParamList } from "../../navigation";
 import { papersApi } from "../../api/papers";
+import { useAuthStore } from "../../stores/authStore";
 import type { AnswerEntry, MCQOption, QuestionInPaper } from "../../types";
 import {
   AnimatedButton,
@@ -35,9 +37,13 @@ import { colors, radius, shadows, spacing, typography } from "../../theme";
 import { shouldShowQuestionStemText } from "../../utils/questionVisual";
 import { latexToPlainText } from "../../utils/latex";
 import {
+  buildPaperAnswerEntries,
   selectNewestInProgressAttempt,
-  toggleSelectableAnswer,
 } from "./paperAttemptModel";
+import { usePaperAttemptSession } from "./usePaperAttemptSession";
+
+const MemoLatexText = React.memo(LatexText);
+const MemoQuestionVisual = React.memo(QuestionVisual);
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "Quiz">;
 type Route = RouteProp<PapersStackParamList, "Quiz">;
@@ -53,10 +59,11 @@ function isMcqOptions(
   return Array.isArray(options);
 }
 
-function QuestionCard({
+const QuestionCard = React.memo(function QuestionCard({
   question,
   index,
   answer,
+  disabled,
   onAnswer,
   onAssist,
   assistText,
@@ -65,12 +72,48 @@ function QuestionCard({
   question: QuestionInPaper;
   index: number;
   answer?: string;
-  onAnswer: (value: string) => void;
-  onAssist: (mode: AssistMode) => void;
+  disabled: boolean;
+  onAnswer: (questionId: string, value: string, selectable: boolean) => void;
+  onAssist: (questionId: string, mode: AssistMode) => void;
   assistText?: string;
   assistLoading?: boolean;
 }) {
-  const answered = Boolean(answer?.trim());
+  const [optimisticAnswer, setOptimisticAnswer] = useState(answer);
+  const pressInSelectionRef = useRef<string | null>(null);
+  const selectable =
+    question.question_type === "mcq" ||
+    question.question_type === "true_false";
+  const visibleAnswer = selectable ? optimisticAnswer : answer;
+  const answered = Boolean(visibleAnswer?.trim());
+
+  useEffect(() => {
+    setOptimisticAnswer(answer);
+  }, [answer]);
+
+  const showImmediateSelection = useCallback((value: string) => {
+    setOptimisticAnswer((current) => (current === value ? undefined : value));
+  }, []);
+
+  const commitImmediateSelection = useCallback(
+    (value: string) => {
+      pressInSelectionRef.current = value;
+      showImmediateSelection(value);
+      onAnswer(question.id, value, true);
+    },
+    [onAnswer, question.id, showImmediateSelection],
+  );
+
+  const finishSelection = useCallback(
+    (value: string) => {
+      if (pressInSelectionRef.current === value) {
+        pressInSelectionRef.current = null;
+        return;
+      }
+      showImmediateSelection(value);
+      onAnswer(question.id, value, true);
+    },
+    [onAnswer, question.id, showImmediateSelection],
+  );
 
   return (
     <AnimatedCard style={styles.questionCard}>
@@ -88,24 +131,26 @@ function QuestionCard({
       </View>
 
       {question.visual_payload ? (
-        <QuestionVisual visual={question.visual_payload} />
+        <MemoQuestionVisual visual={question.visual_payload} />
       ) : null}
 
       {shouldShowQuestionStemText(question.visual_payload, "interactive") ? (
-        <LatexText value={question.question_text} style={styles.questionText} />
+        <MemoLatexText value={question.question_text} style={styles.questionText} />
       ) : null}
 
       {question.question_type === "mcq" && isMcqOptions(question.options) ? (
         <View style={styles.optionList}>
           {question.options.map((option, optionIndex) => {
             const value = option.id || optionLabel(optionIndex);
-            const selected = answer === value;
+            const selected = visibleAnswer === value;
             return (
               <Pressable
                 key={`${question.id}-${value}`}
-                onPress={() => onAnswer(value)}
+                disabled={disabled}
+                onPressIn={() => commitImmediateSelection(value)}
+                onPress={() => finishSelection(value)}
                 accessibilityRole="radio"
-                accessibilityState={{ selected }}
+                accessibilityState={{ selected, disabled }}
                 accessibilityLabel={`Question ${index + 1}, option ${optionLabel(optionIndex, option)}: ${latexToPlainText(option.text)}`}
                 accessibilityHint={
                   selected
@@ -126,14 +171,12 @@ function QuestionCard({
                 >
                   {optionLabel(optionIndex, option)}
                 </Text>
-                <LatexText
-                  value={option.text}
-                  style={[
-                    styles.optionText,
-                    selected && styles.optionTextSelected,
-                  ]}
-                  containerStyle={styles.optionTextContainer}
-                />
+                <View pointerEvents="none" style={styles.optionTextContainer}>
+                  <MemoLatexText
+                    value={option.text}
+                    style={styles.optionText}
+                  />
+                </View>
               </Pressable>
             );
           })}
@@ -143,13 +186,15 @@ function QuestionCard({
       {question.question_type === "true_false" ? (
         <View style={styles.booleanRow}>
           {["True", "False"].map((value) => {
-            const selected = answer === value;
+            const selected = visibleAnswer === value;
             return (
               <Pressable
                 key={value}
-                onPress={() => onAnswer(value)}
+                disabled={disabled}
+                onPressIn={() => commitImmediateSelection(value)}
+                onPress={() => finishSelection(value)}
                 accessibilityRole="radio"
-                accessibilityState={{ selected }}
+                accessibilityState={{ selected, disabled }}
                 accessibilityHint={
                   selected
                     ? "Tap again to clear this answer."
@@ -179,7 +224,8 @@ function QuestionCard({
       question.question_type !== "true_false" ? (
         <TextInput
           value={answer || ""}
-          onChangeText={onAnswer}
+          editable={!disabled}
+          onChangeText={(value) => onAnswer(question.id, value, false)}
           multiline
           textAlignVertical="top"
           placeholder="Write your answer"
@@ -193,7 +239,8 @@ function QuestionCard({
 
       <View style={styles.assistRow}>
         <Pressable
-          onPress={() => onAssist("hint")}
+          disabled={disabled}
+          onPress={() => onAssist(question.id, "hint")}
           style={({ pressed }) => [
             styles.assistButton,
             pressed && styles.pressed,
@@ -203,7 +250,8 @@ function QuestionCard({
           <Text style={styles.assistLabel}>Hint</Text>
         </Pressable>
         <Pressable
-          onPress={() => onAssist("explain")}
+          disabled={disabled}
+          onPress={() => onAssist(question.id, "explain")}
           style={({ pressed }) => [
             styles.assistButton,
             pressed && styles.pressed,
@@ -213,7 +261,8 @@ function QuestionCard({
           <Text style={styles.assistLabel}>Explain</Text>
         </Pressable>
         <Pressable
-          onPress={() => onAssist("mistake")}
+          disabled={disabled}
+          onPress={() => onAssist(question.id, "mistake")}
           style={({ pressed }) => [
             styles.assistButton,
             pressed && styles.pressed,
@@ -231,23 +280,24 @@ function QuestionCard({
         </View>
       ) : assistText ? (
         <View style={styles.assistPanel}>
-          <LatexText value={assistText} style={styles.assistText} />
+          <MemoLatexText value={assistText} style={styles.assistText} />
         </View>
       ) : null}
     </AnimatedCard>
   );
-}
+})
 
 export default function QuizScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Route>();
   const queryClient = useQueryClient();
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const userId = useAuthStore((state) => state.user?.id);
   const [assistByQuestion, setAssistByQuestion] = useState<
     Record<string, string>
   >({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const didAutoSubmitRef = useRef(false);
 
   const paperQuery = useQuery({
     queryKey: ["interactive-paper", params.paperId],
@@ -257,7 +307,7 @@ export default function QuizScreen() {
   const paper = paperQuery.data;
 
   const attemptQuery = useQuery({
-    queryKey: ['paper-attempt', params.paperId, params.examId, 'interactive-quiz'],
+    queryKey: ['paper-attempt', userId, params.paperId, params.examId, 'interactive_quiz'],
     queryFn: async () => {
       const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
       const inProgress = selectNewestInProgressAttempt(attempts.items)
@@ -266,10 +316,41 @@ export default function QuizScreen() {
         reason: 'interactive_quiz',
       })
     },
-    enabled: Boolean(paper),
+    enabled: Boolean(userId),
   })
 
   const activeAttempt = attemptQuery.data
+  const serverAnswers = useMemo(
+    () => (activeAttempt?.answers ?? []).reduce<Record<string, string>>((result, answer) => {
+      result[answer.question_id] = answer.response
+      return result
+    }, {}),
+    [activeAttempt],
+  )
+  const attemptIdentity = useMemo(
+    () => userId && activeAttempt?.id
+      ? {
+          userId,
+          paperId: params.paperId,
+          examId: params.examId,
+          attemptId: activeAttempt.id,
+          mode: 'interactive_quiz' as const,
+        }
+      : null,
+    [activeAttempt?.id, params.examId, params.paperId, userId],
+  )
+  const attemptSession = usePaperAttemptSession({
+    identity: attemptIdentity,
+    serverAnswers,
+  })
+  const {
+    answers,
+    selectAnswer,
+    setTextAnswer,
+    getAnswerSnapshot,
+    flushDraft,
+    clearDraft,
+  } = attemptSession
 
   useEffect(() => {
     if (!paper?.duration_minutes || !activeAttempt) {
@@ -284,6 +365,10 @@ export default function QuizScreen() {
       : 0;
     setTimeLeft(Math.max(0, paper.duration_minutes * 60 - elapsedSeconds));
   }, [activeAttempt, paper?.duration_minutes]);
+
+  useEffect(() => {
+    didAutoSubmitRef.current = false
+  }, [activeAttempt?.id])
 
   const elapsedSeconds = useCallback(() => {
     if (!activeAttempt) return 0;
@@ -314,8 +399,9 @@ export default function QuizScreen() {
       );
     },
     onSuccess: async (data) => {
+      await clearDraft()
       await queryClient.invalidateQueries({
-        queryKey: ["paper-attempt", params.paperId],
+        queryKey: ["paper-attempt", userId, params.paperId],
       });
       Alert.alert("Quiz submitted", "Your JEE practice quiz has been graded.", [
         {
@@ -339,6 +425,7 @@ export default function QuizScreen() {
             attempt_id: activeAttempt?.id,
           });
           if (existing?.id && existing.id === activeAttempt?.id) {
+            await clearDraft()
             Alert.alert(
               "Quiz saved",
               "Your answers were saved. Open Results to review grading.",
@@ -394,15 +481,42 @@ export default function QuizScreen() {
     },
   });
 
+  const handleAnswer = useCallback((
+    questionId: string,
+    value: string,
+    selectable: boolean,
+  ) => {
+    if (selectable) {
+      selectAnswer(questionId, value)
+    } else {
+      setTextAnswer(questionId, value)
+    }
+  }, [selectAnswer, setTextAnswer])
+
+  const handleAssist = useCallback((questionId: string, mode: AssistMode) => {
+    assistMutation.mutate({ questionId, mode })
+  }, [assistMutation.mutate])
+
   const submit = useCallback(
     (autoSubmit = false) => {
-      if (!paper) return;
-      const answerList = paper.questions.map((question) => ({
-        question_id: question.id,
-        response: answers[question.id] || "",
-      }));
+      if (!paper || submitMutation.isPending) return;
+      if (autoSubmit && didAutoSubmitRef.current) return
+      let answerList: AnswerEntry[]
+      try {
+        answerList = buildPaperAnswerEntries(
+          paper.questions.map((question) => question.id),
+          getAnswerSnapshot(),
+        )
+      } catch (error) {
+        Alert.alert(
+          "Quiz cannot be submitted",
+          error instanceof Error ? error.message : "This quiz contains invalid questions.",
+        )
+        return
+      }
 
       if (autoSubmit) {
+        didAutoSubmitRef.current = true
         submitMutation.mutate(answerList);
         return;
       }
@@ -416,7 +530,7 @@ export default function QuizScreen() {
         ],
       );
     },
-    [answeredCount, answers, paper, submitMutation],
+    [answeredCount, getAnswerSnapshot, paper, submitMutation],
   );
 
   useEffect(() => {
@@ -442,7 +556,41 @@ export default function QuizScreen() {
     return `${minutes}:${secs}`;
   };
 
-  if (paperQuery.isLoading || attemptQuery.isLoading) {
+  const renderQuestion = useCallback(({
+    item,
+    index,
+  }: {
+    item: QuestionInPaper;
+    index: number;
+  }) => (
+    <QuestionCard
+      question={item}
+      index={index}
+      answer={answers[item.id]}
+      disabled={submitMutation.isPending}
+      onAnswer={handleAnswer}
+      onAssist={handleAssist}
+      assistText={assistByQuestion[item.id]}
+      assistLoading={
+        assistMutation.isPending &&
+        assistMutation.variables?.questionId === item.id
+      }
+    />
+  ), [
+    answers,
+    assistByQuestion,
+    assistMutation.isPending,
+    assistMutation.variables?.questionId,
+    handleAnswer,
+    handleAssist,
+    submitMutation.isPending,
+  ]);
+
+  if (
+    paperQuery.isLoading
+    || attemptQuery.isLoading
+    || Boolean(activeAttempt && !attemptSession.isReady)
+  ) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
         <ActivityIndicator color={colors.paperStudio.jee} />
@@ -475,7 +623,9 @@ export default function QuizScreen() {
     <View style={styles.root}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            void flushDraft().finally(() => navigation.goBack())
+          }}
           style={({ pressed }) => [
             styles.headerIcon,
             pressed && styles.pressed,
@@ -501,59 +651,42 @@ export default function QuizScreen() {
         ) : null}
       </View>
 
-      <ScrollView
+      <FlatList
+        data={paper.questions}
+        keyExtractor={(question) => question.id}
+        renderItem={renderQuestion}
+        ListHeaderComponent={(
+          <AnimatedCard style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <View>
+                <Text style={styles.summaryKicker}>Progress</Text>
+                <Text style={styles.summaryTitle}>
+                  {answeredCount}/{paper.questions.length} answered
+                </Text>
+              </View>
+              <View style={styles.marksPill}>
+                <Text style={styles.marksText}>{paper.total_marks} marks</Text>
+              </View>
+            </View>
+            {paper.instructions ? (
+              <LatexText value={paper.instructions} style={styles.instructions} />
+            ) : null}
+            <AnimatedButton
+              label={submitMutation.isPending ? "Submitting..." : "Submit quiz"}
+              loading={submitMutation.isPending}
+              onPress={() => submit()}
+            />
+          </AnimatedCard>
+        )}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-      >
-        <AnimatedCard style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <View>
-              <Text style={styles.summaryKicker}>Progress</Text>
-              <Text style={styles.summaryTitle}>
-                {answeredCount}/{paper.questions.length} answered
-              </Text>
-            </View>
-            <View style={styles.marksPill}>
-              <Text style={styles.marksText}>{paper.total_marks} marks</Text>
-            </View>
-          </View>
-          {paper.instructions ? (
-            <LatexText value={paper.instructions} style={styles.instructions} />
-          ) : null}
-          <AnimatedButton
-            label={submitMutation.isPending ? "Submitting..." : "Submit quiz"}
-            loading={submitMutation.isPending}
-            onPress={() => submit()}
-          />
-        </AnimatedCard>
-
-        {paper.questions.map((question, index) => (
-          <QuestionCard
-            key={question.id}
-            question={question}
-            index={index}
-            answer={answers[question.id]}
-            onAnswer={(value) => {
-              const isSelectable =
-                question.question_type === "mcq" ||
-                question.question_type === "true_false";
-              setAnswers((current) =>
-                isSelectable
-                  ? toggleSelectableAnswer(current, question.id, value)
-                  : { ...current, [question.id]: value },
-              );
-            }}
-            onAssist={(mode) =>
-              assistMutation.mutate({ questionId: question.id, mode })
-            }
-            assistText={assistByQuestion[question.id]}
-            assistLoading={
-              assistMutation.isPending &&
-              assistMutation.variables?.questionId === question.id
-            }
-          />
-        ))}
-      </ScrollView>
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={2}
+        maxToRenderPerBatch={3}
+        updateCellsBatchingPeriod={40}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS === "android"}
+      />
     </View>
   );
 }

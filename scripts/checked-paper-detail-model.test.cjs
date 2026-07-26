@@ -122,9 +122,9 @@ test('checking state and estimated progress remain honest until a real score arr
   })), false)
 
   const started = Date.parse('2026-07-17T12:00:00.000Z')
-  const halfway = model.buildCheckingEstimate('2026-07-17T12:00:00.000Z', started + 60_000)
+  const halfway = model.buildCheckingEstimate('2026-07-17T12:00:00.000Z', started + 30_000)
   assert.equal(halfway.percent > 8 && halfway.percent < 94, true)
-  assert.equal(halfway.timeLabel, '≈ 1m left')
+  assert.equal(halfway.timeLabel, '≈ 30s left')
   assert.equal(halfway.isOverdue, false)
   const overdue = model.buildCheckingEstimate('2026-07-17T12:00:00.000Z', started + 180_000)
   assert.equal(overdue.percent, 94)
@@ -248,7 +248,7 @@ test('detailed explanation omits empty sections and keeps supplied learning supp
     easy_example: null,
     recommendation: 'Practice substitutions.',
   }))
-  assert.deepEqual(sections.map((section) => section.title), ['Why Marks Cut', 'Potential Solutions', 'Recommendation'])
+  assert.deepEqual(sections.map((section) => section.title), ['Why Marks Cut', 'Solution Steps', 'Recommendation'])
 })
 
 test('math text is readable without leaking latex wrappers', () => {
