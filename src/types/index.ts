@@ -373,6 +373,10 @@ export interface GradingResultItem {
   selected_answer?: unknown;
   expected_answer?: unknown;
   options?: unknown;
+  visual_payload?: QuestionVisualPayload | Record<string, unknown> | null;
+  visual_asset_url?: string | null;
+  question_image_url?: string | null;
+  diagram_url?: string | null;
   status?: string | null;
   result_status?: string | null;
   correctness?: string | null;
