@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +14,8 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -33,6 +36,7 @@ import {
   readableMathText,
   type DetailedExplanationSection,
   type QuestionEvidenceTab,
+  type QuestionReviewFigure,
   type QuestionReviewOption,
 } from './checkedPaperDetailModel'
 
@@ -51,6 +55,182 @@ const STATUS_META = {
   missed: { label: 'Missed', tone: colors.danger },
   pending: { label: 'Pending', tone: colors.textMuted },
 } as const
+
+function QuestionFigure({
+  figure,
+  compact,
+}: {
+  figure: QuestionReviewFigure
+  compact: boolean
+}) {
+  const { height } = useWindowDimensions()
+  const [imageState, setImageState] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [viewerVisible, setViewerVisible] = useState(false)
+  const [zoomLevel, setZoomLevel] = useState(1)
+  const scale = useSharedValue(1)
+  const startingScale = useSharedValue(1)
+  const translateX = useSharedValue(0)
+  const translateY = useSharedValue(0)
+  const startingX = useSharedValue(0)
+  const startingY = useSharedValue(0)
+
+  const resetZoom = useCallback(() => {
+    scale.value = withTiming(1)
+    translateX.value = withTiming(0)
+    translateY.value = withTiming(0)
+    setZoomLevel(1)
+  }, [scale, translateX, translateY])
+
+  const changeZoom = useCallback((next: number) => {
+    const clamped = Math.max(1, Math.min(4, next))
+    scale.value = withTiming(clamped)
+    if (clamped === 1) {
+      translateX.value = withTiming(0)
+      translateY.value = withTiming(0)
+    }
+    setZoomLevel(clamped)
+  }, [scale, translateX, translateY])
+
+  const openViewer = () => {
+    resetZoom()
+    setViewerVisible(true)
+  }
+
+  const closeViewer = () => {
+    setViewerVisible(false)
+    resetZoom()
+  }
+
+  const pinchGesture = useMemo(() => Gesture.Pinch()
+    .onBegin(() => {
+      startingScale.value = scale.value
+    })
+    .onUpdate((event) => {
+      scale.value = Math.max(1, Math.min(4, startingScale.value * event.scale))
+    })
+    .onEnd(() => {
+      runOnJS(setZoomLevel)(Math.round(scale.value * 10) / 10)
+      if (scale.value <= 1.01) {
+        translateX.value = withTiming(0)
+        translateY.value = withTiming(0)
+      }
+    }), [scale, startingScale, translateX, translateY])
+
+  const panGesture = useMemo(() => Gesture.Pan()
+    .onBegin(() => {
+      startingX.value = translateX.value
+      startingY.value = translateY.value
+    })
+    .onUpdate((event) => {
+      if (scale.value <= 1) return
+      const limit = (scale.value - 1) * 160
+      translateX.value = Math.max(-limit, Math.min(limit, startingX.value + event.translationX))
+      translateY.value = Math.max(-limit, Math.min(limit, startingY.value + event.translationY))
+    }), [scale, startingX, startingY, translateX, translateY])
+
+  const viewerGesture = useMemo(
+    () => Gesture.Simultaneous(pinchGesture, panGesture),
+    [panGesture, pinchGesture],
+  )
+  const animatedFigureStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }))
+  const viewerImageHeight = Math.max(280, Math.min(580, height - 210))
+
+  return (
+    <View style={styles.questionFigure}>
+      <View style={styles.questionFigureLabel}>
+        <Ionicons name="image-outline" size={14} color={colors.accentStrong} />
+        <Text style={styles.questionFigureLabelText}>Question figure</Text>
+      </View>
+      <View style={styles.questionFigureMedia}>
+        <ProtectedContentImage
+          uri={figure.imageUrl}
+          accessibilityLabel={figure.altText}
+          contentHeight={compact ? 180 : 220}
+          errorHeight={126}
+          onLoadStateChange={setImageState}
+          style={styles.questionImage}
+        />
+        {imageState === 'loaded' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${figure.altText} full screen`}
+            accessibilityHint="Opens a viewer where you can zoom and move around the figure."
+            onPress={openViewer}
+            style={styles.expandFigureButton}
+          >
+            <Ionicons name="expand-outline" size={19} color={colors.white} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      <Modal
+        visible={viewerVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeViewer}
+      >
+        <GestureHandlerRootView style={styles.viewerBackdrop}>
+          <View style={styles.viewerHeader}>
+            <View style={styles.viewerTitleGroup}>
+              <Text style={styles.viewerKicker}>Question figure</Text>
+              <Text style={styles.viewerTitle}>Pinch or use the controls to inspect details.</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close figure viewer" onPress={closeViewer} style={styles.viewerClose}>
+              <Ionicons name="close" size={22} color={colors.white} />
+            </Pressable>
+          </View>
+
+          <View style={styles.viewerCanvas}>
+            <GestureDetector gesture={viewerGesture}>
+              <Animated.View style={[styles.viewerFigure, animatedFigureStyle]}>
+                <ProtectedContentImage
+                  uri={figure.imageUrl}
+                  accessibilityLabel={figure.altText}
+                  contentHeight={viewerImageHeight}
+                  errorHeight={126}
+                  style={styles.viewerImage}
+                />
+              </Animated.View>
+            </GestureDetector>
+          </View>
+
+          <View style={styles.viewerControls}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Zoom out"
+              accessibilityState={{ disabled: zoomLevel <= 1 }}
+              disabled={zoomLevel <= 1}
+              onPress={() => changeZoom(zoomLevel - 0.5)}
+              style={[styles.viewerControl, zoomLevel <= 1 && styles.disabled]}
+            >
+              <Ionicons name="remove" size={21} color={colors.white} />
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Reset zoom" onPress={resetZoom} style={styles.viewerReset}>
+              <Text style={styles.viewerResetText}>{Math.round(zoomLevel * 100)}%</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Zoom in"
+              accessibilityState={{ disabled: zoomLevel >= 4 }}
+              disabled={zoomLevel >= 4}
+              onPress={() => changeZoom(zoomLevel + 0.5)}
+              style={[styles.viewerControl, zoomLevel >= 4 && styles.disabled]}
+            >
+              <Ionicons name="add" size={21} color={colors.white} />
+            </Pressable>
+          </View>
+        </GestureHandlerRootView>
+      </Modal>
+    </View>
+  )
+}
 
 function OptionRow({ option }: { option: QuestionReviewOption }) {
   const stateLabel = option.selected && option.expected
@@ -71,7 +251,7 @@ function OptionRow({ option }: { option: QuestionReviewOption }) {
       </View>
       <View style={styles.optionCopy}>
         {option.text ? <MathText style={styles.optionText} value={option.text} /> : null}
-        {option.imageUrl ? <ProtectedContentImage uri={option.imageUrl} accessibilityLabel={`Image for option ${option.key}`} style={styles.optionImage} /> : null}
+        {option.imageUrl ? <ProtectedContentImage uri={option.imageUrl} accessibilityLabel={`Image for option ${option.key}`} contentHeight={130} /> : null}
         {stateLabel ? (
           <View style={styles.optionState}>
             <Ionicons name={option.expected ? 'checkmark-circle' : 'person-circle-outline'} size={13} color={option.expected ? colors.success : colors.accentStrong} />
@@ -300,6 +480,9 @@ export default function QuestionEvidenceScreen() {
                       ) : null}
                     </View>
                   )}
+                  {review.questionFigure ? (
+                    <QuestionFigure figure={review.questionFigure} compact={compact} />
+                  ) : null}
                   <Text style={styles.chapterText}>{data.subject_name || 'Checked paper'}</Text>
                   {review.optionBased && review.options.length ? (
                     <View
@@ -480,6 +663,25 @@ const styles = StyleSheet.create({
   marksLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, textAlign: 'right' },
   questionText: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 17, lineHeight: 23, marginTop: spacing[2] },
   questionTextCompact: { fontSize: 15, lineHeight: 21 },
+  questionFigure: { width: '100%', marginTop: spacing[3], gap: spacing[2] },
+  questionFigureLabel: { minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  questionFigureLabelText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 0.45, textTransform: 'uppercase' },
+  questionFigureMedia: { width: '100%', position: 'relative' },
+  questionImage: { borderWidth: 1, borderColor: '#eadfd1', backgroundColor: colors.backgroundElevated },
+  expandFigureButton: { position: 'absolute', top: spacing[2], right: spacing[2], width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(7,21,45,0.92)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
+  viewerBackdrop: { flex: 1, paddingTop: spacing[6], paddingBottom: spacing[4], paddingHorizontal: spacing[3], backgroundColor: 'rgba(3,12,28,0.98)' },
+  viewerHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  viewerTitleGroup: { flex: 1, minWidth: 0 },
+  viewerKicker: { color: '#ff8543', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.1, textTransform: 'uppercase' },
+  viewerTitle: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 13, lineHeight: 18, marginTop: 3 },
+  viewerClose: { width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.08)' },
+  viewerCanvas: { flex: 1, minHeight: 0, marginVertical: spacing[3], borderRadius: 22, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf2' },
+  viewerFigure: { width: '100%', alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { borderRadius: 0, backgroundColor: '#fffaf2' },
+  viewerControls: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[3] },
+  viewerControl: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.09)' },
+  viewerReset: { minWidth: 82, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  viewerResetText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   chapterText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, marginTop: spacing[2] },
   questionOptions: { marginTop: spacing[3], paddingTop: spacing[1], borderTopWidth: 1, borderTopColor: '#eadfd1' },
   missingContext: { marginTop: spacing[2], borderRadius: 16, padding: spacing[3], gap: spacing[2], backgroundColor: colors.dangerSurface, borderWidth: 1, borderColor: colors.border },
@@ -498,7 +700,6 @@ const styles = StyleSheet.create({
   optionKeyTextActive: { color: colors.white },
   optionCopy: { flex: 1, minWidth: 0, gap: spacing[2] },
   optionText: { color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17, flexShrink: 1 },
-  optionImage: { height: 130 },
   optionState: { alignSelf: 'flex-start', minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: 4 },
   optionStateText: { fontFamily: typography.fonts.bodyBold, fontSize: 9 },
   unansweredState: { minHeight: 48, borderRadius: 14, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: colors.dangerSurface },

@@ -15,6 +15,11 @@ export interface QuestionReviewOption {
   expected: boolean
 }
 
+export interface QuestionReviewFigure {
+  imageUrl: string
+  altText: string
+}
+
 export interface DetailedExplanationSection {
   key: 'why_marks_cut' | 'potential_solutions' | 'hints' | 'easy_example' | 'recommendation'
   title: string
@@ -251,6 +256,34 @@ function parseOptionSource(value: unknown): unknown {
   }
 }
 
+function firstString(value: unknown): string {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const candidate = firstString(item)
+      if (candidate) return candidate
+    }
+    return ''
+  }
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+export function normalizeQuestionFigure(item: GradingResultItem): QuestionReviewFigure | null {
+  const nestedQuestion = recordValue(item, ['question', 'question_data', 'question_details'])
+  const rawVisual = recordValue(item, ['visual_payload', 'question_visual', 'question_image'])
+    ?? recordValue(nestedQuestion, ['visual_payload', 'question_visual', 'question_image'])
+  const visual = parseOptionSource(rawVisual)
+  const imageUrl = firstString(recordValue(visual, ['asset_url', 'image_url', 'url', 'src']))
+    || firstString(recordValue(visual, ['asset_urls', 'image_urls']))
+    || firstString(recordValue(item, ['visual_asset_url', 'question_image_url', 'diagram_url']))
+    || firstString(recordValue(nestedQuestion, ['visual_asset_url', 'question_image_url', 'diagram_url']))
+  if (!imageUrl) return null
+
+  const altText = firstString(recordValue(visual, ['alt_text', 'alt', 'caption', 'description']))
+    || firstString(recordValue(item, ['visual_alt_text', 'question_image_alt']))
+    || 'Diagram associated with this question'
+  return { imageUrl, altText }
+}
+
 function normalizeRawOptions(value: unknown): Array<{ key: string; text: string; imageUrl: string | null }> {
   const parsed = parseOptionSource(value)
   const nested = parseOptionSource(recordValue(parsed, ['options', 'choices', 'items']))
@@ -374,10 +407,12 @@ export function buildQuestionReview(item: GradingResultItem) {
       || answerDisplay(recordValue(nestedQuestion, ['question_text', 'text', 'prompt'])),
   )
   const options = normalizeQuestionOptions(item)
+  const questionFigure = normalizeQuestionFigure(item)
   const optionBased = ['mcq', 'true_false'].includes(normalizedToken(item.question_type).replace(/\s+/g, '_'))
   return {
     questionText,
     contextAvailable: Boolean(questionText),
+    questionFigure,
     optionBased,
     options,
     unanswered: !hasMeaningfulAnswer(responseValue),

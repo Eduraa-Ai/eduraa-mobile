@@ -168,6 +168,35 @@ test('legacy option containers still produce a complete question context', () =>
   assert.equal(encoded.options.length, 2)
 })
 
+test('question figures normalize current and legacy checked-paper payloads', () => {
+  const current = model.buildQuestionReview(question(1, 0, 1, {
+    visual_payload: {
+      kind: 'diagram',
+      asset_url: '/api/v1/documents/visuals/oscillation.png',
+      alt_text: 'Liquid oscillating in a U-shaped tube',
+    },
+  }))
+  assert.deepEqual(current.questionFigure, {
+    imageUrl: '/api/v1/documents/visuals/oscillation.png',
+    altText: 'Liquid oscillating in a U-shaped tube',
+  })
+
+  const legacy = model.buildQuestionReview(question(2, 0, 1, {
+    visual_payload: null,
+    question_data: {
+      visual_payload: JSON.stringify({
+        asset_urls: ['/api/v1/ai/jee/diagrams/legacy.png'],
+      }),
+    },
+  }))
+  assert.deepEqual(legacy.questionFigure, {
+    imageUrl: '/api/v1/ai/jee/diagrams/legacy.png',
+    altText: 'Diagram associated with this question',
+  })
+
+  assert.equal(model.buildQuestionReview(question(3, 0, 1)).questionFigure, null)
+})
+
 test('missing question context and absent explanation remain explicit', () => {
   const review = model.buildQuestionReview(question(1, 0, 1, {
     question_text: null,
