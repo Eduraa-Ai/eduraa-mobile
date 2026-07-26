@@ -44,7 +44,7 @@ test('leaving a previous paper clears the papers stack before restoring its inde
   const navigation = read('src/navigation/index.tsx')
   const builder = read('src/screens/learning/PreviousPapersScreen.tsx')
   const attempt = read('src/screens/papers/AttemptPaperScreen.tsx')
-  const popToTopIndex = attempt.indexOf('navigation.popToTop()')
+  const resetPapersIndex = attempt.indexOf('navigation.reset({')
   const restorePreviousPapersIndex = attempt.indexOf(
     "navigation.getParent()?.navigate('PreviousPapers'",
   )
@@ -52,8 +52,9 @@ test('leaving a previous paper clears the papers stack before restoring its inde
   assert.match(navigation, /returnTo\?: 'PreviousPapers'/)
   assert.match(builder, /returnTo:\s*'PreviousPapers'/)
   assert.match(attempt, /params\.returnTo === 'PreviousPapers'/)
-  assert.ok(popToTopIndex >= 0)
-  assert.ok(restorePreviousPapersIndex > popToTopIndex)
+  assert.match(attempt, /routes:\s*\[\{\s*name:\s*'PapersList'\s*\}\]/)
+  assert.ok(resetPapersIndex >= 0)
+  assert.ok(restorePreviousPapersIndex > resetPapersIndex)
 })
 
 test('the PYQ implementation has no checked-paper dependency', () => {

@@ -647,7 +647,10 @@ export default function AttemptPaperScreen() {
 
   const leaveAttempt = useCallback(() => {
     if (params.returnTo === 'PreviousPapers') {
-      navigation.popToTop()
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'PapersList' }],
+      })
       navigation.getParent()?.navigate('PreviousPapers' as never)
       return
     }
