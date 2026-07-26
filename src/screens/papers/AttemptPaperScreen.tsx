@@ -72,6 +72,8 @@ function isMCQOptions(
 
 const HOLD_DURATION_MS = 3000;
 const HOLD_TICK_MS = 50;
+const checkingStatuses = new Set(['submitted', 'checking', 'processing', 'uploaded'])
+const failedCheckingStatuses = new Set(['failed', 'error', 'grading_failed', 'checking_failed'])
 
 function formatQuestionType(value: QuestionInPaper["question_type"]) {
   if (value === "mcq") return "MCQ";
@@ -354,12 +356,14 @@ export default function AttemptPaperScreen() {
   const [attemptAgainError, setAttemptAgainError] = useState<string | null>(
     null,
   );
+  const [isOpeningSubmittedResult, setIsOpeningSubmittedResult] = useState(false)
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const submitHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
   );
   const didAutoSubmitRef = useRef(false);
+  const submittedResultOpeningRef = useRef(false)
   const attemptScrollRef = useRef<FlatList<QuestionInPaper>>(null);
   const didHandleInitialFocusRef = useRef(false);
 
@@ -420,7 +424,7 @@ export default function AttemptPaperScreen() {
     ),
     refetchInterval: (query) => {
       const status = String(query.state.data?.grading_status || '').toLowerCase()
-      return status === 'submitted' || status === 'checking' ? 2000 : false
+      return checkingStatuses.has(status) ? 2000 : false
     },
   })
 
@@ -523,9 +527,9 @@ export default function AttemptPaperScreen() {
       void clearDraft()
       const isExistingSubmission = Boolean(activeAttempt?.id && data.id !== activeAttempt.id)
       const gradingStatus = String((data as { grading_status?: string }).grading_status || '').toLowerCase()
-      const isChecking = gradingStatus === 'submitted' || gradingStatus === 'checking'
+      const isChecking = checkingStatuses.has(gradingStatus)
       const resultIsReady = !isChecking
-        && gradingStatus !== 'failed'
+        && !failedCheckingStatuses.has(gradingStatus)
         && data.results_visible_to_student !== false
       const scoreText = resultIsReady && data.total_score != null && data.max_score
         ? `${data.total_score} / ${data.max_score}`
@@ -544,7 +548,7 @@ export default function AttemptPaperScreen() {
           kind: 'existing',
           title: 'Already submitted',
           message: isChecking
-            ? 'This attempt was already submitted from another session and is still being checked.'
+            ? 'This attempt was already submitted and is being checked. Select View results to follow its status and see the marks when ready.'
             : 'This attempt was already submitted from another session. Its recorded result is ready to view.',
           submissionId: data.id,
           scoreText,
@@ -557,7 +561,7 @@ export default function AttemptPaperScreen() {
         kind: "submitted",
         title: isChecking ? "Paper submitted" : "Paper submitted",
         message: isChecking
-          ? "Your paper has been submitted. We'll notify you once checking is complete."
+          ? "Your paper is being checked. Select View results to follow its status and see your marks as soon as they are ready."
           : "Your answers have been recorded and graded.",
         submissionId: data.id,
         scoreText,
@@ -579,13 +583,14 @@ export default function AttemptPaperScreen() {
           if (existing?.id && existing.id === activeAttempt?.id) {
             void clearDraft()
             const existingStatus = String(existing.grading_status || '').toLowerCase()
-            const existingResultReady = !['submitted', 'checking', 'failed'].includes(existingStatus)
+            const existingResultReady = !checkingStatuses.has(existingStatus)
+              && !failedCheckingStatuses.has(existingStatus)
               && existing.results_visible_to_student !== false
             setSubmitOutcome({
               kind: "saved",
               title: "Paper submitted",
               message:
-                "Your answers were saved. Grading may take a moment, so check Results shortly.",
+                "Your answers were saved and checking is continuing. Select View results to follow the status and see your marks when ready.",
               submissionId: existing.id,
               scoreText: existingResultReady && existing.total_score != null && existing.max_score
                 ? `${existing.total_score} / ${existing.max_score}`
@@ -707,13 +712,20 @@ export default function AttemptPaperScreen() {
     resetSubmitHold();
   };
 
+  useEffect(() => {
+    submittedResultOpeningRef.current = false
+    setIsOpeningSubmittedResult(false)
+  }, [submitOutcome?.submissionId])
+
   const openSubmittedResult = () => {
-    if (!submitOutcome?.submissionId) return;
+    if (!submitOutcome?.submissionId || submittedResultOpeningRef.current) return
+    submittedResultOpeningRef.current = true
+    setIsOpeningSubmittedResult(true)
     navigation.getParent()?.navigate("Results", {
       screen: "ResultDetail",
       params: { checkedPaperId: submitOutcome.submissionId },
-    });
-  };
+    })
+  }
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60)
@@ -796,14 +808,15 @@ export default function AttemptPaperScreen() {
   )
   const checkingStatus = String(checkingSubmission?.grading_status || '').toLowerCase()
   const checkingResultReady = checkingSubmission
-    && !['submitted', 'checking', 'failed'].includes(checkingStatus)
+    && !checkingStatuses.has(checkingStatus)
+    && !failedCheckingStatuses.has(checkingStatus)
     && checkingSubmission.results_visible_to_student !== false
   const checkedScoreText = checkingResultReady
     && checkingSubmission.total_score != null
     && checkingSubmission.max_score
     ? `${checkingSubmission.total_score} / ${checkingSubmission.max_score}`
     : submitOutcome?.scoreText
-  const checkingFailed = checkingStatus === 'failed'
+  const checkingFailed = failedCheckingStatuses.has(checkingStatus)
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -1084,8 +1097,8 @@ export default function AttemptPaperScreen() {
                   </View>
                   <Text style={styles.submittedStatusHint}>
                     {checkingFailed
-                      ? 'Your attempt is saved. Return later to check its status, or start another attempt now.'
-                      : 'Progress updates while this sheet is open. You can start another attempt now.'}
+                      ? 'Your attempt is saved. Open View results for a recoverable status and retry option.'
+                      : 'Checking continues in the background. View results will update automatically when marks are ready.'}
                   </Text>
                 </View>
               </View>
@@ -1118,27 +1131,37 @@ export default function AttemptPaperScreen() {
                 </>
               ) : (
                 <>
-                  <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('PapersList')} style={styles.submitCancelButton} accessibilityRole="button" accessibilityLabel="Return to papers">
-                    <Text style={styles.submitCancelText}>Papers</Text>
-                  </TouchableOpacity>
                   {checkedScoreText ? (
-                    <TouchableOpacity activeOpacity={0.9} onPress={openSubmittedResult} style={styles.submitConfirmButton} accessibilityRole="button" accessibilityLabel="View results">
-                      <Text style={styles.submitConfirmText}>View results</Text>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => attemptAgainMutation.mutate()}
+                      disabled={attemptAgainMutation.isPending}
+                      style={[styles.submitCancelButton, attemptAgainMutation.isPending && styles.submitBtnDisabled]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Retest this paper"
+                    >
+                      <Text style={styles.submitCancelText}>
+                        {attemptAgainMutation.isPending ? 'Starting' : 'Retest'}
+                      </Text>
+                      <Ionicons name="refresh" size={15} color={colors.nav} />
+                    </TouchableOpacity>
+                  ) : null}
+                  {submitOutcome.submissionId ? (
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={openSubmittedResult}
+                      disabled={isOpeningSubmittedResult}
+                      style={[styles.submitConfirmButton, isOpeningSubmittedResult && styles.submitBtnDisabled]}
+                      accessibilityRole="button"
+                      accessibilityLabel="View results"
+                      accessibilityState={{ busy: isOpeningSubmittedResult, disabled: isOpeningSubmittedResult }}
+                    >
+                      <Text style={styles.submitConfirmText}>{isOpeningSubmittedResult ? 'Opening' : 'View results'}</Text>
                       <Ionicons name="bar-chart" size={15} color={colors.white} />
                     </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity
-                      activeOpacity={0.9}
-                      onPress={() => attemptAgainMutation.mutate()}
-                      disabled={attemptAgainMutation.isPending}
-                      style={[styles.submitConfirmButton, attemptAgainMutation.isPending && styles.submitBtnDisabled]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Attempt this paper again"
-                    >
-                      <Text style={styles.submitConfirmText}>
-                        {attemptAgainMutation.isPending ? 'Starting' : 'Attempt again'}
-                      </Text>
-                      <Ionicons name="refresh" size={15} color={colors.white} />
+                    <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('PapersList')} style={styles.submitConfirmButton} accessibilityRole="button" accessibilityLabel="Return to papers">
+                      <Text style={styles.submitConfirmText}>Return to papers</Text>
                     </TouchableOpacity>
                   )}
                 </>

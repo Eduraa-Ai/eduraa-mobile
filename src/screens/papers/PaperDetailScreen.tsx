@@ -95,6 +95,8 @@ export default function PaperDetailScreen() {
   const [actionMenuOpen, setActionMenuOpen] = useState(false)
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [isOpeningResult, setIsOpeningResult] = useState(false)
+  const resultOpeningRef = useRef(false)
 
   const paperQuery = useQuery({
     queryKey: ['paper', params.paperId],
@@ -114,6 +116,15 @@ export default function PaperDetailScreen() {
   const submittedScore = visibleScore(submittedAttempt)
   const checking = isAttemptChecking(submittedAttempt)
   const checkDelayed = isAttemptCheckDelayed(submittedAttempt)
+  const canOpenSubmittedResult = Boolean(
+    submittedAttempt
+    && (
+      primaryAction === 'view_results'
+      || primaryAction === 'attempt_again'
+      || checking
+      || checkDelayed
+    ),
+  )
 
   const ownedPapersQuery = useQuery({
     queryKey: ['papers', 'mine', user?.id],
@@ -166,6 +177,8 @@ export default function PaperDetailScreen() {
 
   useEffect(() => {
     if (!isFocused) return
+    resultOpeningRef.current = false
+    setIsOpeningResult(false)
     void paperQuery.refetch()
     if (paper) void attemptsQuery.refetch()
   }, [isFocused, params.paperId])
@@ -218,6 +231,15 @@ export default function PaperDetailScreen() {
   }
 
   const hPad = width < 380 ? spacing[4] : spacing[5];
+  const openSubmittedResult = () => {
+    if (!submittedAttempt?.id || resultOpeningRef.current) return
+    resultOpeningRef.current = true
+    setIsOpeningResult(true)
+    navigation.getParent()?.navigate('Results', {
+      screen: 'ResultDetail',
+      params: { checkedPaperId: submittedAttempt.id },
+    })
+  }
 
   return (
     <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
@@ -308,9 +330,9 @@ export default function PaperDetailScreen() {
                 {submittedScore
                   ? `Score: ${submittedScore}`
                   : checking
-                    ? "You can start another attempt while this one is checked."
+                    ? "Select View Results to follow checking and see marks when ready."
                     : checkDelayed
-                      ? "Your attempt is saved. You can safely try again."
+                      ? "Your attempt is safe. Open View Results for a retry option."
                       : "Open your result for the complete review."}
               </Text>
             </View>
@@ -318,21 +340,18 @@ export default function PaperDetailScreen() {
         ) : null}
 
         <View style={styles.actions}>
-          {primaryAction === 'view_results' && submittedAttempt ? (
+          {canOpenSubmittedResult && submittedAttempt ? (
             <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={() =>
-                navigation.getParent()?.navigate('Results', {
-                  screen: 'ResultDetail',
-                  params: { checkedPaperId: submittedAttempt.id },
-                })
-              }
+              style={[styles.primaryBtn, isOpeningResult && styles.primaryBtnDisabled]}
+              onPress={openSubmittedResult}
+              disabled={isOpeningResult}
               activeOpacity={0.82}
               accessibilityRole="button"
               accessibilityLabel="View results"
+              accessibilityState={{ busy: isOpeningResult, disabled: isOpeningResult }}
             >
               <Ionicons name="stats-chart" size={16} color={colors.white} />
-              <Text style={styles.primaryBtnText}>View My Results</Text>
+              <Text style={styles.primaryBtnText}>{isOpeningResult ? 'Opening…' : 'View Results'}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -369,14 +388,31 @@ export default function PaperDetailScreen() {
               </Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={styles.secondaryBtn}
-            onPress={() => navigation.navigate("Quiz", { paperId: paper.id })}
-            activeOpacity={0.82}
-          >
-            <Ionicons name="flash-outline" size={16} color={colors.accent} />
-            <Text style={styles.secondaryBtnText}>Interactive Quiz</Text>
-          </TouchableOpacity>
+          {submittedAttempt ? (
+            <TouchableOpacity
+              style={[styles.secondaryBtn, retestMutation.isPending && styles.primaryBtnDisabled]}
+              onPress={() => retestMutation.mutate()}
+              activeOpacity={0.82}
+              disabled={retestMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Retest this paper"
+              accessibilityState={{ busy: retestMutation.isPending, disabled: retestMutation.isPending }}
+            >
+              {retestMutation.isPending
+                ? <ActivityIndicator size="small" color={colors.accent} />
+                : <Ionicons name="repeat-outline" size={16} color={colors.accent} />}
+              <Text style={styles.secondaryBtnText}>{retestMutation.isPending ? 'Starting…' : 'Retest'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => navigation.navigate("Quiz", { paperId: paper.id })}
+              activeOpacity={0.82}
+            >
+              <Ionicons name="flash-outline" size={16} color={colors.accent} />
+              <Text style={styles.secondaryBtnText}>Interactive Quiz</Text>
+            </TouchableOpacity>
+          )}
         </View>
         {actionError ? (
           <View accessibilityLiveRegion="polite" style={styles.actionError}>

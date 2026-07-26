@@ -5,9 +5,17 @@ async function main() {
   const bridge = await startBridge()
   const bridgeUrl = 'http://localhost:8001'
   const expoCli = require.resolve('expo/bin/cli')
-  const expo = spawn(process.execPath, [expoCli, 'start', ...process.argv.slice(2)], {
+  const expoArgs = process.argv.slice(2)
+  const usesAnonymousExpoGo = expoArgs.includes('--go')
+  const expo = spawn(process.execPath, [expoCli, 'start', ...expoArgs], {
     cwd: process.cwd(),
-    env: { ...process.env, EXPO_PUBLIC_WEB_API_URL: bridgeUrl },
+    env: {
+      ...process.env,
+      EXPO_PUBLIC_WEB_API_URL: bridgeUrl,
+      ...(usesAnonymousExpoGo
+        ? { EDURAA_EXPO_GO_ANONYMOUS: '1' }
+        : {}),
+    },
     stdio: 'inherit',
   })
 

@@ -32,6 +32,7 @@ import {
   buildQuestionReview,
   findEvidenceQuestion,
   findNextEvidenceQuestion,
+  findPreviousEvidenceQuestion,
   questionStatus,
   questionTypeLabel,
   readableMathText,
@@ -46,7 +47,7 @@ type Nav = NativeStackNavigationProp<ResultsStackParamList, 'QuestionEvidence'>
 
 const TAB_CONFIG: Array<{ key: QuestionEvidenceTab; label: string }> = [
   { key: 'feedback', label: 'Feedback' },
-  { key: 'details', label: 'Detailed explanation' },
+  { key: 'details', label: 'Solution' },
   { key: 'review', label: 'Review' },
 ]
 
@@ -365,27 +366,24 @@ export default function QuestionEvidenceScreen() {
   const questionNumber = item.question_number ?? evidence.index + 1
   const totalQuestions = data.grading_results?.length ?? 0
   const nextEvidence = findNextEvidenceQuestion(data, params.questionId, params.questionIndex)
+  const previousEvidence = findPreviousEvidenceQuestion(data, params.questionId, params.questionIndex)
   const status = questionStatus(item)
   const statusMeta = STATUS_META[status]
   const isStrong = status === 'correct'
-  const response = review.unanswered ? '' : readableMathText(review.studentAnswer)
-  const expected = readableMathText(review.expectedAnswer)
-  const feedback = readableMathText(item.feedback)
-  const recommendation = readableMathText(item.recommendation)
+  const response = review.unanswered ? '' : review.studentAnswer
+  const expected = review.expectedAnswer
+  const feedback = item.feedback || ''
+  const recommendation = item.recommendation || ''
   const reviewSent = Boolean(data.manual_review_requested || reviewMutation.isSuccess)
   const canSubmitReview = reviewNote.trim().length >= 10 && !reviewMutation.isPending && !reviewSent
   const tabs = isStaff ? TAB_CONFIG.filter((tab) => tab.key !== 'review') : TAB_CONFIG
   const hasScan = Boolean(String(data.scanned_pdf_url || '').trim())
 
-  const goToNextQuestion = () => {
-    if (!nextEvidence) {
-      navigation.goBack()
-      return
-    }
+  const goToEvidence = (target: NonNullable<typeof nextEvidence>) => {
     navigation.setParams({
       checkedPaperId: params.checkedPaperId,
-      questionId: nextEvidence.item.question_id || undefined,
-      questionIndex: nextEvidence.index,
+      questionId: target.item.question_id || undefined,
+      questionIndex: target.index,
     })
   }
 
@@ -481,29 +479,46 @@ export default function QuestionEvidenceScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <Pressable
-              key={`next-question-${evidence.index}`}
-              accessibilityRole="button"
-              accessibilityLabel={nextEvidence
-                ? `Next question, Question ${nextEvidence.index + 1} of ${totalQuestions}`
-                : 'Back to report, last question'}
-              accessibilityHint={nextEvidence
-                ? 'Shows the next reviewed question from the top of Feedback.'
-                : 'Returns to the checked-paper report.'}
-              onPress={goToNextQuestion}
-              style={({ pressed }) => [
-                styles.nextQuestionAction,
-                pressed && styles.nextQuestionActionPressed,
-              ]}
-            >
-              <Text style={styles.nextQuestionLabel}>{nextEvidence ? 'Next question' : 'Back to report'}</Text>
-              <View style={styles.nextQuestionDestination}>
-                <Text numberOfLines={1} style={styles.nextQuestionProgress}>
-                  {nextEvidence ? `Question ${nextEvidence.index + 1} of ${totalQuestions}` : 'Review complete'}
-                </Text>
-                <Ionicons name={nextEvidence ? 'arrow-forward' : 'checkmark'} size={18} color={nextEvidence ? colors.accentStrong : colors.success} />
-              </View>
-            </Pressable>
+            <View key={`question-navigation-${evidence.index}`} style={styles.questionNavigation}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={previousEvidence
+                  ? `Previous, Question ${previousEvidence.index + 1} of ${totalQuestions}`
+                  : 'Previous unavailable, first question'}
+                accessibilityState={{ disabled: !previousEvidence }}
+                disabled={!previousEvidence}
+                onPress={() => previousEvidence && goToEvidence(previousEvidence)}
+                style={({ pressed }) => [
+                  styles.questionNavigationAction,
+                  !previousEvidence && styles.questionNavigationDisabled,
+                  pressed && styles.questionNavigationPressed,
+                ]}
+              >
+                <Ionicons name="arrow-back" size={17} color={colors.accentStrong} />
+                <Text style={styles.questionNavigationLabel}>Previous</Text>
+              </Pressable>
+              <Text style={styles.questionNavigationProgress}>
+                {evidence.index + 1} of {totalQuestions}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={nextEvidence
+                  ? `Next, Question ${nextEvidence.index + 1} of ${totalQuestions}`
+                  : 'Next unavailable, last question'}
+                accessibilityState={{ disabled: !nextEvidence }}
+                disabled={!nextEvidence}
+                onPress={() => nextEvidence && goToEvidence(nextEvidence)}
+                style={({ pressed }) => [
+                  styles.questionNavigationAction,
+                  styles.questionNavigationActionEnd,
+                  !nextEvidence && styles.questionNavigationDisabled,
+                  pressed && styles.questionNavigationPressed,
+                ]}
+              >
+                <Text style={styles.questionNavigationLabel}>Next</Text>
+                <Ionicons name="arrow-forward" size={17} color={colors.accentStrong} />
+              </Pressable>
+            </View>
 
             {activeTab === 'feedback' ? (
               <View style={[styles.panel, compact && styles.panelCompact]}>
@@ -608,7 +623,7 @@ export default function QuestionEvidenceScreen() {
                   <ExplanationSection key={section.key} section={section} />
                 )) : (
                   <View style={styles.unavailableCard}>
-                    <Text style={styles.unavailableTitle}>Detailed explanation is not available for this question.</Text>
+                    <Text style={styles.unavailableTitle}>A solution is not available for this question.</Text>
                     <Text style={styles.unavailableText}>No solving steps or learning guidance were included in this record.</Text>
                   </View>
                 )}
@@ -703,11 +718,13 @@ const styles = StyleSheet.create({
   tabIndicator: { position: 'absolute', bottom: -1, left: spacing[1], right: spacing[1], height: 3, borderRadius: 2, backgroundColor: colors.accent },
   sheetScroll: { flex: 1 },
   sheetContent: { paddingHorizontal: spacing[4], paddingTop: spacing[3] },
-  nextQuestionAction: { width: '100%', maxWidth: 760, minHeight: 48, alignSelf: 'center', marginBottom: spacing[3], paddingVertical: spacing[2], paddingHorizontal: spacing[2], borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#dfd2c2', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], backgroundColor: 'transparent' },
-  nextQuestionActionPressed: { backgroundColor: colors.accentSurface },
-  nextQuestionLabel: { flex: 1, minWidth: 0, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 17 },
-  nextQuestionDestination: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing[2] },
-  nextQuestionProgress: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14, textAlign: 'right' },
+  questionNavigation: { width: '100%', maxWidth: 760, minHeight: 48, alignSelf: 'center', marginBottom: spacing[3], borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#dfd2c2', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  questionNavigationAction: { minWidth: 96, minHeight: 46, paddingHorizontal: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  questionNavigationActionEnd: { justifyContent: 'flex-end' },
+  questionNavigationPressed: { backgroundColor: colors.accentSurface },
+  questionNavigationDisabled: { opacity: 0.34 },
+  questionNavigationLabel: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 17 },
+  questionNavigationProgress: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14, textAlign: 'center' },
   panel: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: spacing[3] },
   panelCompact: { gap: spacing[2] },
   questionBlock: { paddingBottom: spacing[4], borderBottomWidth: 1, borderBottomColor: '#eadfd1' },

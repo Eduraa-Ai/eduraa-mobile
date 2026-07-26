@@ -97,6 +97,10 @@ Wait until the terminal prints `Tunnel ready` and an address such as
 - The tunnel URL changes after a restart.
 - A tester does not need access to the EAS project or the owner's Expo account.
 
+The `expo-go` script deliberately serves an anonymous local development
+manifest so Expo Go does not request the owner's signing credentials. EAS
+ownership and the project ID remain present for preview and production builds.
+
 Native Expo Go bundles call the Azure API directly. They do not use the local
 browser bridge.
 

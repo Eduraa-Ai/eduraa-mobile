@@ -13,6 +13,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const requiresReleaseApi = buildProfile
     ? buildProfile !== "development"
     : process.env.NODE_ENV === "production";
+  const usesAnonymousExpoGo =
+    process.env.EDURAA_EXPO_GO_ANONYMOUS === "1" && !requiresReleaseApi;
 
   if (!config.name || !config.slug) {
     throw new Error("app.json must define expo.name and expo.slug.");
@@ -26,5 +28,22 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     });
   }
 
-  return { ...config, name: config.name, slug: config.slug };
+  const resolvedConfig: ExpoConfig = {
+    ...config,
+    name: config.name,
+    slug: config.slug,
+  };
+
+  if (!usesAnonymousExpoGo) {
+    return resolvedConfig;
+  }
+
+  const { owner: _owner, ...anonymousConfig } = resolvedConfig;
+  const { eas: _eas, ...anonymousExtra } = anonymousConfig.extra ?? {};
+
+  return {
+    ...anonymousConfig,
+    extra:
+      Object.keys(anonymousExtra).length > 0 ? anonymousExtra : undefined,
+  };
 };

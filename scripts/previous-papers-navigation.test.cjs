@@ -95,6 +95,6 @@ test('multi-selection, timer preferences, and a fresh post-submit attempt stay w
   assert.match(builder, /Practice timer/)
   assert.match(builder, /No timer/)
   assert.match(attempt, /reason: 'student_retest'/)
-  assert.match(attempt, /Attempt again/)
+  assert.match(attempt, /Retest/)
   assert.match(attempt, /queryClient\.setQueryData/)
 })

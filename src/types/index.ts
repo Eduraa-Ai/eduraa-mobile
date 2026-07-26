@@ -407,6 +407,7 @@ export interface CheckedPaper {
   status: CheckedPaperStatus;
   total_score?: number | null;
   max_score?: number | null;
+  checking_progress_percent?: number | null;
   grading_feedback?: string | null;
   grading_results?: GradingResultItem[] | null;
   needs_review: boolean;

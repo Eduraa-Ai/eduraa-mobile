@@ -6,7 +6,8 @@ type PaperAttemptSummary = {
   max_score?: number
 }
 
-const pendingStatuses = new Set(['submitted', 'checking'])
+const pendingStatuses = new Set(['submitted', 'checking', 'processing', 'uploaded'])
+const failedStatuses = new Set(['failed', 'error', 'grading_failed', 'checking_failed'])
 
 function normalizedStatus(attempt: PaperAttemptSummary) {
   return String(attempt.grading_status || 'checked').trim().toLowerCase()
@@ -32,13 +33,13 @@ export function isAttemptChecking(attempt?: PaperAttemptSummary) {
 }
 
 export function isAttemptCheckDelayed(attempt?: PaperAttemptSummary) {
-  return Boolean(attempt && normalizedStatus(attempt) === 'failed')
+  return Boolean(attempt && failedStatuses.has(normalizedStatus(attempt)))
 }
 
 export function hasVisibleAttemptResult(attempt?: PaperAttemptSummary) {
   if (!attempt || attempt.results_visible_to_student === false) return false
   const status = normalizedStatus(attempt)
-  return status !== 'in_progress' && !pendingStatuses.has(status) && status !== 'failed'
+  return status !== 'in_progress' && !pendingStatuses.has(status) && !failedStatuses.has(status)
 }
 
 export function paperPrimaryAction(

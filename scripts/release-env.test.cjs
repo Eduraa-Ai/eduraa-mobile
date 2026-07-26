@@ -13,6 +13,7 @@ const cleanEnvironment = (overrides = {}) => {
         'EXPO_PUBLIC_API_URL',
         'EXPO_PUBLIC_WEB_API_URL',
         'EXPO_PUBLIC_NATIVE_API_URL',
+        'EDURAA_EXPO_GO_ANONYMOUS',
         'NODE_ENV',
     ]) {
         if (!(name in overrides)) delete environment[name]
@@ -54,4 +55,29 @@ test('profileless production Expo config accepts a public HTTPS API origin', () 
     const config = JSON.parse(result.stdout)
     assert.equal(config.name, 'Eduraa')
     assert.equal(config.slug, 'eduraa-mobile')
+})
+
+test('anonymous Expo Go config omits EAS ownership for local phone testing', () => {
+    const result = runNode([expoCli, 'config', '--type', 'public', '--json'], {
+        EDURAA_EXPO_GO_ANONYMOUS: '1',
+    })
+    assert.equal(result.status, 0, result.stderr)
+    const config = JSON.parse(result.stdout)
+    assert.equal(config.owner, undefined)
+    assert.equal(config.extra?.eas, undefined)
+})
+
+test('release config preserves EAS ownership even if the local Expo Go flag leaks', () => {
+    const result = runNode([expoCli, 'config', '--type', 'public', '--json'], {
+        EDURAA_EXPO_GO_ANONYMOUS: '1',
+        NODE_ENV: 'production',
+        EXPO_PUBLIC_API_URL: 'https://api.example.com',
+    })
+    assert.equal(result.status, 0, result.stderr)
+    const config = JSON.parse(result.stdout)
+    assert.equal(config.owner, 'kk_agent')
+    assert.equal(
+        config.extra?.eas?.projectId,
+        '649f0bb2-fb2c-4c8d-8120-30df4fa995f2',
+    )
 })
