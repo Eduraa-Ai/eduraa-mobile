@@ -30,6 +30,7 @@ import {
   isBookQuestionShortage,
   withBookMcqCount,
 } from "../../utils/bookPaperGeneration";
+import { parsePaperDuration } from "./generatePaperSettingsModel";
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "GeneratePaper">;
 type Stage = 0 | 1 | 2;
@@ -240,7 +241,6 @@ const DEFAULT_MARKS: Record<MarkKey, number> = {
   marks_per_match_columns: 2,
   marks_per_true_false: 1,
 };
-const DURATION_PRESETS = [0, 30, 45, 60, 90, 120];
 const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 
 function clamp(value: number, min: number, max: number) {
@@ -654,7 +654,7 @@ function GenerateStudioHeader({
     {
       pill: "Ready",
       title: "Generate draft.",
-      body: "Duration, difficulty, visual support, and the final action.",
+      body: "Duration, difficulty, and the final action.",
     },
   ][stage];
 
@@ -711,11 +711,14 @@ export default function GeneratePaperScreen() {
     useState<Record<CountKey, number>>(DEFAULT_COUNTS);
   const [marks, setMarks] = useState<Record<MarkKey, number>>(DEFAULT_MARKS);
   const [customTypes, setCustomTypes] = useState<CustomType[]>([]);
-  const [durationMin, setDurationMin] = useState(0);
+  const [durationInput, setDurationInput] = useState("");
+  const [durationTouched, setDurationTouched] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
-  const [prompt, setPrompt] = useState("");
-  const [includeReferenceVisuals, setIncludeReferenceVisuals] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const durationResult = useMemo(
+    () => parsePaperDuration(durationInput),
+    [durationInput],
+  );
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -772,7 +775,6 @@ export default function GeneratePaperScreen() {
     () => activeChapters.filter((chapter) => chapterIds.includes(chapter.id)),
     [activeChapters, chapterIds],
   );
-  const isCompetitiveAi = isCompetitive && chapterSource === "ai";
   const activePresets = isCompetitive ? COMPETITIVE_PRESETS : PRESETS;
   const visibleQuestionRows = isCompetitive
     ? QUESTION_ROWS.filter((row) => row.key === "mcq")
@@ -810,7 +812,6 @@ export default function GeneratePaperScreen() {
   useEffect(() => {
     if (aiSourceAvailable) {
       setChapterSource("ai");
-      setIncludeReferenceVisuals(false);
     } else {
       setChapterSource("books");
     }
@@ -1020,6 +1021,8 @@ export default function GeneratePaperScreen() {
       );
       return;
     }
+    setDurationTouched(true);
+    if (durationResult.error) return;
 
     const blueprintSections = buildBlueprintSections(
       counts,
@@ -1043,17 +1046,9 @@ export default function GeneratePaperScreen() {
           count: item.count,
           marks: item.marks,
         })),
-      timer_value: durationMin > 0 ? durationMin : null,
+      timer_value: durationResult.minutes,
       timer_unit: "minutes",
-      duration_minutes: durationMin > 0 ? durationMin : null,
-      additional_instructions: prompt.trim() || undefined,
-      instructions: prompt.trim() || undefined,
-      include_reference_visuals:
-        chapterSource === "books" && includeReferenceVisuals,
-      visual_question_types:
-        chapterSource === "books" && includeReferenceVisuals
-          ? ["mcq", "short_answer", "long_answer", "match_columns"]
-          : undefined,
+      duration_minutes: durationResult.minutes,
       only_fill_blanks:
         counts.fill_blank_count > 0 &&
         counts.mcq_count === 0 &&
@@ -1068,7 +1063,7 @@ export default function GeneratePaperScreen() {
         board,
         standard: normalizeStandard(effectiveStandard),
         division: effectiveDivision,
-        duration_minutes: durationMin > 0 ? durationMin : null,
+        duration_minutes: durationResult.minutes,
         target_marks: totals.marks,
       },
       blueprint_sections: blueprintSections,
@@ -1301,7 +1296,6 @@ export default function GeneratePaperScreen() {
                       ]}
                       onPress={() => {
                         setChapterSource(source);
-                        if (source === "ai") setIncludeReferenceVisuals(false);
                         clearChapters();
                       }}
                     >
@@ -1644,45 +1638,41 @@ export default function GeneratePaperScreen() {
             setStage(2);
           }}
         >
-          {isCompetitiveAi ? (
-            <View style={styles.contractNote}>
-              <Ionicons
-                name="information-circle-outline"
-                size={18}
-                color={colors.accentStrong}
-              />
-              <Text style={styles.contractNoteText}>
-                Customize the timer, difficulty, and teacher instruction for
-                this AI syllabus draft. Indexed textbook visuals remain
-                available with Books.
-              </Text>
-            </View>
-          ) : null}
           <View style={styles.twoCol}>
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Duration</Text>
-              <View style={styles.chipWrap}>
-                {DURATION_PRESETS.map((minutes) => {
-                  const active = durationMin === minutes;
-                  return (
-                    <TouchableOpacity
-                      key={minutes}
-                      activeOpacity={0.86}
-                      style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => setDurationMin(minutes)}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          active && styles.chipTextActive,
-                        ]}
-                      >
-                        {minutes === 0 ? "No timer" : `${minutes} min`}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <Text style={styles.fieldLabel}>Duration (minutes)</Text>
+              <TextInput
+                value={durationInput}
+                onChangeText={setDurationInput}
+                onBlur={() => setDurationTouched(true)}
+                placeholder="Enter minutes"
+                placeholderTextColor={colors.textSubtle}
+                keyboardType="number-pad"
+                inputMode="numeric"
+                returnKeyType="done"
+                accessibilityLabel="Duration in minutes"
+                accessibilityHint="Leave empty for no timer"
+                aria-invalid={
+                  durationTouched && Boolean(durationResult.error)
+                }
+                style={[
+                  styles.input,
+                  durationTouched &&
+                    durationResult.error &&
+                    styles.inputInvalid,
+                ]}
+              />
+              {durationTouched && durationResult.error ? (
+                <Text
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                  style={styles.fieldError}
+                >
+                  {durationResult.error}
+                </Text>
+              ) : (
+                <Text style={styles.fieldHelper}>Leave empty for no timer.</Text>
+              )}
             </View>
             <CompactSelect
               label="Difficulty"
@@ -1695,54 +1685,6 @@ export default function GeneratePaperScreen() {
               onChange={(value) => setDifficulty(value as Difficulty)}
             />
           </View>
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>AI / teacher instruction</Text>
-            <TextInput
-              value={prompt}
-              onChangeText={setPrompt}
-              placeholder="Optional: include diagrams, keep language simple, use textbook examples"
-              placeholderTextColor={colors.textSubtle}
-              multiline
-              style={[styles.input, styles.promptInput]}
-            />
-          </View>
-          <TouchableOpacity
-            activeOpacity={0.86}
-            disabled={chapterSource === "ai"}
-            accessibilityRole="switch"
-            accessibilityState={{
-              checked: includeReferenceVisuals,
-              disabled: chapterSource === "ai",
-            }}
-            accessibilityLabel="Use textbook visuals"
-            style={[
-              styles.visualToggle,
-              chapterSource === "ai" && styles.visualToggleDisabled,
-            ]}
-            onPress={() => setIncludeReferenceVisuals((current) => !current)}
-          >
-            <View style={styles.visualToggleCopy}>
-              <Text style={styles.visualToggleTitle}>Use textbook visuals</Text>
-              <Text style={styles.visualToggleBody}>
-                {chapterSource === "ai"
-                  ? "Switch Question source to Books to add indexed figures."
-                  : "Add indexed figures only when the image is needed to answer."}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.toggleTrack,
-                includeReferenceVisuals && styles.toggleTrackActive,
-              ]}
-            >
-              <View
-                style={[
-                  styles.toggleKnob,
-                  includeReferenceVisuals && styles.toggleKnobActive,
-                ]}
-              />
-            </View>
-          </TouchableOpacity>
           <View style={styles.generateSummary}>
             <Text style={styles.generateTitle}>{effectivePaperName}</Text>
             <Text style={styles.generateBody}>
@@ -1792,7 +1734,6 @@ export default function GeneratePaperScreen() {
                 aiSourceAvailable
                   ? () => {
                       setChapterSource("ai");
-                      setIncludeReferenceVisuals(false);
                       clearChapters();
                       setGenerationError(null);
                       setStage(0);
@@ -2502,11 +2443,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     paddingHorizontal: spacing[3],
   },
-  promptInput: {
-    minHeight: 108,
-    paddingTop: spacing[3],
-    paddingBottom: spacing[3],
-    textAlignVertical: "top",
+  inputInvalid: {
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSurface,
+  },
+  fieldHelper: {
+    color: colors.textMuted,
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  fieldError: {
+    color: colors.dangerText,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    lineHeight: 16,
   },
   presetRow: {
     flexDirection: "row",
@@ -2663,72 +2614,6 @@ const styles = StyleSheet.create({
   },
   twoCol: {
     gap: spacing[4],
-  },
-  contractNote: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.accent,
-    backgroundColor: colors.accentSurface,
-    padding: spacing[3],
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing[2],
-  },
-  contractNoteText: {
-    flex: 1,
-    color: colors.accentStrong,
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    lineHeight: 17,
-  },
-  visualToggle: {
-    minHeight: 76,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
-    backgroundColor: colors.accentSurface,
-    padding: spacing[3],
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-  },
-  visualToggleDisabled: {
-    opacity: 0.62,
-  },
-  visualToggleCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  visualToggleTitle: {
-    color: colors.text,
-    fontFamily: fonts.bold,
-    fontSize: 14,
-  },
-  visualToggleBody: {
-    color: colors.textMuted,
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  toggleTrack: {
-    width: 46,
-    height: 28,
-    borderRadius: 14,
-    padding: 3,
-    backgroundColor: colors.slate[300],
-    justifyContent: "center",
-  },
-  toggleTrackActive: {
-    backgroundColor: colors.accentStrong,
-  },
-  toggleKnob: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.white,
-    ...shadows.xs,
-  },
-  toggleKnobActive: {
-    alignSelf: "flex-end",
   },
   inlineRecovery: {
     borderRadius: 16,
