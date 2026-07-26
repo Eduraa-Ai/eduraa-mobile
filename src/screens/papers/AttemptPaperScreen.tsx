@@ -88,6 +88,223 @@ function isMatchColumnsOptions(
   );
 }
 
+const StandardQuestionCard = React.memo(function StandardQuestionCard({
+  question,
+  index,
+  answer,
+  flagged,
+  disabled,
+  onSelectAnswer,
+  onTextAnswer,
+  onToggleFlag,
+}: {
+  question: QuestionInPaper
+  index: number
+  answer?: string
+  flagged: boolean
+  disabled: boolean
+  onSelectAnswer: (questionId: string, value: string) => void
+  onTextAnswer: (questionId: string, value: string) => void
+  onToggleFlag: (questionId: string) => void
+}) {
+  return (
+    <View
+      style={[
+        styles.questionCard,
+        answer && styles.questionCardAnswered,
+      ]}
+    >
+      <View style={styles.questionHeader}>
+        <View style={styles.questionTitleRow}>
+          <View
+            style={[
+              styles.questionNumBadge,
+              answer && styles.questionNumBadgeAnswered,
+            ]}
+          >
+            <Text
+              style={[
+                styles.questionNum,
+                answer && styles.questionNumAnswered,
+              ]}
+            >
+              {String(index + 1).padStart(2, "0")}
+            </Text>
+          </View>
+          <View style={styles.questionHeaderCopy}>
+            <Text style={styles.questionType}>
+              {formatQuestionType(question.question_type)}
+            </Text>
+            <Text style={styles.questionMarks}>
+              {question.marks} {question.marks === 1 ? "mark" : "marks"}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          disabled={disabled}
+          onPress={() => onToggleFlag(question.id)}
+          style={[styles.flagButton, flagged && styles.flagButtonActive]}
+          accessibilityRole="button"
+          accessibilityLabel={`${flagged ? 'Remove' : 'Flag'} question ${index + 1} for review`}
+          accessibilityState={{ selected: flagged, disabled }}
+        >
+          <Ionicons
+            name={flagged ? "flag" : "flag-outline"}
+            size={15}
+            color={flagged ? colors.warning : colors.textMuted}
+          />
+        </TouchableOpacity>
+      </View>
+      {question.visual_payload ? (
+        <QuestionVisual
+          visual={question.visual_payload}
+          containerStyle={styles.questionVisual}
+        />
+      ) : null}
+      {shouldShowQuestionStemText(question.visual_payload, "interactive") ? (
+        <LatexText
+          value={question.question_text}
+          style={styles.questionText}
+          containerStyle={styles.questionTextContainer}
+        />
+      ) : null}
+
+      {question.question_type === "mcq" && isMCQOptions(question.options) && (
+        <View style={styles.mcqOptions}>
+          {question.options.map((option, optionIndex) => {
+            const selected = answer === option.id
+            return (
+              <TouchableOpacity
+                key={option.id}
+                activeOpacity={0.85}
+                disabled={disabled}
+                style={[styles.mcqOption, selected && styles.mcqOptionSelected]}
+                onPress={() => onSelectAnswer(question.id, option.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected, disabled }}
+                accessibilityLabel={`Question ${index + 1}, option ${String.fromCharCode(65 + optionIndex)}: ${latexToPlainText(option.text)}`}
+                accessibilityHint={selected ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
+              >
+                <Text
+                  style={[
+                    styles.mcqLabel,
+                    selected && styles.mcqLabelSelected,
+                  ]}
+                >
+                  {String.fromCharCode(65 + optionIndex)}
+                </Text>
+                <LatexText
+                  value={option.text}
+                  style={[
+                    styles.mcqText,
+                    selected && styles.mcqTextSelected,
+                  ]}
+                  containerStyle={styles.mcqTextContainer}
+                />
+                {selected ? (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={colors.accent}
+                  />
+                ) : null}
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+      )}
+
+      {question.question_type === "true_false" && (
+        <View style={styles.tfRow}>
+          {["True", "False"].map((value) => {
+            const selected = answer === value
+            return (
+              <TouchableOpacity
+                key={value}
+                activeOpacity={0.85}
+                disabled={disabled}
+                style={[styles.tfBtn, selected && styles.tfBtnSelected]}
+                onPress={() => onSelectAnswer(question.id, value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected, disabled }}
+                accessibilityLabel={`Question ${index + 1}, ${value}`}
+                accessibilityHint={selected ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
+              >
+                <Text
+                  style={[
+                    styles.tfText,
+                    selected && styles.tfTextSelected,
+                  ]}
+                >
+                  {value}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+      )}
+
+      {["short_answer", "long_answer", "fill_blank"].includes(
+        question.question_type,
+      ) && (
+        <TextInput
+          style={[
+            styles.textInput,
+            question.question_type === "long_answer" && styles.textInputLong,
+          ]}
+          placeholder={
+            question.question_type === "long_answer"
+              ? "Write your structured answer here..."
+              : "Type your answer here..."
+          }
+          placeholderTextColor={colors.subtle}
+          multiline
+          editable={!disabled}
+          value={answer || ''}
+          onChangeText={(text) => onTextAnswer(question.id, text)}
+          accessibilityLabel={`Answer for question ${index + 1}`}
+        />
+      )}
+
+      {question.question_type === "match_columns" &&
+      isMatchColumnsOptions(question.options) ? (
+        <View style={styles.matchBox}>
+          <View style={styles.matchColumn}>
+            <Text style={styles.matchLabel}>Column A</Text>
+            {question.options.left.map((item, itemIndex) => (
+              <LatexText
+                key={`${item}-${itemIndex}`}
+                value={`${itemIndex + 1}. ${item}`}
+                style={styles.matchItem}
+              />
+            ))}
+          </View>
+          <View style={styles.matchColumn}>
+            <Text style={styles.matchLabel}>Column B</Text>
+            {question.options.right.map((item, itemIndex) => (
+              <LatexText
+                key={`${item}-${itemIndex}`}
+                value={`${String.fromCharCode(65 + itemIndex)}. ${item}`}
+                style={styles.matchItem}
+              />
+            ))}
+          </View>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter matches, e.g. 1-A, 2-C"
+            placeholderTextColor={colors.subtle}
+            editable={!disabled}
+            value={answer || ''}
+            onChangeText={(text) => onTextAnswer(question.id, text)}
+            accessibilityLabel={`Matches for question ${index + 1}`}
+          />
+        </View>
+      ) : null}
+    </View>
+  )
+})
+
 export default function AttemptPaperScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Route>();
@@ -600,188 +817,17 @@ export default function AttemptPaperScreen() {
         </View>
 
         {paper.questions.map((q, index) => (
-          <View
+          <StandardQuestionCard
             key={q.id}
-            style={[
-              styles.questionCard,
-              answers[q.id] && styles.questionCardAnswered,
-            ]}
-          >
-            <View style={styles.questionHeader}>
-              <View style={styles.questionTitleRow}>
-                <View
-                  style={[
-                    styles.questionNumBadge,
-                    answers[q.id] && styles.questionNumBadgeAnswered,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.questionNum,
-                      answers[q.id] && styles.questionNumAnswered,
-                    ]}
-                  >
-                    {String(index + 1).padStart(2, "0")}
-                  </Text>
-                </View>
-                <View style={styles.questionHeaderCopy}>
-                  <Text style={styles.questionType}>
-                    {formatQuestionType(q.question_type)}
-                  </Text>
-                  <Text style={styles.questionMarks}>
-                    {q.marks} {q.marks === 1 ? "mark" : "marks"}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => toggleFlag(q.id)}
-                style={[styles.flagButton, flagged[q.id] && styles.flagButtonActive]}
-                accessibilityRole="button"
-                accessibilityLabel={`${flagged[q.id] ? 'Remove' : 'Flag'} question ${index + 1} for review`}
-                accessibilityState={{ selected: Boolean(flagged[q.id]) }}
-              >
-                <Ionicons
-                  name={flagged[q.id] ? "flag" : "flag-outline"}
-                  size={15}
-                  color={flagged[q.id] ? colors.warning : colors.textMuted}
-                />
-              </TouchableOpacity>
-            </View>
-            {q.visual_payload ? (
-              <QuestionVisual
-                visual={q.visual_payload}
-                containerStyle={styles.questionVisual}
-              />
-            ) : null}
-            {shouldShowQuestionStemText(q.visual_payload, "interactive") ? (
-              <LatexText
-                value={q.question_text}
-                style={styles.questionText}
-                containerStyle={styles.questionTextContainer}
-              />
-            ) : null}
-
-            {q.question_type === "mcq" && isMCQOptions(q.options) && (
-              <View style={styles.mcqOptions}>
-                {q.options.map((opt, i) => (
-                  <TouchableOpacity
-                    key={opt.id}
-                    style={[styles.mcqOption, answers[q.id] === opt.id && styles.mcqOptionSelected]}
-                    onPress={() => selectAnswer(q.id, opt.id)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: answers[q.id] === opt.id }}
-                    accessibilityLabel={`Question ${index + 1}, option ${String.fromCharCode(65 + i)}: ${latexToPlainText(opt.text)}`}
-                    accessibilityHint={answers[q.id] === opt.id ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
-                  >
-                    <Text
-                      style={[
-                        styles.mcqLabel,
-                        answers[q.id] === opt.id && styles.mcqLabelSelected,
-                      ]}
-                    >
-                      {String.fromCharCode(65 + i)}
-                    </Text>
-                    <LatexText
-                      value={opt.text}
-                      style={[
-                        styles.mcqText,
-                        answers[q.id] === opt.id && styles.mcqTextSelected,
-                      ]}
-                      containerStyle={styles.mcqTextContainer}
-                    />
-                    {answers[q.id] === opt.id ? (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={18}
-                        color={colors.accent}
-                      />
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {q.question_type === "true_false" && (
-              <View style={styles.tfRow}>
-                {["True", "False"].map((val) => (
-                  <TouchableOpacity
-                    key={val}
-                    style={[styles.tfBtn, answers[q.id] === val && styles.tfBtnSelected]}
-                    onPress={() => selectAnswer(q.id, val)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: answers[q.id] === val }}
-                    accessibilityLabel={`Question ${index + 1}, ${val}`}
-                    accessibilityHint={answers[q.id] === val ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
-                  >
-                    <Text
-                      style={[
-                        styles.tfText,
-                        answers[q.id] === val && styles.tfTextSelected,
-                      ]}
-                    >
-                      {val}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {["short_answer", "long_answer", "fill_blank"].includes(
-              q.question_type,
-            ) && (
-              <TextInput
-                style={[
-                  styles.textInput,
-                  q.question_type === "long_answer" && styles.textInputLong,
-                ]}
-                placeholder={
-                  q.question_type === "long_answer"
-                    ? "Write your structured answer here..."
-                    : "Type your answer here..."
-                }
-                placeholderTextColor={colors.subtle}
-                multiline
-                value={answers[q.id] || ''}
-                onChangeText={(text) => setTextAnswer(q.id, text)}
-                accessibilityLabel={`Answer for question ${index + 1}`}
-              />
-            )}
-
-            {q.question_type === "match_columns" &&
-            isMatchColumnsOptions(q.options) ? (
-              <View style={styles.matchBox}>
-                <View style={styles.matchColumn}>
-                  <Text style={styles.matchLabel}>Column A</Text>
-                  {q.options.left.map((item, itemIndex) => (
-                    <LatexText
-                      key={`${item}-${itemIndex}`}
-                      value={`${itemIndex + 1}. ${item}`}
-                      style={styles.matchItem}
-                    />
-                  ))}
-                </View>
-                <View style={styles.matchColumn}>
-                  <Text style={styles.matchLabel}>Column B</Text>
-                  {q.options.right.map((item, itemIndex) => (
-                    <LatexText
-                      key={`${item}-${itemIndex}`}
-                      value={`${String.fromCharCode(65 + itemIndex)}. ${item}`}
-                      style={styles.matchItem}
-                    />
-                  ))}
-                </View>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter matches, e.g. 1-A, 2-C"
-                  placeholderTextColor={colors.subtle}
-                  value={answers[q.id] || ''}
-                  onChangeText={(text) => setTextAnswer(q.id, text)}
-                  accessibilityLabel={`Matches for question ${index + 1}`}
-                />
-              </View>
-            ) : null}
-          </View>
+            question={q}
+            index={index}
+            answer={answers[q.id]}
+            flagged={Boolean(flagged[q.id])}
+            disabled={submitMutation.isPending}
+            onSelectAnswer={selectAnswer}
+            onTextAnswer={setTextAnswer}
+            onToggleFlag={toggleFlag}
+          />
         ))}
       </ScrollView>
 

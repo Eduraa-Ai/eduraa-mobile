@@ -55,10 +55,11 @@ function isMcqOptions(
   return Array.isArray(options);
 }
 
-function QuestionCard({
+const QuestionCard = React.memo(function QuestionCard({
   question,
   index,
   answer,
+  disabled,
   onAnswer,
   onAssist,
   assistText,
@@ -67,8 +68,9 @@ function QuestionCard({
   question: QuestionInPaper;
   index: number;
   answer?: string;
-  onAnswer: (value: string) => void;
-  onAssist: (mode: AssistMode) => void;
+  disabled: boolean;
+  onAnswer: (questionId: string, value: string, selectable: boolean) => void;
+  onAssist: (questionId: string, mode: AssistMode) => void;
   assistText?: string;
   assistLoading?: boolean;
 }) {
@@ -105,9 +107,10 @@ function QuestionCard({
             return (
               <Pressable
                 key={`${question.id}-${value}`}
-                onPress={() => onAnswer(value)}
+                disabled={disabled}
+                onPress={() => onAnswer(question.id, value, true)}
                 accessibilityRole="radio"
-                accessibilityState={{ selected }}
+                accessibilityState={{ selected, disabled }}
                 accessibilityLabel={`Question ${index + 1}, option ${optionLabel(optionIndex, option)}: ${latexToPlainText(option.text)}`}
                 accessibilityHint={
                   selected
@@ -149,9 +152,10 @@ function QuestionCard({
             return (
               <Pressable
                 key={value}
-                onPress={() => onAnswer(value)}
+                disabled={disabled}
+                onPress={() => onAnswer(question.id, value, true)}
                 accessibilityRole="radio"
-                accessibilityState={{ selected }}
+                accessibilityState={{ selected, disabled }}
                 accessibilityHint={
                   selected
                     ? "Tap again to clear this answer."
@@ -181,7 +185,8 @@ function QuestionCard({
       question.question_type !== "true_false" ? (
         <TextInput
           value={answer || ""}
-          onChangeText={onAnswer}
+          editable={!disabled}
+          onChangeText={(value) => onAnswer(question.id, value, false)}
           multiline
           textAlignVertical="top"
           placeholder="Write your answer"
@@ -195,7 +200,8 @@ function QuestionCard({
 
       <View style={styles.assistRow}>
         <Pressable
-          onPress={() => onAssist("hint")}
+          disabled={disabled}
+          onPress={() => onAssist(question.id, "hint")}
           style={({ pressed }) => [
             styles.assistButton,
             pressed && styles.pressed,
@@ -205,7 +211,8 @@ function QuestionCard({
           <Text style={styles.assistLabel}>Hint</Text>
         </Pressable>
         <Pressable
-          onPress={() => onAssist("explain")}
+          disabled={disabled}
+          onPress={() => onAssist(question.id, "explain")}
           style={({ pressed }) => [
             styles.assistButton,
             pressed && styles.pressed,
@@ -215,7 +222,8 @@ function QuestionCard({
           <Text style={styles.assistLabel}>Explain</Text>
         </Pressable>
         <Pressable
-          onPress={() => onAssist("mistake")}
+          disabled={disabled}
+          onPress={() => onAssist(question.id, "mistake")}
           style={({ pressed }) => [
             styles.assistButton,
             pressed && styles.pressed,
@@ -238,7 +246,7 @@ function QuestionCard({
       ) : null}
     </AnimatedCard>
   );
-}
+})
 
 export default function QuizScreen() {
   const navigation = useNavigation<Nav>();
@@ -434,6 +442,22 @@ export default function QuizScreen() {
     },
   });
 
+  const handleAnswer = useCallback((
+    questionId: string,
+    value: string,
+    selectable: boolean,
+  ) => {
+    if (selectable) {
+      selectAnswer(questionId, value)
+    } else {
+      setTextAnswer(questionId, value)
+    }
+  }, [selectAnswer, setTextAnswer])
+
+  const handleAssist = useCallback((questionId: string, mode: AssistMode) => {
+    assistMutation.mutate({ questionId, mode })
+  }, [assistMutation.mutate])
+
   const submit = useCallback(
     (autoSubmit = false) => {
       if (!paper || submitMutation.isPending) return;
@@ -590,19 +614,9 @@ export default function QuizScreen() {
             question={question}
             index={index}
             answer={answers[question.id]}
-            onAnswer={(value) => {
-              const isSelectable =
-                question.question_type === "mcq" ||
-                question.question_type === "true_false";
-              if (isSelectable) {
-                selectAnswer(question.id, value)
-              } else {
-                setTextAnswer(question.id, value)
-              }
-            }}
-            onAssist={(mode) =>
-              assistMutation.mutate({ questionId: question.id, mode })
-            }
+            disabled={submitMutation.isPending}
+            onAnswer={handleAnswer}
+            onAssist={handleAssist}
             assistText={assistByQuestion[question.id]}
             assistLoading={
               assistMutation.isPending &&
