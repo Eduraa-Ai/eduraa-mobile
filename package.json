@@ -21,10 +21,11 @@
     "eas-build-post-install": "npm run validate:release-env",
     "typecheck": "tsc --noEmit",
     "test:config": "tsx --test scripts/api-config.test.ts",
+    "test:ai-stream": "tsx --test scripts/ai-stream.test.ts",
     "test:release-env": "node --test scripts/release-env.test.cjs",
     "test:bridge": "node --test scripts/dev-api-bridge.test.cjs",
     "test:models": "node scripts/run-model-tests.cjs",
-    "test": "npm run test:config && npm run test:release-env && npm run test:bridge && npm run test:audit && npm run test:models",
+    "test": "npm run test:config && npm run test:ai-stream && npm run test:release-env && npm run test:bridge && npm run test:audit && npm run test:models",
     "export:web": "node scripts/validate-release-env.cjs --release && expo export --platform web",
     "export:ci": "node scripts/validate-release-env.cjs --release && expo export --platform all"
   },

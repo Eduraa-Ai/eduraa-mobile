@@ -23,6 +23,7 @@ const models = [
   'src/utils/mathContent.ts',
   'src/utils/protectedDocumentModel.ts',
   'src/utils/latex.ts',
+  'src/utils/aiResponseContent.ts',
   'src/utils/questionVisual.ts',
   'src/utils/bookPaperGeneration.ts',
   'src/auth/queryCacheScope.ts',
@@ -101,6 +102,10 @@ const suites = [
   {
     file: 'scripts/latex.test.cjs',
     env: { LATEX_MODEL_PATH: path.join(outDir, 'utils/latex.js') },
+  },
+  {
+    file: 'scripts/ai-response-content.test.cjs',
+    env: { AI_RESPONSE_CONTENT_PATH: path.join(outDir, 'utils/aiResponseContent.js') },
   },
   {
     file: 'scripts/question-visual.test.cjs',
