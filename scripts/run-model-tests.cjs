@@ -57,6 +57,10 @@ const suites = [
     env: { PAPER_ATTEMPT_MODEL_PATH: path.join(outDir, 'screens/papers/paperAttemptModel.js') },
   },
   {
+    file: 'scripts/paper-attempt-session-contract.test.cjs',
+    env: {},
+  },
+  {
     file: 'scripts/paper-detail-model.test.cjs',
     env: { PAPER_DETAIL_MODEL_PATH: path.join(outDir, 'screens/papers/paperDetailModel.js') },
   },

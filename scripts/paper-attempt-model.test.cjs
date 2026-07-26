@@ -119,6 +119,18 @@ test('selecting later questions preserves every earlier answer', () => {
   })
 })
 
+test('rapid selections settle on the final option without losing other questions', () => {
+  let state = createPaperAttemptState(identity, { 'question-1': 'A' })
+  state = reduce(state, { type: 'select', questionId: 'question-2', value: 'A' })
+  state = reduce(state, { type: 'select', questionId: 'question-2', value: 'B' })
+  state = reduce(state, { type: 'select', questionId: 'question-2', value: 'C' })
+
+  assert.deepEqual(state.answers, {
+    'question-1': 'A',
+    'question-2': 'C',
+  })
+})
+
 test('text changes and explicit clears affect only their own question', () => {
   let state = createPaperAttemptState(identity, {
     'question-1': 'A',
