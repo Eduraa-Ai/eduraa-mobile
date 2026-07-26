@@ -25,6 +25,11 @@ import { colors } from "../../theme/colors";
 import { fonts } from "../../theme/fonts";
 import { layout, radius, shadows, spacing } from "../../theme/spacing";
 import type { Chapter, Difficulty, PaperGenerateRequest } from "../../types";
+import {
+  getAvailableBookCountCandidates,
+  isBookQuestionShortage,
+  withBookMcqCount,
+} from "../../utils/bookPaperGeneration";
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "GeneratePaper">;
 type Stage = 0 | 1 | 2;
@@ -63,13 +68,16 @@ type CustomType = {
 };
 
 type BlueprintSectionPayload = {
-  id?: string;
+  id: string;
   title: string;
   question_type: string;
-  custom_type_name?: string;
-  marks: number;
-  count: number;
-  order?: number;
+  order: number;
+  slots: Array<{
+    id: string;
+    question_type: string;
+    marks: number;
+    is_placeholder: boolean;
+  }>;
 };
 
 type QuestionRow = {
@@ -82,6 +90,7 @@ type QuestionRow = {
 
 type GenerateInput = {
   payload: PaperGenerateRequest;
+  useAvailableBookCount?: boolean;
   ai?: {
     examType: string;
     subject: string;
@@ -313,22 +322,30 @@ function buildBlueprintSections(
     id: `section-${row.key}`,
     title: row.label,
     question_type: row.key,
-    marks: marks[row.markKey],
-    count: counts[row.countKey],
     order: index,
+    slots: Array.from({ length: counts[row.countKey] }, (_, slotIndex) => ({
+      id: `slot-${row.key}-${slotIndex + 1}`,
+      question_type: row.key,
+      marks: marks[row.markKey],
+      is_placeholder: true,
+    })),
   }));
 
   customTypes
     .filter((item) => item.name.trim() && item.count > 0)
     .forEach((item, index) => {
+      const sectionIndex = sections.length;
       sections.push({
         id: `section-custom-${item.id}`,
         title: item.name.trim(),
         question_type: "short_answer",
-        custom_type_name: item.name.trim(),
-        marks: item.marks,
-        count: item.count,
-        order: sections.length + index,
+        order: sectionIndex + index,
+        slots: Array.from({ length: item.count }, (_, slotIndex) => ({
+          id: `slot-custom-${item.id}-${slotIndex + 1}`,
+          question_type: "short_answer",
+          marks: item.marks,
+          is_placeholder: true,
+        })),
       });
     });
 
@@ -471,10 +488,18 @@ function InlineRecovery({
   title,
   body,
   onRetry,
+  retryLabel = "Try again",
+  onSecondary,
+  secondaryLabel,
+  pending = false,
 }: {
   title: string;
   body: string;
   onRetry: () => void;
+  retryLabel?: string;
+  onSecondary?: () => void;
+  secondaryLabel?: string;
+  pending?: boolean;
 }) {
   return (
     <View style={styles.inlineRecovery}>
@@ -491,11 +516,26 @@ function InlineRecovery({
         <TouchableOpacity
           activeOpacity={0.84}
           style={styles.inlineRetry}
+          disabled={pending}
           onPress={onRetry}
         >
-          <Ionicons name="refresh" size={14} color={colors.white} />
-          <Text style={styles.inlineRetryText}>Try again</Text>
+          {pending ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <Ionicons name="refresh" size={14} color={colors.white} />
+          )}
+          <Text style={styles.inlineRetryText}>{retryLabel}</Text>
         </TouchableOpacity>
+        {onSecondary && secondaryLabel ? (
+          <TouchableOpacity
+            activeOpacity={0.84}
+            style={styles.inlineSecondary}
+            disabled={pending}
+            onPress={onSecondary}
+          >
+            <Text style={styles.inlineSecondaryText}>{secondaryLabel}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -733,8 +773,8 @@ export default function GeneratePaperScreen() {
     [activeChapters, chapterIds],
   );
   const isCompetitiveAi = isCompetitive && chapterSource === "ai";
-  const activePresets = isCompetitiveAi ? COMPETITIVE_PRESETS : PRESETS;
-  const visibleQuestionRows = isCompetitiveAi
+  const activePresets = isCompetitive ? COMPETITIVE_PRESETS : PRESETS;
+  const visibleQuestionRows = isCompetitive
     ? QUESTION_ROWS.filter((row) => row.key === "mcq")
     : QUESTION_ROWS;
   const derivedSubtopics = useMemo(() => {
@@ -825,10 +865,10 @@ export default function GeneratePaperScreen() {
   }, [derivedSubtopics]);
 
   useEffect(() => {
-    if (!isCompetitiveAi) return;
+    if (!isCompetitive) return;
     setCustomTypes([]);
     setCounts(COMPETITIVE_PRESETS[0].counts);
-  }, [isCompetitiveAi]);
+  }, [isCompetitive]);
 
   const generateMutation = useMutation({
     mutationFn: async (input: GenerateInput) => {
@@ -853,13 +893,56 @@ export default function GeneratePaperScreen() {
             `AI generation finished but no paper was produced. Status: ${response.status}`,
           );
         }
-        return papersApi.getById(response.paper_id);
+        const paper = await papersApi.getById(response.paper_id);
+        return {
+          paper,
+          requestedCount: input.ai.count,
+          generatedCount: paper.questions.length,
+        };
       }
-      return papersApi.generate(input.payload);
+      if (!input.useAvailableBookCount) {
+        const paper = await papersApi.generate(input.payload);
+        return {
+          paper,
+          requestedCount: input.payload.mcq_count,
+          generatedCount: paper.questions.length,
+        };
+      }
+
+      let lastShortageError: unknown;
+      for (const count of getAvailableBookCountCandidates(
+        input.payload.mcq_count,
+      )) {
+        try {
+          const paper = await papersApi.generate(
+            withBookMcqCount(input.payload, count),
+          );
+          return {
+            paper,
+            requestedCount: input.payload.mcq_count,
+            generatedCount: paper.questions.length,
+          };
+        } catch (error) {
+          if (!isBookQuestionShortage(error)) throw error;
+          lastShortageError = error;
+        }
+      }
+      throw (
+        lastShortageError ??
+        new Error(
+          "No approved book questions are available for this selection.",
+        )
+      );
     },
     onMutate: () => setGenerationError(null),
-    onSuccess: (paper) =>
-      navigation.replace("PaperDetail", { paperId: paper.id }),
+    onSuccess: ({ paper, requestedCount, generatedCount }) =>
+      navigation.replace("PaperDetail", {
+        paperId: paper.id,
+        generationNotice:
+          generatedCount < requestedCount
+            ? `Created ${generatedCount} of ${requestedCount} requested questions from the approved book bank.`
+            : undefined,
+      }),
     onError: (err: any) => {
       const detail = err?.response?.data?.detail;
       const message =
@@ -920,7 +1003,7 @@ export default function GeneratePaperScreen() {
     setCustomTypes((current) => current.filter((item) => item.id !== id));
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = (generationMode: "exact" | "available" = "exact") => {
     if (!topicDone) {
       setStage(0);
       Alert.alert(
@@ -967,6 +1050,10 @@ export default function GeneratePaperScreen() {
       instructions: prompt.trim() || undefined,
       include_reference_visuals:
         chapterSource === "books" && includeReferenceVisuals,
+      visual_question_types:
+        chapterSource === "books" && includeReferenceVisuals
+          ? ["mcq", "short_answer", "long_answer", "match_columns"]
+          : undefined,
       only_fill_blanks:
         counts.fill_blank_count > 0 &&
         counts.mcq_count === 0 &&
@@ -991,6 +1078,8 @@ export default function GeneratePaperScreen() {
 
     generateMutation.mutate({
       payload,
+      useAvailableBookCount:
+        generationMode === "available" && chapterSource === "books",
       ai:
         chapterSource === "ai" && aiSourceAvailable
           ? {
@@ -1514,7 +1603,7 @@ export default function GeneratePaperScreen() {
               </View>
             ))}
           </View>
-          {!isCompetitiveAi ? (
+          {!isCompetitive ? (
             <TouchableOpacity
               activeOpacity={0.86}
               style={styles.addTypeButton}
@@ -1563,9 +1652,9 @@ export default function GeneratePaperScreen() {
                 color={colors.accentStrong}
               />
               <Text style={styles.contractNoteText}>
-                AI syllabus drafts use exam-matched difficulty and untimed
-                practice. Choose Books in Topic to customize timer, difficulty,
-                and indexed visuals.
+                Customize the timer, difficulty, and teacher instruction for
+                this AI syllabus draft. Indexed textbook visuals remain
+                available with Books.
               </Text>
             </View>
           ) : null}
@@ -1579,12 +1668,7 @@ export default function GeneratePaperScreen() {
                     <TouchableOpacity
                       key={minutes}
                       activeOpacity={0.86}
-                      disabled={isCompetitiveAi}
-                      style={[
-                        styles.chip,
-                        active && styles.chipActive,
-                        isCompetitiveAi && styles.disabledBlock,
-                      ]}
+                      style={[styles.chip, active && styles.chipActive]}
                       onPress={() => setDurationMin(minutes)}
                     >
                       <Text
@@ -1609,7 +1693,6 @@ export default function GeneratePaperScreen() {
                 label: item[0].toUpperCase() + item.slice(1),
               }))}
               onChange={(value) => setDifficulty(value as Difficulty)}
-              disabled={isCompetitiveAi}
             />
           </View>
           <View style={styles.field}>
@@ -1669,9 +1752,53 @@ export default function GeneratePaperScreen() {
           </View>
           {generationError ? (
             <InlineRecovery
-              title="The draft paused"
-              body={`${generationError} Your topic, question mix, and settings are still here.`}
-              onRetry={handleGenerate}
+              title={
+                chapterSource === "books" &&
+                isBookQuestionShortage(generationError)
+                  ? "Fewer approved book questions"
+                  : "The draft paused"
+              }
+              body={
+                chapterSource === "books" &&
+                isBookQuestionShortage(generationError)
+                  ? `The ${difficulty} bank cannot fill all ${totals.questions} questions for this selection. Generate the largest available set with its textbook images, or use AI syllabus for the full count.`
+                  : `${generationError} Your topic, question mix, and settings are still here.`
+              }
+              retryLabel={
+                chapterSource === "books" &&
+                isBookQuestionShortage(generationError)
+                  ? "Generate available"
+                  : "Try again"
+              }
+              pending={generateMutation.isPending}
+              onRetry={() =>
+                handleGenerate(
+                  chapterSource === "books" &&
+                    isBookQuestionShortage(generationError)
+                    ? "available"
+                    : "exact",
+                )
+              }
+              secondaryLabel={
+                chapterSource === "books" &&
+                isBookQuestionShortage(generationError) &&
+                aiSourceAvailable
+                  ? "Use AI syllabus"
+                  : undefined
+              }
+              onSecondary={
+                chapterSource === "books" &&
+                isBookQuestionShortage(generationError) &&
+                aiSourceAvailable
+                  ? () => {
+                      setChapterSource("ai");
+                      setIncludeReferenceVisuals(false);
+                      clearChapters();
+                      setGenerationError(null);
+                      setStage(0);
+                    }
+                  : undefined
+              }
             />
           ) : null}
           <PrimaryButton
@@ -2651,6 +2778,18 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 11,
+  },
+  inlineSecondary: {
+    alignSelf: "flex-start",
+    minHeight: 38,
+    paddingHorizontal: spacing[2],
+    justifyContent: "center",
+  },
+  inlineSecondaryText: {
+    color: colors.dangerText,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    textDecorationLine: "underline",
   },
   generateSummary: {
     borderRadius: 18,

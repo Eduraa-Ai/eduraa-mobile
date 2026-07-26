@@ -1,4 +1,16 @@
 import apiClient from './client'
+import type { QueryClient } from '@tanstack/react-query'
+
+export type AgenticLearningFailureKind = 'api' | 'content' | 'rendering'
+
+export class AgenticLearningContentError extends Error {
+  readonly kind = 'content' as const
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'AgenticLearningContentError'
+  }
+}
 
 export interface AgenticLearningSubjectBucket {
   subject_id: string
@@ -78,19 +90,81 @@ export interface AgenticLearningTopicDetail {
   weightage_label?: string | null
 }
 
+const AGENTIC_REQUEST_TIMEOUT_MS = 12000
+
+function stringList(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => String(item ?? '').trim()).filter(Boolean)
+}
+
+function normalizeTopicDetail(value: unknown): AgenticLearningTopicDetail {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AgenticLearningContentError('Lesson response was not an object.')
+  }
+  const data = value as Record<string, unknown>
+  const topicId = String(data.topic_id ?? '').trim()
+  const subjectId = String(data.subject_id ?? '').trim()
+  const topicName = String(data.topic_name ?? '').trim()
+  if (!topicId || !subjectId || !topicName) {
+    throw new AgenticLearningContentError('Lesson response is missing its topic identity.')
+  }
+
+  return {
+    ...data,
+    topic_id: topicId,
+    subject_id: subjectId,
+    subject_name: String(data.subject_name ?? 'Subject'),
+    subject_family: String(data.subject_family ?? ''),
+    curriculum_mode: String(data.curriculum_mode ?? ''),
+    curriculum_label: String(data.curriculum_label ?? ''),
+    topic_name: topicName,
+    chapter_title: data.chapter_title == null ? null : String(data.chapter_title),
+    status: String(data.status ?? 'needs_repair'),
+    mastery_score: Number(data.mastery_score) || 0,
+    confidence: Number(data.confidence) || 0,
+    evidence_strength: Number(data.evidence_strength) || 0,
+    repeated_mistake_index: Number(data.repeated_mistake_index) || 0,
+    attempt_count: Number(data.attempt_count) || 0,
+    improvement_trend: data.improvement_trend == null ? null : String(data.improvement_trend),
+    summary: String(data.summary ?? ''),
+    concept_explanation: String(data.concept_explanation ?? data.summary ?? ''),
+    easy_ways_to_learn: stringList(data.easy_ways_to_learn),
+    memory_tips: stringList(data.memory_tips),
+    recap_points: stringList(data.recap_points),
+    diagram_kind: data.diagram_kind == null ? null : String(data.diagram_kind),
+    text_diagram: data.text_diagram == null ? null : String(data.text_diagram),
+    practice_questions: stringList(data.practice_questions),
+    coach_note: data.coach_note == null ? null : String(data.coach_note),
+    resolved_at: data.resolved_at == null ? null : String(data.resolved_at),
+    lesson_source: String(data.lesson_source ?? 'evidence'),
+    lesson_version: Number(data.lesson_version) || 1,
+    generated_at: String(data.generated_at ?? new Date(0).toISOString()),
+    pyq_frequency: data.pyq_frequency == null ? null : Number(data.pyq_frequency),
+    paper_types: stringList(data.paper_types),
+    branch: data.branch == null ? null : String(data.branch),
+    weightage_label: data.weightage_label == null ? null : String(data.weightage_label),
+  } as AgenticLearningTopicDetail
+}
+
 export const agenticLearningApi = {
   async getSubjects() {
-    const response = await apiClient.get<{ subjects: AgenticLearningSubjectBucket[] }>('/agentic-learning/subjects')
+    const response = await apiClient.get<{ subjects: AgenticLearningSubjectBucket[] }>('/agentic-learning/subjects', {
+      timeout: AGENTIC_REQUEST_TIMEOUT_MS,
+    })
     return response.data.subjects
   },
 
   async getQuickActions() {
-    const response = await apiClient.get<{ actions: AgenticLearningQuickAction[] }>('/agentic-learning/quick-actions')
+    const response = await apiClient.get<{ actions: AgenticLearningQuickAction[] }>('/agentic-learning/quick-actions', {
+      timeout: AGENTIC_REQUEST_TIMEOUT_MS,
+    })
     return response.data.actions
   },
 
   async getSubtopics(subjectId: string) {
-    const response = await apiClient.get<{ items: AgenticLearningSubtopicCard[] }>(`/agentic-learning/subjects/${subjectId}/subtopics`)
+    const response = await apiClient.get<{ items: AgenticLearningSubtopicCard[] }>(`/agentic-learning/subjects/${encodeURIComponent(subjectId)}/subtopics`, {
+      timeout: AGENTIC_REQUEST_TIMEOUT_MS,
+    })
     return response.data.items
   },
 
@@ -98,9 +172,9 @@ export const agenticLearningApi = {
     const safeTopicId = encodeURIComponent(topicId)
     const response = await apiClient.get<AgenticLearningTopicDetail>(`/agentic-learning/topics/${safeTopicId}`, {
       signal,
-      timeout: 20000,
+      timeout: AGENTIC_REQUEST_TIMEOUT_MS,
     })
-    return response.data
+    return normalizeTopicDetail(response.data)
   },
 
   async setTopicResolved(topicId: string, subjectId: string, resolved: boolean) {
@@ -108,4 +182,44 @@ export const agenticLearningApi = {
     const response = await apiClient.post(`/agentic-learning/topics/${safeTopicId}/resolve`, { subject_id: subjectId, resolved })
     return response.data
   },
+
+  async prepareCheckedPaper(checkedPaperId: string) {
+    const safeCheckedPaperId = encodeURIComponent(checkedPaperId)
+    const response = await apiClient.post<{ topic_ids: string[] }>(
+      `/agentic-learning/checked-papers/${safeCheckedPaperId}/prepare`,
+      undefined,
+      { timeout: AGENTIC_REQUEST_TIMEOUT_MS },
+    )
+    return response.data
+  },
+}
+
+export function agenticFailureKind(error: unknown): AgenticLearningFailureKind {
+  return error instanceof AgenticLearningContentError ? 'content' : 'api'
+}
+
+export async function prefetchAgenticLearning(
+  queryClient: QueryClient,
+  checkedPaperId?: string,
+  knownTopicIds: string[] = [],
+) {
+  const topicIds = new Set(knownTopicIds.filter(Boolean))
+  if (checkedPaperId) {
+    try {
+      const prepared = await agenticLearningApi.prepareCheckedPaper(checkedPaperId)
+      prepared.topic_ids.forEach((topicId) => topicIds.add(topicId))
+    } catch {
+      // The list and any already-known topics can still be warmed independently.
+    }
+  }
+
+  await Promise.allSettled([
+    queryClient.prefetchQuery({ queryKey: ['agentic-subjects'], queryFn: agenticLearningApi.getSubjects, staleTime: 30 * 60 * 1000 }),
+    queryClient.prefetchQuery({ queryKey: ['agentic-quick-actions'], queryFn: agenticLearningApi.getQuickActions, staleTime: 30 * 60 * 1000 }),
+    ...[...topicIds].map((topicId) => queryClient.prefetchQuery({
+      queryKey: ['agentic-topic', topicId],
+      queryFn: ({ signal }) => agenticLearningApi.getTopic(topicId, signal),
+      staleTime: 30 * 60 * 1000,
+    })),
+  ])
 }

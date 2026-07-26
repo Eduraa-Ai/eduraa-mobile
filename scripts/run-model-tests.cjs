@@ -19,7 +19,11 @@ const models = [
   'src/screens/papers/paperDetailModel.ts',
   'src/screens/workspace/examWorkspaceModel.ts',
   'src/utils/mathText.ts',
+  'src/utils/mathContent.ts',
   'src/utils/protectedDocumentModel.ts',
+  'src/utils/latex.ts',
+  'src/utils/questionVisual.ts',
+  'src/utils/bookPaperGeneration.ts',
   'src/auth/queryCacheScope.ts',
   'src/auth/roles.ts',
   'src/auth/landing.ts',
@@ -67,6 +71,10 @@ const suites = [
     env: {},
   },
   {
+    file: 'scripts/math-content.test.cjs',
+    env: { MATH_CONTENT_PATH: path.join(outDir, 'utils/mathContent.js') },
+  },
+  {
     file: 'scripts/checked-paper-access.test.cjs',
     env: {
       PROTECTED_DOCUMENT_MODEL_PATH: path.join(outDir, 'utils/protectedDocumentModel.js'),
@@ -84,6 +92,18 @@ const suites = [
   {
     file: 'scripts/previous-papers-navigation.test.cjs',
     env: {},
+  },
+  {
+    file: 'scripts/latex.test.cjs',
+    env: { LATEX_MODEL_PATH: path.join(outDir, 'utils/latex.js') },
+  },
+  {
+    file: 'scripts/question-visual.test.cjs',
+    env: { QUESTION_VISUAL_MODEL_PATH: path.join(outDir, 'utils/questionVisual.js') },
+  },
+  {
+    file: 'scripts/book-paper-generation.test.cjs',
+    env: { BOOK_PAPER_GENERATION_MODEL_PATH: path.join(outDir, 'utils/bookPaperGeneration.js') },
   },
 ]
 

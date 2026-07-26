@@ -21,6 +21,7 @@ import {
   AppScreen,
   AuthenticatedImage,
   ErrorState,
+  MathText,
   PremiumHeader,
   SelectableChip,
 } from '../../components/ui'
@@ -266,7 +267,7 @@ function QuestionCard({ question }: { question: PreviousQuestion }) {
         </View>
       </View>
 
-      <Text style={styles.questionText}>{readablePreviousPaperText(question.question_text)}</Text>
+      <MathText style={styles.questionText} value={question.question_text} />
 
       <FigureGallery
         urls={question.question_figure_urls}
@@ -284,7 +285,7 @@ function QuestionCard({ question }: { question: PreviousQuestion }) {
                 <View style={[styles.optionLabel, isAnswer && styles.optionLabelAnswer]}>
                   <Text style={[styles.optionLabelText, isAnswer && styles.optionLabelTextAnswer]}>{label}</Text>
                 </View>
-                <Text style={styles.optionText}>{readablePreviousPaperText(option.text || option.value)}</Text>
+                <MathText style={styles.optionText} value={option.text || option.value} />
               </View>
             )
           })}
@@ -324,7 +325,7 @@ function QuestionCard({ question }: { question: PreviousQuestion }) {
       {answerVisible && hasAnswer ? (
         <View accessibilityLiveRegion="polite" style={styles.answerBand}>
           <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-          <Text style={styles.answerText}>Answer: {readablePreviousPaperText(question.answer_key)}</Text>
+          <MathText style={styles.answerText} value={`Answer: ${question.answer_key}`} />
         </View>
       ) : null}
 
@@ -332,7 +333,7 @@ function QuestionCard({ question }: { question: PreviousQuestion }) {
         <View accessibilityLiveRegion="polite" style={styles.solutionPanel}>
           <Text style={styles.solutionLabel}>Worked solution</Text>
           {question.solution_text ? (
-            <Text style={styles.solutionText}>{readablePreviousPaperText(question.solution_text)}</Text>
+            <MathText style={styles.solutionText} value={question.solution_text} />
           ) : null}
           <FigureGallery
             urls={question.solution_figure_urls}

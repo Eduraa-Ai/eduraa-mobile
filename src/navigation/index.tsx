@@ -1,7 +1,7 @@
 import React from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { NavigationContainer } from '@react-navigation/native'
+import { NavigationContainer, type LinkingOptions, type NavigatorScreenParams } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { AnimatedButton, AnimatedCard, AppScreen, AuthLogoMark, BottomTabBar, GradientHeroCard } from '../components/ui'
@@ -60,7 +60,7 @@ export type AuthStackParamList = {
 export type PapersStackParamList = {
   PapersList: undefined
   GeneratePaper: undefined
-  PaperDetail: { paperId: string }
+  PaperDetail: { paperId: string; generationNotice?: string }
   AttemptPaper: {
     paperId: string
     examId?: string
@@ -71,19 +71,23 @@ export type PapersStackParamList = {
 }
 
 export type ResultsStackParamList = {
-  ResultsList: undefined
-  ResultDetail: { submissionId?: string; checkedPaperId?: string }
-  QuestionEvidence: { checkedPaperId: string; questionId?: string; questionIndex?: number }
-}
+  ResultsList: undefined;
+  ResultDetail: { submissionId?: string; checkedPaperId?: string };
+  QuestionEvidence: {
+    checkedPaperId: string;
+    questionId?: string;
+    questionIndex?: number;
+  };
+};
 
 export type LearningStackParamList = {
   LearningHome: undefined
   CompetitiveExam: undefined
   CompetitiveSubject: { subjectName: string }
   CompetitiveChapter: { subjectName: string; chapterKey: string }
-  AgenticLearning: undefined
+  AgenticLearning: { origin?: 'checked-paper'; checkedPaperId?: string } | undefined
   AgenticSubject: { subjectId: string }
-  AgenticTopic: { topicId: string; topicName?: string; subjectName?: string }
+  AgenticTopic: { topicId: string; topicName?: string; subjectName?: string; origin?: 'checked-paper'; checkedPaperId?: string }
   LearningResources: undefined
   LearningResourceDetail: { resourceId: string }
   CheatSheetDetail: { cheatSheetId: string }
@@ -97,53 +101,80 @@ export type LearningStackParamList = {
 }
 
 export type StaffWorkspaceStackParamList = {
-  StaffWorkspace: undefined
-  Feature: { featureId: string }
-  Approvals: undefined
-  Attendance: undefined
-  ScanUpload: undefined
-  Exams: undefined
-  StaffAIStudio: undefined
-  StaffGeneratePaper: undefined
-  StaffPapers: undefined
-  StaffResults: undefined
-  ResultDetail: { submissionId?: string; checkedPaperId?: string }
-  QuestionEvidence: { checkedPaperId: string; questionId?: string; questionIndex?: number }
-}
+  StaffWorkspace: undefined;
+  Feature: { featureId: string };
+  Approvals: undefined;
+  Attendance: undefined;
+  ScanUpload: undefined;
+  Exams: undefined;
+  StaffAIStudio: undefined;
+  StaffGeneratePaper: undefined;
+  StaffPapers: undefined;
+  StaffResults: undefined;
+  ResultDetail: { submissionId?: string; checkedPaperId?: string };
+  QuestionEvidence: {
+    checkedPaperId: string;
+    questionId?: string;
+    questionIndex?: number;
+  };
+};
 
 export type ProfileStackParamList = {
-  ProfileMain: undefined
-}
+  ProfileMain: undefined;
+};
 
 export type TabParamList = {
   Home: undefined
-  Learning: undefined
+  Learning: NavigatorScreenParams<LearningStackParamList> | undefined
   Papers: undefined
-  Results: undefined
+  Results: NavigatorScreenParams<ResultsStackParamList> | undefined
   Profile: undefined
   PreviousPapers: undefined
 }
 
 export type StaffTabParamList = {
-  StaffHome: undefined
-  StaffApprovals: undefined
-  StaffAttendance: undefined
-  StaffScanUpload: undefined
-  StaffExams: undefined
-  StaffPapers: undefined
-  StaffResults: undefined
-  StaffAIStudio: undefined
-}
+  StaffHome: undefined;
+  StaffApprovals: undefined;
+  StaffAttendance: undefined;
+  StaffScanUpload: undefined;
+  StaffExams: undefined;
+  StaffPapers: undefined;
+  StaffResults: undefined;
+  StaffAIStudio: undefined;
+};
 
-const AuthStack = createNativeStackNavigator<AuthStackParamList>()
-const PapersStack = createNativeStackNavigator<PapersStackParamList>()
-const ResultsStack = createNativeStackNavigator<ResultsStackParamList>()
-const LearningStack = createNativeStackNavigator<LearningStackParamList>()
-const ProfileStack = createNativeStackNavigator<ProfileStackParamList>()
-const StaffWorkspaceStack = createNativeStackNavigator<StaffWorkspaceStackParamList>()
-const Tab = createBottomTabNavigator<TabParamList>()
-const StaffTab = createBottomTabNavigator<StaffTabParamList>()
-const OnboardingStack = createNativeStackNavigator<{ B2COnboarding: undefined }>()
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const PapersStack = createNativeStackNavigator<PapersStackParamList>();
+const ResultsStack = createNativeStackNavigator<ResultsStackParamList>();
+const LearningStack = createNativeStackNavigator<LearningStackParamList>();
+const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
+const StaffWorkspaceStack =
+  createNativeStackNavigator<StaffWorkspaceStackParamList>();
+const Tab = createBottomTabNavigator<TabParamList>();
+const StaffTab = createBottomTabNavigator<StaffTabParamList>();
+const OnboardingStack = createNativeStackNavigator<{
+  B2COnboarding: undefined;
+}>();
+
+const linking: LinkingOptions<TabParamList> = {
+  prefixes: ['eduraa://'],
+  config: {
+    screens: {
+      Learning: {
+        screens: {
+          AgenticLearning: 'learning/agentic',
+          AgenticSubject: 'learning/agentic/subjects/:subjectId',
+          AgenticTopic: 'learning/agentic/topics/:topicId',
+        },
+      },
+      Results: {
+        screens: {
+          ResultDetail: 'results/checked/:checkedPaperId',
+        },
+      },
+    },
+  },
+}
 
 const stackScreenOptions = {
   headerStyle: {
@@ -159,41 +190,79 @@ const stackScreenOptions = {
   contentStyle: {
     backgroundColor: colors.background,
   },
-}
+};
 
 function AuthNavigator() {
   return (
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />
-      <AuthStack.Screen name="RegisterIndividual" component={RegisterIndividualScreen} />
-      <AuthStack.Screen name="RegisterSchool" component={RegisterSchoolScreen} />
+      <AuthStack.Screen
+        name="RegisterIndividual"
+        component={RegisterIndividualScreen}
+      />
+      <AuthStack.Screen
+        name="RegisterSchool"
+        component={RegisterSchoolScreen}
+      />
       <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
       <AuthStack.Screen name="RegistrationComplete" component={RegistrationCompleteScreen} options={{ gestureEnabled: false }} />
     </AuthStack.Navigator>
-  )
+  );
 }
 
 function PapersNavigator() {
   return (
     <PapersStack.Navigator screenOptions={stackScreenOptions}>
-      <PapersStack.Screen name="PapersList" component={PapersScreen} options={{ title: 'Papers' }} />
-      <PapersStack.Screen name="GeneratePaper" component={GeneratePaperScreen} options={{ title: 'Generate paper' }} />
-      <PapersStack.Screen name="PaperDetail" component={PaperDetailScreen} options={{ title: 'Paper detail' }} />
-      <PapersStack.Screen name="AttemptPaper" component={AttemptPaperScreen} options={{ headerShown: false }} />
-      <PapersStack.Screen name="Quiz" component={QuizScreen} options={{ headerShown: false }} />
+      <PapersStack.Screen
+        name="PapersList"
+        component={PapersScreen}
+        options={{ title: "Papers" }}
+      />
+      <PapersStack.Screen
+        name="GeneratePaper"
+        component={GeneratePaperScreen}
+        options={{ title: "Generate paper" }}
+      />
+      <PapersStack.Screen
+        name="PaperDetail"
+        component={PaperDetailScreen}
+        options={{ title: "Paper detail" }}
+      />
+      <PapersStack.Screen
+        name="AttemptPaper"
+        component={AttemptPaperScreen}
+        options={{ headerShown: false }}
+      />
+      <PapersStack.Screen
+        name="Quiz"
+        component={QuizScreen}
+        options={{ headerShown: false }}
+      />
     </PapersStack.Navigator>
-  )
+  );
 }
 
 function ResultsNavigator() {
   return (
     <ResultsStack.Navigator screenOptions={stackScreenOptions}>
-      <ResultsStack.Screen name="ResultsList" component={ResultsScreen} options={{ headerShown: false }} />
-      <ResultsStack.Screen name="ResultDetail" component={ResultDetailScreen} options={{ headerShown: false }} />
-      <ResultsStack.Screen name="QuestionEvidence" component={QuestionEvidenceScreen} options={{ headerShown: false }} />
+      <ResultsStack.Screen
+        name="ResultsList"
+        component={ResultsScreen}
+        options={{ headerShown: false }}
+      />
+      <ResultsStack.Screen
+        name="ResultDetail"
+        component={ResultDetailScreen}
+        options={{ headerShown: false }}
+      />
+      <ResultsStack.Screen
+        name="QuestionEvidence"
+        component={QuestionEvidenceScreen}
+        options={{ headerShown: false }}
+      />
     </ResultsStack.Navigator>
-  )
+  );
 }
 
 function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
@@ -217,7 +286,7 @@ function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
       <LearningStack.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
       <LearningStack.Screen name="AIStudio" component={AIStudioScreen} options={{ headerShown: false }} />
     </LearningStack.Navigator>
-  )
+  );
 }
 
 function ProfileNavigator() {
@@ -226,10 +295,10 @@ function ProfileNavigator() {
       <ProfileStack.Screen
         name="ProfileMain"
         component={ProfileScreen}
-        options={{ title: 'Profile', headerShown: false }}
+        options={{ title: "Profile", headerShown: false }}
       />
     </ProfileStack.Navigator>
-  )
+  );
 }
 
 function StudentTabs({
@@ -250,7 +319,7 @@ function StudentTabs({
       <Tab.Screen name="Home">
         {() => <HomeScreen competitive={competitive} previousPapersEligible={previousPapersEligible} />}
       </Tab.Screen>
-      <Tab.Screen name="Learning" options={{ title: 'Learning' }}>
+      <Tab.Screen name="Learning" options={{ title: "Learning" }}>
         {() => <LearningNavigator competitive={competitive} />}
       </Tab.Screen>
       <Tab.Screen name="Papers" component={PapersNavigator} options={{ title: 'Papers' }} />
@@ -264,26 +333,74 @@ function StudentTabs({
         />
       ) : null}
     </Tab.Navigator>
-  )
+  );
 }
 
 function StaffWorkspaceNavigator() {
   return (
     <StaffWorkspaceStack.Navigator screenOptions={stackScreenOptions}>
-      <StaffWorkspaceStack.Screen name="StaffWorkspace" component={WorkspaceScreen} options={{ title: 'Workspace' }} />
-      <StaffWorkspaceStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
-      <StaffWorkspaceStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
-      <StaffWorkspaceStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
-      <StaffWorkspaceStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
-      <StaffWorkspaceStack.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
-      <StaffWorkspaceStack.Screen name="StaffAIStudio" component={AIStudioScreen} options={{ headerShown: false }} />
-      <StaffWorkspaceStack.Screen name="StaffGeneratePaper" component={GeneratePaperScreen} options={{ title: 'Generate paper' }} />
-      <StaffWorkspaceStack.Screen name="StaffPapers" component={PapersScreen} options={{ title: 'Papers' }} />
-      <StaffWorkspaceStack.Screen name="StaffResults" component={ResultsScreen} options={{ title: 'Checked papers' }} />
-      <StaffWorkspaceStack.Screen name="ResultDetail" component={ResultDetailScreen} options={{ headerShown: false }} />
-      <StaffWorkspaceStack.Screen name="QuestionEvidence" component={QuestionEvidenceScreen} options={{ headerShown: false }} />
+      <StaffWorkspaceStack.Screen
+        name="StaffWorkspace"
+        component={WorkspaceScreen}
+        options={{ title: "Workspace" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="Feature"
+        component={FeatureScreen}
+        options={{ title: "Feature" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="Approvals"
+        component={ApprovalsScreen}
+        options={{ title: "Approvals" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="Attendance"
+        component={AttendanceScreen}
+        options={{ title: "Attendance" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="ScanUpload"
+        component={ScanUploadScreen}
+        options={{ title: "Scan upload" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="Exams"
+        component={ExamsScreen}
+        options={{ title: "Exams" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="StaffAIStudio"
+        component={AIStudioScreen}
+        options={{ headerShown: false }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="StaffGeneratePaper"
+        component={GeneratePaperScreen}
+        options={{ title: "Generate paper" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="StaffPapers"
+        component={PapersScreen}
+        options={{ title: "Papers" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="StaffResults"
+        component={ResultsScreen}
+        options={{ title: "Checked papers" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="ResultDetail"
+        component={ResultDetailScreen}
+        options={{ headerShown: false }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="QuestionEvidence"
+        component={QuestionEvidenceScreen}
+        options={{ headerShown: false }}
+      />
     </StaffWorkspaceStack.Navigator>
-  )
+  );
 }
 
 function StaffTabs() {
@@ -294,28 +411,63 @@ function StaffTabs() {
         headerShown: false,
       }}
     >
-      <StaffTab.Screen name="StaffHome" component={StaffWorkspaceNavigator} options={{ title: 'Workspace' }} />
-      <StaffTab.Screen name="StaffApprovals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
-      <StaffTab.Screen name="StaffAttendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
-      <StaffTab.Screen name="StaffScanUpload" component={ScanUploadScreen} options={{ title: 'Scan' }} />
-      <StaffTab.Screen name="StaffExams" component={ExamsScreen} options={{ title: 'Exams' }} />
-      <StaffTab.Screen name="StaffPapers" component={PapersNavigator} options={{ title: 'Papers' }} />
-      <StaffTab.Screen name="StaffResults" component={ResultsNavigator} options={{ title: 'Results' }} />
-      <StaffTab.Screen name="StaffAIStudio" component={AIStudioScreen} options={{ title: 'AI Studio' }} />
+      <StaffTab.Screen
+        name="StaffHome"
+        component={StaffWorkspaceNavigator}
+        options={{ title: "Workspace" }}
+      />
+      <StaffTab.Screen
+        name="StaffApprovals"
+        component={ApprovalsScreen}
+        options={{ title: "Approvals" }}
+      />
+      <StaffTab.Screen
+        name="StaffAttendance"
+        component={AttendanceScreen}
+        options={{ title: "Attendance" }}
+      />
+      <StaffTab.Screen
+        name="StaffScanUpload"
+        component={ScanUploadScreen}
+        options={{ title: "Scan" }}
+      />
+      <StaffTab.Screen
+        name="StaffExams"
+        component={ExamsScreen}
+        options={{ title: "Exams" }}
+      />
+      <StaffTab.Screen
+        name="StaffPapers"
+        component={PapersNavigator}
+        options={{ title: "Papers" }}
+      />
+      <StaffTab.Screen
+        name="StaffResults"
+        component={ResultsNavigator}
+        options={{ title: "Results" }}
+      />
+      <StaffTab.Screen
+        name="StaffAIStudio"
+        component={AIStudioScreen}
+        options={{ title: "AI Studio" }}
+      />
     </StaffTab.Navigator>
-  )
+  );
 }
 
 function B2COnboardingScreen() {
-  return <ProfileScreen mode="onboarding" />
+  return <ProfileScreen mode="onboarding" />;
 }
 
 function OnboardingNavigator() {
   return (
     <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
-      <OnboardingStack.Screen name="B2COnboarding" component={B2COnboardingScreen} />
+      <OnboardingStack.Screen
+        name="B2COnboarding"
+        component={B2COnboardingScreen}
+      />
     </OnboardingStack.Navigator>
-  )
+  );
 }
 
 function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
@@ -330,8 +482,13 @@ function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
   return <StaffTabs />
 }
 
-export default function RootNavigator({ onRetrySession }: { onRetrySession?: () => void }) {
-  const { isAuthenticated, isLoading, sessionRestoreError, token, user } = useAuthStore()
+export default function RootNavigator({
+  onRetrySession,
+}: {
+  onRetrySession?: () => void;
+}) {
+  const { isAuthenticated, isLoading, sessionRestoreError, token, user } =
+    useAuthStore();
 
   if (isLoading && !(token && !user)) {
     return (
@@ -339,7 +496,7 @@ export default function RootNavigator({ onRetrySession }: { onRetrySession?: () 
         <ActivityIndicator color={colors.accent} />
         <Text style={styles.loadingText}>Loading Eduraa</Text>
       </View>
-    )
+    );
   }
 
   if (token && !user && (sessionRestoreError || isLoading)) {
@@ -350,44 +507,77 @@ export default function RootNavigator({ onRetrySession }: { onRetrySession?: () 
             <AuthLogoMark size={50} />
             <View>
               <Text style={styles.recoveryBrandName}>EDURAA</Text>
-              <Text style={styles.recoveryBrandLine}>INTELLIGENCE FOR SERIOUS LEARNING</Text>
+              <Text style={styles.recoveryBrandLine}>
+                INTELLIGENCE FOR SERIOUS LEARNING
+              </Text>
             </View>
           </View>
 
-          <Text style={styles.recoveryEyebrow}>{isLoading ? 'VERIFYING SAVED SESSION' : 'YOUR PLACE IS HELD'}</Text>
-          <Text style={styles.recoveryTitle}>{isLoading ? 'Finding your place in Eduraa.' : 'Connection paused. Your progress isn’t.'}</Text>
-          <Text style={styles.recoveryCopy}>{isLoading ? 'We’re securely reconnecting this device to your account.' : sessionRestoreError}</Text>
+          <Text style={styles.recoveryEyebrow}>
+            {isLoading ? "VERIFYING SAVED SESSION" : "YOUR PLACE IS HELD"}
+          </Text>
+          <Text style={styles.recoveryTitle}>
+            {isLoading
+              ? "Finding your place in Eduraa."
+              : "Connection paused. Your progress isn’t."}
+          </Text>
+          <Text style={styles.recoveryCopy}>
+            {isLoading
+              ? "We’re securely reconnecting this device to your account."
+              : sessionRestoreError}
+          </Text>
 
           <View style={styles.recoveryStatus}>
             <View style={styles.recoveryStatusIcon}>
-              {isLoading ? <ActivityIndicator color={colors.accent} /> : <Ionicons name="cloud-offline-outline" size={20} color={colors.accent} />}
+              {isLoading ? (
+                <ActivityIndicator color={colors.accent} />
+              ) : (
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={20}
+                  color={colors.accent}
+                />
+              )}
             </View>
             <View style={styles.recoveryStatusCopy}>
-              <Text style={styles.recoveryStatusTitle}>{isLoading ? 'Checking your session' : 'Waiting for Eduraa'}</Text>
-              <Text style={styles.recoveryStatusBody}>{isLoading ? 'This usually takes only a moment. Keep Eduraa open while we verify access.' : 'Check your connection, then retry. We won’t send you back to sign in for a temporary outage.'}</Text>
+              <Text style={styles.recoveryStatusTitle}>
+                {isLoading ? "Checking your session" : "Waiting for Eduraa"}
+              </Text>
+              <Text style={styles.recoveryStatusBody}>
+                {isLoading
+                  ? "This usually takes only a moment. Keep Eduraa open while we verify access."
+                  : "Check your connection, then retry. We won’t send you back to sign in for a temporary outage."}
+              </Text>
             </View>
           </View>
 
-          <AnimatedButton label={isLoading ? 'Checking connection' : 'Try connection again'} loading={isLoading} onPress={() => onRetrySession?.()} style={styles.recoveryAction} />
-          <Text style={styles.recoveryFootnote}>Your saved session stays on this device.</Text>
+          <AnimatedButton
+            label={isLoading ? "Checking connection" : "Try connection again"}
+            loading={isLoading}
+            onPress={() => onRetrySession?.()}
+            style={styles.recoveryAction}
+          />
+          <Text style={styles.recoveryFootnote}>
+            Your saved session stays on this device.
+          </Text>
         </View>
       </View>
-    )
+    );
   }
 
-  const landingKey = user ? resolveMobileLanding(user) : 'auth'
+  const landingKey = user ? resolveMobileLanding(user) : "auth";
   return (
-    <NavigationContainer key={landingKey}>
+    <NavigationContainer key={landingKey} linking={linking}>
       {isAuthenticated && user ? <AuthenticatedNavigator user={user} /> : <AuthNavigator />}
     </NavigationContainer>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
   loadingRoot: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing[3],
     backgroundColor: colors.background,
   },
@@ -398,19 +588,19 @@ const styles = StyleSheet.create({
   },
   recoveryRoot: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[8],
     backgroundColor: colors.canvasWarm,
   },
   recoveryContent: {
-    width: '100%',
+    width: "100%",
     maxWidth: 390,
-    alignSelf: 'center',
+    alignSelf: "center",
   },
   recoveryBrand: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[3],
   },
   recoveryBrandName: {
@@ -451,8 +641,8 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   recoveryStatus: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: spacing[3],
     marginTop: spacing[7],
     paddingTop: spacing[5],
@@ -462,8 +652,8 @@ const styles = StyleSheet.create({
   recoveryStatusIcon: {
     width: 44,
     height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: 18,
     backgroundColor: colors.accentSurface,
   },
@@ -483,7 +673,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   recoveryAction: {
-    width: '100%',
+    width: "100%",
     marginTop: spacing[7],
   },
   recoveryFootnote: {
@@ -491,16 +681,16 @@ const styles = StyleSheet.create({
     color: colors.textSoft,
     fontFamily: fonts.medium,
     fontSize: 11,
-    textAlign: 'center',
+    textAlign: "center",
   },
   roleGateContent: {
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   roleGateCard: {
     gap: spacing[3],
   },
   rolePill: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     borderRadius: 999,
     backgroundColor: colors.accentSurface,
     borderWidth: 1,
@@ -513,7 +703,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 11,
     letterSpacing: 0.6,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   roleGateTitle: {
     color: colors.text,
@@ -527,4 +717,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
   },
-})
+});

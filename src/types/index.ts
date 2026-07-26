@@ -127,8 +127,13 @@ export interface RubricItem {
 export interface QuestionVisualPayload {
   kind: string;
   asset_url?: string | null;
+  asset_urls?: string[];
   alt_text?: string | null;
   source_figure_id?: string | null;
+  source_figure_ids?: string[];
+  captions?: string[];
+  placement?: string | null;
+  layout?: string | null;
   figure_type?: string | null;
   page_number?: number | null;
 }
@@ -237,13 +242,16 @@ export interface PaperGenerateRequest {
     target_marks?: number;
   };
   blueprint_sections?: Array<{
-    id?: string;
+    id: string;
     title: string;
     question_type: string;
-    custom_type_name?: string;
-    marks: number;
-    count: number;
     order?: number;
+    slots: Array<{
+      id: string;
+      question_type: string;
+      marks: number;
+      is_placeholder?: boolean;
+    }>;
   }>;
 }
 
@@ -353,16 +361,33 @@ export type CheckedPaperStatus =
 
 export interface GradingResultItem {
   question_id: string;
+  topic_id?: string | null;
+  topic_name?: string | null;
+  subject_id?: string | null;
+  subject_name?: string | null;
   question_number?: number;
-  question_text?: string;
-  question_type?: string;
-  response?: string;
-  expected_answer?: string | null;
+  question_text?: string | null;
+  question_type?: string | null;
+  response?: unknown;
+  student_answer?: unknown;
+  selected_answer?: unknown;
+  expected_answer?: unknown;
+  options?: unknown;
+  status?: string | null;
+  result_status?: string | null;
+  correctness?: string | null;
   score?: number | null;
   max_score?: number | null;
   feedback?: string | null;
   confidence?: number | null;
   recommendation?: string | null;
+  marking_rubric?: unknown;
+  hints?: string[] | string | null;
+  solution_ideas?: string[] | string | null;
+  solution_steps?: string[] | string | null;
+  explanation?: string | null;
+  easy_example?: string | null;
+  why_marks_cut?: string | null;
 }
 
 export interface CheckedPaper {
@@ -371,7 +396,7 @@ export interface CheckedPaper {
   teacher_id: string;
   exam_id: string | null;
   subject_id?: string | null;
-  scanned_pdf_url: string;
+  scanned_pdf_url?: string | null;
   annotated_pdf_url?: string | null;
   ocr_text: string;
   identifier_text: string;

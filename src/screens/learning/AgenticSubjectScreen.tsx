@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import { agenticLearningApi, AgenticLearningSubtopicCard } from '../../api/agenticLearning'
-import { AppScreen, ErrorState } from '../../components/ui'
+import { AppScreen, ErrorState, MathText } from '../../components/ui'
 import { colors, radius, spacing, typography } from '../../theme'
 import { AgenticHeader, AgenticIntro, AgenticSurface } from './AgenticLearningFrame'
 import { clampPercent, topicAccessibilityLabel, topicStatusLabel, topicTone } from './agenticLearningModel'
@@ -36,7 +36,7 @@ function TopicCard({ topic, onPress }: { topic: AgenticLearningSubtopicCard; onP
           <Text style={[styles.statusText, { color: tone.text }]}>{topicStatusLabel(topic)}</Text>
         </View>
       </View>
-      <Text style={styles.topicSummary}>{topic.summary}</Text>
+      <MathText style={styles.topicSummary} value={topic.summary} />
       <View style={styles.topicFooter}>
         <Text style={styles.topicMetric}>{clampPercent(topic.mastery_score)}% mastery</Text>
         {topic.pyq_frequency != null ? <Text style={styles.topicMetric}>· {topic.pyq_frequency} PYQs</Text> : null}
@@ -50,10 +50,11 @@ export default function AgenticSubjectScreen() {
   const navigation = useNavigation<any>()
   const route = useRoute()
   const { subjectId } = route.params as RouteParams
-  const subjectsQuery = useQuery({ queryKey: ['agentic-subjects'], queryFn: agenticLearningApi.getSubjects })
+  const subjectsQuery = useQuery({ queryKey: ['agentic-subjects'], queryFn: agenticLearningApi.getSubjects, retry: 1 })
   const subtopicsQuery = useQuery({
     queryKey: ['agentic-subtopics', subjectId],
     queryFn: () => agenticLearningApi.getSubtopics(subjectId),
+    retry: 1,
   })
 
   const subject = subjectsQuery.data?.find((item) => item.subject_id === subjectId)
@@ -87,6 +88,7 @@ export default function AgenticSubjectScreen() {
         <ErrorState
           title="Subtopics unavailable"
           message="The subject is still selected. Retry without losing your place."
+          loading={subtopicsQuery.isFetching}
           onAction={() => void subtopicsQuery.refetch()}
         />
       ) : null}
