@@ -16,7 +16,6 @@ import {
   TextInput,
   Platform,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -44,10 +43,11 @@ import { ErrorState, LatexText, QuestionVisual } from "../../components/ui";
 import { latexToPlainText } from "../../utils/latex";
 import { shouldShowQuestionStemText } from "../../utils/questionVisual";
 import {
+  buildPaperAnswerEntries,
   clampCheckingProgress,
   selectNewestInProgressAttempt,
-  toggleSelectableAnswer,
 } from "./paperAttemptModel";
+import { usePaperAttemptSession } from "./usePaperAttemptSession";
 type Nav = NativeStackNavigationProp<PapersStackParamList, "AttemptPaper">;
 type Route = RouteProp<PapersStackParamList, "AttemptPaper">;
 type SubmitOutcome = {
@@ -57,28 +57,6 @@ type SubmitOutcome = {
   submissionId?: string
   scoreText?: string
   checkingProgressPercent?: number
-}
-
-type AttemptDraft = {
-  attemptId: string
-  answers: Record<string, string>
-  flagged: Record<string, boolean>
-}
-
-function toStringRecord(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return Object.entries(value).reduce<Record<string, string>>((result, [key, item]) => {
-    if (typeof item === 'string') result[key] = item
-    return result
-  }, {})
-}
-
-function toBooleanRecord(value: unknown): Record<string, boolean> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return Object.entries(value).reduce<Record<string, boolean>>((result, [key, item]) => {
-    if (typeof item === 'boolean') result[key] = item
-    return result
-  }, {})
 }
 
 function isMCQOptions(
@@ -118,8 +96,6 @@ export default function AttemptPaperScreen() {
   const isFocused = useIsFocused();
   const userId = useAuthStore((state) => state.user?.id);
 
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [flagged, setFlagged] = useState<Record<string, boolean>>({});
   const [submitReviewOpen, setSubmitReviewOpen] = useState(false);
   const [submitHoldProgress, setSubmitHoldProgress] = useState(0);
   const [submitOutcome, setSubmitOutcome] = useState<SubmitOutcome | null>(
@@ -129,15 +105,12 @@ export default function AttemptPaperScreen() {
     null,
   );
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [isDraftReady, setIsDraftReady] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const submitHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
   );
-  const draftWriteRef = useRef<Promise<void>>(Promise.resolve());
   const didAutoSubmitRef = useRef(false);
   const attemptScrollRef = useRef<ScrollView>(null);
-  const draftKey = `eduraa-attempt-draft:${userId ?? "unknown"}:${params.paperId}:${params.examId ?? "practice"}`;
 
   useLayoutEffect(() => {
     const parent = navigation.getParent();
@@ -171,8 +144,9 @@ export default function AttemptPaperScreen() {
   })
   const paper = paperQuery.data
 
+  const attemptQueryKey = ['paper-attempt', userId, params.paperId, params.examId, 'standard'] as const
   const attemptQuery = useQuery({
-    queryKey: ['paper-attempt', params.paperId, params.examId],
+    queryKey: attemptQueryKey,
     enabled: Boolean(paper && userId),
     staleTime: Infinity,
     queryFn: async () => {
@@ -212,6 +186,32 @@ export default function AttemptPaperScreen() {
     }, {}),
     [activeAttempt],
   )
+  const attemptIdentity = useMemo(
+    () => userId && activeAttempt?.id
+      ? {
+          userId,
+          paperId: params.paperId,
+          examId: params.examId,
+          attemptId: activeAttempt.id,
+          mode: 'standard' as const,
+        }
+      : null,
+    [activeAttempt?.id, params.examId, params.paperId, userId],
+  )
+  const attemptSession = usePaperAttemptSession({
+    identity: attemptIdentity,
+    serverAnswers,
+  })
+  const {
+    answers,
+    flagged,
+    selectAnswer,
+    setTextAnswer,
+    toggleFlag,
+    getAnswerSnapshot,
+    flushDraft,
+    clearDraft,
+  } = attemptSession
   const attemptStartedAt = useMemo(() => {
     const parsed = Date.parse(activeAttempt?.started_at || activeAttempt?.created_at || '')
     return Number.isFinite(parsed) ? parsed : null
@@ -221,49 +221,9 @@ export default function AttemptPaperScreen() {
     [attemptStartedAt, paper?.duration_minutes],
   )
 
-  const queueDraftWrite = useCallback((operation: () => Promise<void>) => {
-    draftWriteRef.current = draftWriteRef.current
-      .catch(() => undefined)
-      .then(operation)
-      .catch(() => undefined)
-    return draftWriteRef.current
-  }, [])
-
   useEffect(() => {
-    if (!activeAttempt?.id) return
-    let active = true
-    setIsDraftReady(false)
     didAutoSubmitRef.current = false
-    setAnswers(serverAnswers)
-    setFlagged({})
-
-    void AsyncStorage.getItem(draftKey)
-      .then((raw) => {
-        if (!active || !raw) return
-        const draft = JSON.parse(raw) as Partial<AttemptDraft>
-        if (draft.attemptId !== activeAttempt.id) return
-        setAnswers({ ...serverAnswers, ...toStringRecord(draft.answers) })
-        setFlagged(toBooleanRecord(draft.flagged))
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (active) setIsDraftReady(true)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [activeAttempt?.id, draftKey, serverAnswers])
-
-  const persistDraft = useCallback((nextAnswers = answers, nextFlagged = flagged) => {
-    if (!isDraftReady || !activeAttempt?.id) return Promise.resolve()
-    const draft: AttemptDraft = { attemptId: activeAttempt.id, answers: nextAnswers, flagged: nextFlagged }
-    return queueDraftWrite(() => AsyncStorage.setItem(draftKey, JSON.stringify(draft)))
-  }, [activeAttempt?.id, answers, draftKey, flagged, isDraftReady, queueDraftWrite])
-
-  useEffect(() => {
-    void persistDraft()
-  }, [persistDraft])
+  }, [activeAttempt?.id])
 
   const attemptAgainMutation = useMutation({
     mutationFn: async () => {
@@ -271,20 +231,17 @@ export default function AttemptPaperScreen() {
         exam_id: params.examId,
         reason: 'student_retest',
       })
-      await queueDraftWrite(() => AsyncStorage.removeItem(draftKey))
+      await clearDraft()
       return nextAttempt
     },
     onMutate: () => setAttemptAgainError(null),
     onSuccess: (nextAttempt) => {
       // Reset every visible attempt surface with the query swap so the sticky
       // progress dock cannot retain the submitted attempt for a render.
-      setAnswers({})
-      setFlagged({})
       setTimeLeft(null)
-      setIsDraftReady(false)
       didAutoSubmitRef.current = false
       queryClient.setQueryData(
-        ['paper-attempt', params.paperId, params.examId],
+        attemptQueryKey,
         nextAttempt,
       )
       setSubmitOutcome(null)
@@ -308,7 +265,7 @@ export default function AttemptPaperScreen() {
         mode: 'standard',
     }),
     onSuccess: (data) => {
-      void queueDraftWrite(() => AsyncStorage.removeItem(draftKey))
+      void clearDraft()
       const isExistingSubmission = Boolean(activeAttempt?.id && data.id !== activeAttempt.id)
       const gradingStatus = String((data as { grading_status?: string }).grading_status || '').toLowerCase()
       const isChecking = gradingStatus === 'submitted' || gradingStatus === 'checking'
@@ -365,7 +322,7 @@ export default function AttemptPaperScreen() {
             attempt_id: activeAttempt?.id,
           })
           if (existing?.id && existing.id === activeAttempt?.id) {
-            void queueDraftWrite(() => AsyncStorage.removeItem(draftKey))
+            void clearDraft()
             const existingStatus = String(existing.grading_status || '').toLowerCase()
             const existingResultReady = !['submitted', 'checking', 'failed'].includes(existingStatus)
               && existing.results_visible_to_student !== false
@@ -416,12 +373,20 @@ export default function AttemptPaperScreen() {
     clearSubmitHoldTimer()
     setSubmitHoldProgress(0)
     setSubmitReviewOpen(false)
-    const answerList: AnswerEntry[] = paper.questions.map((q) => ({
-      question_id: q.id,
-      response: answers[q.id] || '',
-    }))
-    submitMutation.mutate(answerList)
-  }, [activeAttempt?.id, answers, clearSubmitHoldTimer, paper, submitMutation])
+    try {
+      const answerList = buildPaperAnswerEntries(
+        paper.questions.map((question) => question.id),
+        getAnswerSnapshot(),
+      )
+      submitMutation.mutate(answerList)
+    } catch (error) {
+      setSubmitOutcome({
+        kind: 'error',
+        title: 'Paper cannot be submitted',
+        message: error instanceof Error ? error.message : 'This paper contains invalid questions.',
+      })
+    }
+  }, [activeAttempt?.id, clearSubmitHoldTimer, getAnswerSnapshot, paper, submitMutation])
 
   useEffect(() => {
     if (!attemptDeadline) {
@@ -455,8 +420,8 @@ export default function AttemptPaperScreen() {
   }, [navigation, params.returnTo])
 
   const handleExit = useCallback(() => {
-    void persistDraft().finally(leaveAttempt)
-  }, [leaveAttempt, persistDraft])
+    void flushDraft().finally(leaveAttempt)
+  }, [flushDraft, leaveAttempt])
 
   const startSubmitHold = () => {
     if (
@@ -499,7 +464,11 @@ export default function AttemptPaperScreen() {
     return `${m}:${s}`;
   };
 
-  if (paperQuery.isLoading || attemptQuery.isLoading) {
+  if (
+    paperQuery.isLoading
+    || attemptQuery.isLoading
+    || Boolean(activeAttempt && !attemptSession.isReady)
+  ) {
     return (
       <View style={styles.center}>
         <View style={styles.loadingMark}>
@@ -666,7 +635,7 @@ export default function AttemptPaperScreen() {
               </View>
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => setFlagged((current) => ({ ...current, [q.id]: !current[q.id] }))}
+                onPress={() => toggleFlag(q.id)}
                 style={[styles.flagButton, flagged[q.id] && styles.flagButtonActive]}
                 accessibilityRole="button"
                 accessibilityLabel={`${flagged[q.id] ? 'Remove' : 'Flag'} question ${index + 1} for review`}
@@ -699,7 +668,7 @@ export default function AttemptPaperScreen() {
                   <TouchableOpacity
                     key={opt.id}
                     style={[styles.mcqOption, answers[q.id] === opt.id && styles.mcqOptionSelected]}
-                    onPress={() => setAnswers((previous) => toggleSelectableAnswer(previous, q.id, opt.id))}
+                    onPress={() => selectAnswer(q.id, opt.id)}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: answers[q.id] === opt.id }}
                     accessibilityLabel={`Question ${index + 1}, option ${String.fromCharCode(65 + i)}: ${latexToPlainText(opt.text)}`}
@@ -739,7 +708,7 @@ export default function AttemptPaperScreen() {
                   <TouchableOpacity
                     key={val}
                     style={[styles.tfBtn, answers[q.id] === val && styles.tfBtnSelected]}
-                    onPress={() => setAnswers((previous) => toggleSelectableAnswer(previous, q.id, val))}
+                    onPress={() => selectAnswer(q.id, val)}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: answers[q.id] === val }}
                     accessibilityLabel={`Question ${index + 1}, ${val}`}
@@ -774,7 +743,7 @@ export default function AttemptPaperScreen() {
                 placeholderTextColor={colors.subtle}
                 multiline
                 value={answers[q.id] || ''}
-                onChangeText={(text) => setAnswers((prev) => ({ ...prev, [q.id]: text }))}
+                onChangeText={(text) => setTextAnswer(q.id, text)}
                 accessibilityLabel={`Answer for question ${index + 1}`}
               />
             )}
@@ -807,7 +776,7 @@ export default function AttemptPaperScreen() {
                   placeholder="Enter matches, e.g. 1-A, 2-C"
                   placeholderTextColor={colors.subtle}
                   value={answers[q.id] || ''}
-                  onChangeText={(text) => setAnswers((prev) => ({ ...prev, [q.id]: text }))}
+                  onChangeText={(text) => setTextAnswer(q.id, text)}
                   accessibilityLabel={`Matches for question ${index + 1}`}
                 />
               </View>
