@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   View,
   Text,
@@ -17,6 +23,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  useNavigation,
+  useNavigationState,
+  type NavigationProp,
+  type ParamListBase,
+} from "@react-navigation/native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
@@ -1983,6 +1996,7 @@ const sheet = StyleSheet.create({
 
 export default function AIStudioScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -2079,6 +2093,43 @@ export default function AIStudioScreen() {
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = setTimeout(() => setNotice(null), 1800);
   }, []);
+
+  const navigateBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    const routeNames = navigation.getState().routeNames;
+    if (routeNames.includes("LearningHome")) {
+      navigation.reset({ index: 0, routes: [{ name: "LearningHome" }] });
+      return;
+    }
+    if (routeNames.includes("StaffWorkspace")) {
+      navigation.reset({ index: 0, routes: [{ name: "StaffWorkspace" }] });
+      return;
+    }
+    if (routeNames.includes("StaffHome")) {
+      navigation.reset({ index: 0, routes: [{ name: "StaffHome" }] });
+    }
+  }, [navigation]);
+
+  const hasLocalStackBack = useNavigationState(
+    (state) => state.type === "stack" && state.index > 0,
+  );
+  const edgeBackGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(Platform.OS !== "web" && !hasLocalStackBack)
+        .runOnJS(true)
+        .hitSlop({ left: 0, width: 24 })
+        .activeOffsetX(36)
+        .failOffsetY([-24, 24])
+        .onEnd(({ translationX }) => {
+          if (translationX >= 72) navigateBack();
+        }),
+    [hasLocalStackBack, navigateBack],
+  );
 
   const scrollToEnd = useCallback((animated = true) => {
     setTimeout(() => listRef.current?.scrollToEnd({ animated }), 80);
@@ -2387,17 +2438,31 @@ export default function AIStudioScreen() {
           : "ready with your learning context";
 
   return (
-    <View style={styles.root}>
+    <GestureDetector gesture={edgeBackGesture}>
+      <View style={styles.root}>
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + spacing[2] }]}>
-        <TouchableOpacity
-          style={styles.topBtn}
-          onPress={() => setShowHistory(true)}
-          activeOpacity={0.75}
-          accessibilityLabel="Open conversation history"
-        >
-          <Ionicons name="menu" size={20} color={colors.ink} />
-        </TouchableOpacity>
+        <View style={styles.topActions}>
+          <TouchableOpacity
+            style={styles.topBtn}
+            onPress={navigateBack}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Back from AI Studio"
+            hitSlop={4}
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.ink} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.topBtn}
+            onPress={() => setShowHistory(true)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Open conversation history"
+          >
+            <Ionicons name="menu" size={20} color={colors.ink} />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.topCenter}>
           <Text style={styles.topTitle} numberOfLines={1}>
@@ -2756,7 +2821,8 @@ export default function AIStudioScreen() {
           <Text style={styles.noticeText}>{notice}</Text>
         </View>
       ) : null}
-    </View>
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -2784,6 +2850,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DCCFBE",
     backgroundColor: colors.white,
+  },
+  topActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
   },
   topCenter: { flex: 1, alignItems: "center", gap: 3 },
   topTitle: {
