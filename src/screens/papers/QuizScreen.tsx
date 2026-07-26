@@ -9,7 +9,7 @@ import type { PapersStackParamList } from '../../navigation'
 import { papersApi } from '../../api/papers'
 import { API_BASE_URL } from '../../api/client'
 import type { AnswerEntry, MCQOption, QuestionInPaper } from '../../types'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, MathText } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, 'Quiz'>
@@ -71,7 +71,7 @@ function QuestionCard({
 
       {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.questionImage} resizeMode="contain" /> : null}
 
-      <Text style={styles.questionText}>{question.question_text}</Text>
+      <MathText style={styles.questionText} value={question.question_text} />
 
       {question.question_type === 'mcq' && isMcqOptions(question.options) ? (
         <View style={styles.optionList}>
@@ -81,7 +81,7 @@ function QuestionCard({
             return (
               <Pressable key={`${question.id}-${value}`} onPress={() => onAnswer(value)} style={({ pressed }) => [styles.optionRow, selected && styles.optionSelected, pressed && styles.pressed]}>
                 <Text style={[styles.optionBadge, selected && styles.optionBadgeSelected]}>{optionLabel(optionIndex, option)}</Text>
-                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{option.text}</Text>
+                <MathText style={[styles.optionText, selected && styles.optionTextSelected]} value={option.text} />
               </Pressable>
             )
           })}

@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } fr
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectableChip } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, MathText, SelectableChip } from '../../components/ui'
 import { previousPapersApi, PreviousPaper, PreviousQuestion, resolvePreviousPaperAssetUrl } from '../../api/previousPapers'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 
@@ -45,15 +45,15 @@ function QuestionCard({ question }: { question: PreviousQuestion }) {
         <Text style={styles.questionType}>{question.question_type}</Text>
       </View>
       {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.questionImage} resizeMode="contain" /> : null}
-      <Text style={styles.questionText}>{question.question_text}</Text>
+      <MathText style={styles.questionText} value={question.question_text} />
       {question.options?.map((option, index) => (
         <View key={`${question.id}-${index}`} style={styles.optionRow}>
           <Text style={styles.optionLabel}>{option.label || option.id || String.fromCharCode(65 + index)}</Text>
-          <Text style={styles.optionText}>{option.text || option.value}</Text>
+          <MathText style={styles.optionText} value={option.text || option.value} />
         </View>
       ))}
-      {question.answer_key ? <Text style={styles.answerText}>Answer: {question.answer_key}</Text> : null}
-      {question.solution_text ? <Text style={styles.solutionText}>{question.solution_text}</Text> : null}
+      {question.answer_key ? <MathText style={styles.answerText} value={`Answer: ${question.answer_key}`} /> : null}
+      {question.solution_text ? <MathText style={styles.solutionText} value={question.solution_text} /> : null}
     </AnimatedCard>
   )
 }

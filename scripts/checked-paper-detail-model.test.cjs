@@ -193,7 +193,7 @@ test('detailed explanation omits empty sections and keeps supplied learning supp
 })
 
 test('math text is readable without leaking latex wrappers', () => {
-  assert.equal(model.readableMathText('$I = \\frac{m}{r}$'), 'I = (m)/(r)')
+  assert.equal(model.readableMathText('$I = \\frac{m}{r}$'), 'I = (m)⁄(r)')
   assert.equal(model.readableMathText('$F = 4m\\pi^2r/T^2$'), 'F = 4mπ²r/T²')
   assert.equal(model.readableMathText('$^{39}C_{3r-1} - {}^{39}C_{r^2}$'), '³⁹C₃ᵣ₋₁ - ³⁹Cᵣ²')
 })

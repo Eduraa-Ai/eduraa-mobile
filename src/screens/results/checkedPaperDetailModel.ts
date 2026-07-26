@@ -1,4 +1,5 @@
 import type { CheckedPaper, GradingResultItem } from '../../types'
+import { normalizeMathContent } from '../../utils/mathContent'
 
 export type QuestionEvidenceTab = 'feedback' | 'details' | 'review'
 export type CheckedPaperQuestionStatus = 'correct' | 'wrong' | 'missed' | 'pending'
@@ -50,7 +51,7 @@ function legacyReadableMathText(value?: string | null) {
     .trim()
 }
 
-export function readableMathText(value?: string | null) {
+function unicodeReadableMathText(value?: string | null) {
   const symbols: Record<string, string> = {
     alpha: 'α',
     beta: 'β',
@@ -131,6 +132,11 @@ export function readableMathText(value?: string | null) {
     .replace(/\^\{?([0-9+-]+)\}?/g, (_match, exponent: string) => (
       exponent.split('').map((char) => superscripts[char] || char).join('')
     ))
+}
+
+export function readableMathText(value?: string | null) {
+  const normalized = normalizeMathContent(value)
+  return normalized.text || unicodeReadableMathText(value)
 }
 
 function normalizedToken(value: unknown) {

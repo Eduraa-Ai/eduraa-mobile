@@ -20,7 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { isLearnerRole } from '../../auth/roles'
-import { AuthLogoMark, ProtectedContentImage } from '../../components/ui'
+import { AuthLogoMark, MathText, ProtectedContentImage } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
@@ -70,7 +70,7 @@ function OptionRow({ option }: { option: QuestionReviewOption }) {
         <Text style={[styles.optionKeyText, (option.expected || option.selected) && styles.optionKeyTextActive]}>{option.key}</Text>
       </View>
       <View style={styles.optionCopy}>
-        {option.text ? <Text style={styles.optionText}>{readableMathText(option.text)}</Text> : null}
+        {option.text ? <MathText style={styles.optionText} value={option.text} /> : null}
         {option.imageUrl ? <ProtectedContentImage uri={option.imageUrl} accessibilityLabel={`Image for option ${option.key}`} style={styles.optionImage} /> : null}
         {stateLabel ? (
           <View style={styles.optionState}>
@@ -91,7 +91,7 @@ function ExplanationSection({ section }: { section: DetailedExplanationSection }
         {section.content.map((line, index) => (
           <View key={`${section.key}-${index}`} style={section.list ? styles.explanationLine : undefined}>
             {section.list ? <View style={styles.bullet} /> : null}
-            <Text style={styles.explanationText}>{readableMathText(line)}</Text>
+            <MathText style={styles.explanationText} value={line} />
           </View>
         ))}
       </View>
@@ -188,7 +188,20 @@ export default function QuestionEvidenceScreen() {
 
   const openPaperWorkspace = () => {
     if (isStaff) navigation.getParent()?.navigate('StaffPapers')
-    else navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })
+    else if (item.topic_id) navigation.getParent()?.navigate('Learning', {
+      screen: 'AgenticTopic',
+      params: {
+        topicId: item.topic_id,
+        topicName: item.topic_name || undefined,
+        subjectName: item.subject_name || data.subject_name || undefined,
+        origin: 'checked-paper',
+        checkedPaperId: data.id,
+      },
+    })
+    else navigation.getParent()?.navigate('Learning', {
+      screen: 'AgenticLearning',
+      params: { origin: 'checked-paper', checkedPaperId: data.id },
+    })
   }
 
   const openScan = async () => {
@@ -272,7 +285,7 @@ export default function QuestionEvidenceScreen() {
                     <Text style={styles.marksLabel}>{item.score ?? '-'}/{item.max_score ?? '-'} marks</Text>
                   </View>
                   {review.contextAvailable ? (
-                    <Text style={[styles.questionText, compact && styles.questionTextCompact]}>{review.questionText}</Text>
+                    <MathText style={[styles.questionText, compact && styles.questionTextCompact]} value={review.questionText} />
                   ) : (
                     <View accessibilityRole="alert" style={styles.missingContext}>
                       <Ionicons name="document-text-outline" size={22} color={colors.danger} />
@@ -306,21 +319,21 @@ export default function QuestionEvidenceScreen() {
                 ) : (
                   <View style={[styles.answerCompare, styles.responseBlock]}>
                     <Text style={styles.compareTitle}>Your answer</Text>
-                    <Text style={styles.compareText}>{response}</Text>
+                    <MathText style={styles.compareText} value={response} />
                   </View>
                 )}
 
                 <View style={[styles.answerCompare, styles.expectedBlock]}>
                   <Text style={styles.compareTitle}>Expected answer</Text>
-                  <Text style={styles.compareText}>{expected || 'The expected answer was not included in this result.'}</Text>
+                  <MathText style={styles.compareText} value={expected || 'The expected answer was not included in this result.'} />
                 </View>
 
                 {feedback || recommendation ? (
                   <View style={styles.coachNote}>
                     <View style={styles.coachMark}><Text style={styles.coachMarkText}>AI</Text></View>
                     <View style={styles.coachCopy}>
-                      <Text style={styles.coachTitle}>{recommendation || 'Evaluator feedback'}</Text>
-                      {feedback ? <Text style={styles.coachText}>{feedback}</Text> : null}
+                      <MathText style={styles.coachTitle} value={recommendation || 'Evaluator feedback'} />
+                      {feedback ? <MathText style={styles.coachText} value={feedback} /> : null}
                     </View>
                   </View>
                 ) : (

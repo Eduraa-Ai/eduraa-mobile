@@ -1,7 +1,7 @@
 import React from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { NavigationContainer } from '@react-navigation/native'
+import { NavigationContainer, type LinkingOptions, type NavigatorScreenParams } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { AnimatedButton, AnimatedCard, AppScreen, AuthLogoMark, BottomTabBar, GradientHeroCard } from '../components/ui'
@@ -76,9 +76,9 @@ export type LearningStackParamList = {
   CompetitiveExam: undefined
   CompetitiveSubject: { subjectName: string }
   CompetitiveChapter: { subjectName: string; chapterKey: string }
-  AgenticLearning: undefined
+  AgenticLearning: { origin?: 'checked-paper'; checkedPaperId?: string } | undefined
   AgenticSubject: { subjectId: string }
-  AgenticTopic: { topicId: string; topicName?: string; subjectName?: string }
+  AgenticTopic: { topicId: string; topicName?: string; subjectName?: string; origin?: 'checked-paper'; checkedPaperId?: string }
   PreviousPapers: undefined
   LearningResources: undefined
   LearningResourceDetail: { resourceId: string }
@@ -113,9 +113,9 @@ export type ProfileStackParamList = {
 
 export type TabParamList = {
   Home: undefined
-  Learning: undefined
+  Learning: NavigatorScreenParams<LearningStackParamList> | undefined
   Papers: undefined
-  Results: undefined
+  Results: NavigatorScreenParams<ResultsStackParamList> | undefined
   Profile: undefined
 }
 
@@ -139,6 +139,26 @@ const StaffWorkspaceStack = createNativeStackNavigator<StaffWorkspaceStackParamL
 const Tab = createBottomTabNavigator<TabParamList>()
 const StaffTab = createBottomTabNavigator<StaffTabParamList>()
 const OnboardingStack = createNativeStackNavigator<{ B2COnboarding: undefined }>()
+
+const linking: LinkingOptions<TabParamList> = {
+  prefixes: ['eduraa://'],
+  config: {
+    screens: {
+      Learning: {
+        screens: {
+          AgenticLearning: 'learning/agentic',
+          AgenticSubject: 'learning/agentic/subjects/:subjectId',
+          AgenticTopic: 'learning/agentic/topics/:topicId',
+        },
+      },
+      Results: {
+        screens: {
+          ResultDetail: 'results/checked/:checkedPaperId',
+        },
+      },
+    },
+  },
+}
 
 const stackScreenOptions = {
   headerStyle: {
@@ -358,7 +378,7 @@ export default function RootNavigator({ onRetrySession }: { onRetrySession?: () 
 
   const landingKey = user ? resolveMobileLanding(user) : 'auth'
   return (
-    <NavigationContainer key={landingKey}>
+    <NavigationContainer key={landingKey} linking={linking}>
       {isAuthenticated && user ? <AuthenticatedNavigator user={user} /> : <AuthNavigator />}
     </NavigationContainer>
   )

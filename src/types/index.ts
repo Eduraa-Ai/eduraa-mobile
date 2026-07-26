@@ -340,6 +340,10 @@ export type CheckedPaperStatus =
 
 export interface GradingResultItem {
   question_id: string;
+  topic_id?: string | null;
+  topic_name?: string | null;
+  subject_id?: string | null;
+  subject_name?: string | null;
   question_number?: number;
   question_text?: string | null;
   question_type?: string | null;

@@ -9,6 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
+import { prefetchAgenticLearning } from '../../api/agenticLearning'
 import { isLearnerRole } from '../../auth/roles'
 import { AuthLogoMark } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
@@ -220,6 +221,8 @@ export default function ResultDetailScreen() {
     if (!data || isChecking || completionNotified.current || report?.percent == null) return
     completionNotified.current = true
     void queryClient.invalidateQueries({ queryKey: ['checked-papers'] })
+    const topicIds = (data.grading_results ?? []).map((item) => item.topic_id || '').filter(Boolean)
+    void prefetchAgenticLearning(queryClient, data.id, topicIds)
   }, [data, isChecking, queryClient, report?.percent])
   const goBack = () => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('ResultsList')
   const openQuestion = (item: GradingResultItem, index: number) => navigation.navigate('QuestionEvidence', {
@@ -229,7 +232,10 @@ export default function ResultDetailScreen() {
   })
   const openPaperWorkspace = () => {
     if (isStaff) navigation.getParent()?.navigate('StaffPapers')
-    else navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })
+    else navigation.getParent()?.navigate('Learning', {
+      screen: 'AgenticLearning',
+      params: { origin: 'checked-paper', checkedPaperId: id },
+    })
   }
   const downloadReport = async () => {
     if (!data || isDownloading || isChecking) return
