@@ -9,14 +9,14 @@ import React, {
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
   TextInput,
   Platform,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -44,10 +44,15 @@ import { ErrorState, LatexText, QuestionVisual } from "../../components/ui";
 import { latexToPlainText } from "../../utils/latex";
 import { shouldShowQuestionStemText } from "../../utils/questionVisual";
 import {
+  buildPaperAnswerEntries,
   clampCheckingProgress,
   selectNewestInProgressAttempt,
-  toggleSelectableAnswer,
 } from "./paperAttemptModel";
+import { usePaperAttemptSession } from "./usePaperAttemptSession";
+
+const MemoLatexText = React.memo(LatexText)
+const MemoQuestionVisual = React.memo(QuestionVisual)
+
 type Nav = NativeStackNavigationProp<PapersStackParamList, "AttemptPaper">;
 type Route = RouteProp<PapersStackParamList, "AttemptPaper">;
 type SubmitOutcome = {
@@ -57,28 +62,6 @@ type SubmitOutcome = {
   submissionId?: string
   scoreText?: string
   checkingProgressPercent?: number
-}
-
-type AttemptDraft = {
-  attemptId: string
-  answers: Record<string, string>
-  flagged: Record<string, boolean>
-}
-
-function toStringRecord(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return Object.entries(value).reduce<Record<string, string>>((result, [key, item]) => {
-    if (typeof item === 'string') result[key] = item
-    return result
-  }, {})
-}
-
-function toBooleanRecord(value: unknown): Record<string, boolean> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return Object.entries(value).reduce<Record<string, boolean>>((result, [key, item]) => {
-    if (typeof item === 'boolean') result[key] = item
-    return result
-  }, {})
 }
 
 function isMCQOptions(
@@ -110,6 +93,251 @@ function isMatchColumnsOptions(
   );
 }
 
+const StandardQuestionCard = React.memo(function StandardQuestionCard({
+  question,
+  index,
+  answer,
+  flagged,
+  disabled,
+  onSelectAnswer,
+  onTextAnswer,
+  onToggleFlag,
+}: {
+  question: QuestionInPaper
+  index: number
+  answer?: string
+  flagged: boolean
+  disabled: boolean
+  onSelectAnswer: (questionId: string, value: string) => void
+  onTextAnswer: (questionId: string, value: string) => void
+  onToggleFlag: (questionId: string) => void
+}) {
+  const [optimisticAnswer, setOptimisticAnswer] = useState(answer)
+  const pressInSelectionRef = useRef<string | null>(null)
+  const selectable =
+    question.question_type === "mcq" ||
+    question.question_type === "true_false"
+  const visibleAnswer = selectable ? optimisticAnswer : answer
+
+  useEffect(() => {
+    setOptimisticAnswer(answer)
+  }, [answer])
+
+  const showImmediateSelection = useCallback((value: string) => {
+    setOptimisticAnswer((current) => (current === value ? undefined : value))
+  }, [])
+
+  const commitImmediateSelection = useCallback((value: string) => {
+    pressInSelectionRef.current = value
+    showImmediateSelection(value)
+    onSelectAnswer(question.id, value)
+  }, [onSelectAnswer, question.id, showImmediateSelection])
+
+  const finishSelection = useCallback((value: string) => {
+    if (pressInSelectionRef.current === value) {
+      pressInSelectionRef.current = null
+      return
+    }
+    showImmediateSelection(value)
+    onSelectAnswer(question.id, value)
+  }, [onSelectAnswer, question.id, showImmediateSelection])
+
+  return (
+    <View
+      style={[
+        styles.questionCard,
+        visibleAnswer && styles.questionCardAnswered,
+      ]}
+    >
+      <View style={styles.questionHeader}>
+        <View style={styles.questionTitleRow}>
+          <View
+            style={[
+              styles.questionNumBadge,
+              visibleAnswer && styles.questionNumBadgeAnswered,
+            ]}
+          >
+            <Text
+              style={[
+                styles.questionNum,
+                visibleAnswer && styles.questionNumAnswered,
+              ]}
+            >
+              {String(index + 1).padStart(2, "0")}
+            </Text>
+          </View>
+          <View style={styles.questionHeaderCopy}>
+            <Text style={styles.questionType}>
+              {formatQuestionType(question.question_type)}
+            </Text>
+            <Text style={styles.questionMarks}>
+              {question.marks} {question.marks === 1 ? "mark" : "marks"}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          disabled={disabled}
+          onPress={() => onToggleFlag(question.id)}
+          style={[styles.flagButton, flagged && styles.flagButtonActive]}
+          accessibilityRole="button"
+          accessibilityLabel={`${flagged ? 'Remove' : 'Flag'} question ${index + 1} for review`}
+          accessibilityState={{ selected: flagged, disabled }}
+        >
+          <Ionicons
+            name={flagged ? "flag" : "flag-outline"}
+            size={15}
+            color={flagged ? colors.warning : colors.textMuted}
+          />
+        </TouchableOpacity>
+      </View>
+      {question.visual_payload ? (
+        <MemoQuestionVisual
+          visual={question.visual_payload}
+          containerStyle={styles.questionVisual}
+        />
+      ) : null}
+      {shouldShowQuestionStemText(question.visual_payload, "interactive") ? (
+        <MemoLatexText
+          value={question.question_text}
+          style={styles.questionText}
+          containerStyle={styles.questionTextContainer}
+        />
+      ) : null}
+
+      {question.question_type === "mcq" && isMCQOptions(question.options) && (
+        <View style={styles.mcqOptions}>
+          {question.options.map((option, optionIndex) => {
+            const selected = visibleAnswer === option.id
+            return (
+              <Pressable
+                key={option.id}
+                disabled={disabled}
+                style={[styles.mcqOption, selected && styles.mcqOptionSelected]}
+                onPressIn={() => commitImmediateSelection(option.id)}
+                onPress={() => finishSelection(option.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected, disabled }}
+                accessibilityLabel={`Question ${index + 1}, option ${String.fromCharCode(65 + optionIndex)}: ${latexToPlainText(option.text)}`}
+                accessibilityHint={selected ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
+              >
+                <Text
+                  style={[
+                    styles.mcqLabel,
+                    selected && styles.mcqLabelSelected,
+                  ]}
+                >
+                  {String.fromCharCode(65 + optionIndex)}
+                </Text>
+                <View pointerEvents="none" style={styles.mcqTextContainer}>
+                  <MemoLatexText
+                    value={option.text}
+                    style={styles.mcqText}
+                  />
+                </View>
+                {selected ? (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={colors.accent}
+                  />
+                ) : null}
+              </Pressable>
+            )
+          })}
+        </View>
+      )}
+
+      {question.question_type === "true_false" && (
+        <View style={styles.tfRow}>
+          {["True", "False"].map((value) => {
+            const selected = visibleAnswer === value
+            return (
+              <Pressable
+                key={value}
+                disabled={disabled}
+                style={[styles.tfBtn, selected && styles.tfBtnSelected]}
+                onPressIn={() => commitImmediateSelection(value)}
+                onPress={() => finishSelection(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected, disabled }}
+                accessibilityLabel={`Question ${index + 1}, ${value}`}
+                accessibilityHint={selected ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
+              >
+                <Text
+                  style={[
+                    styles.tfText,
+                    selected && styles.tfTextSelected,
+                  ]}
+                >
+                  {value}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
+      )}
+
+      {["short_answer", "long_answer", "fill_blank"].includes(
+        question.question_type,
+      ) && (
+        <TextInput
+          style={[
+            styles.textInput,
+            question.question_type === "long_answer" && styles.textInputLong,
+          ]}
+          placeholder={
+            question.question_type === "long_answer"
+              ? "Write your structured answer here..."
+              : "Type your answer here..."
+          }
+          placeholderTextColor={colors.subtle}
+          multiline
+          editable={!disabled}
+          value={answer || ''}
+          onChangeText={(text) => onTextAnswer(question.id, text)}
+          accessibilityLabel={`Answer for question ${index + 1}`}
+        />
+      )}
+
+      {question.question_type === "match_columns" &&
+      isMatchColumnsOptions(question.options) ? (
+        <View style={styles.matchBox}>
+          <View style={styles.matchColumn}>
+            <Text style={styles.matchLabel}>Column A</Text>
+            {question.options.left.map((item, itemIndex) => (
+              <MemoLatexText
+                key={`${item}-${itemIndex}`}
+                value={`${itemIndex + 1}. ${item}`}
+                style={styles.matchItem}
+              />
+            ))}
+          </View>
+          <View style={styles.matchColumn}>
+            <Text style={styles.matchLabel}>Column B</Text>
+            {question.options.right.map((item, itemIndex) => (
+              <MemoLatexText
+                key={`${item}-${itemIndex}`}
+                value={`${String.fromCharCode(65 + itemIndex)}. ${item}`}
+                style={styles.matchItem}
+              />
+            ))}
+          </View>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter matches, e.g. 1-A, 2-C"
+            placeholderTextColor={colors.subtle}
+            editable={!disabled}
+            value={answer || ''}
+            onChangeText={(text) => onTextAnswer(question.id, text)}
+            accessibilityLabel={`Matches for question ${index + 1}`}
+          />
+        </View>
+      ) : null}
+    </View>
+  )
+})
+
 export default function AttemptPaperScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Route>();
@@ -118,8 +346,6 @@ export default function AttemptPaperScreen() {
   const isFocused = useIsFocused();
   const userId = useAuthStore((state) => state.user?.id);
 
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [flagged, setFlagged] = useState<Record<string, boolean>>({});
   const [submitReviewOpen, setSubmitReviewOpen] = useState(false);
   const [submitHoldProgress, setSubmitHoldProgress] = useState(0);
   const [submitOutcome, setSubmitOutcome] = useState<SubmitOutcome | null>(
@@ -129,15 +355,13 @@ export default function AttemptPaperScreen() {
     null,
   );
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [isDraftReady, setIsDraftReady] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const submitHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
   );
-  const draftWriteRef = useRef<Promise<void>>(Promise.resolve());
   const didAutoSubmitRef = useRef(false);
-  const attemptScrollRef = useRef<ScrollView>(null);
-  const draftKey = `eduraa-attempt-draft:${userId ?? "unknown"}:${params.paperId}:${params.examId ?? "practice"}`;
+  const attemptScrollRef = useRef<FlatList<QuestionInPaper>>(null);
+  const didHandleInitialFocusRef = useRef(false);
 
   useLayoutEffect(() => {
     const parent = navigation.getParent();
@@ -171,9 +395,10 @@ export default function AttemptPaperScreen() {
   })
   const paper = paperQuery.data
 
+  const attemptQueryKey = ['paper-attempt', userId, params.paperId, params.examId, 'standard'] as const
   const attemptQuery = useQuery({
-    queryKey: ['paper-attempt', params.paperId, params.examId],
-    enabled: Boolean(paper && userId),
+    queryKey: attemptQueryKey,
+    enabled: Boolean(userId),
     staleTime: Infinity,
     queryFn: async () => {
       const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
@@ -201,6 +426,10 @@ export default function AttemptPaperScreen() {
 
   useEffect(() => {
     if (!isFocused) return
+    if (!didHandleInitialFocusRef.current) {
+      didHandleInitialFocusRef.current = true
+      return
+    }
     void paperQuery.refetch()
     void attemptQuery.refetch()
   }, [isFocused, params.launchKey])
@@ -212,6 +441,32 @@ export default function AttemptPaperScreen() {
     }, {}),
     [activeAttempt],
   )
+  const attemptIdentity = useMemo(
+    () => userId && activeAttempt?.id
+      ? {
+          userId,
+          paperId: params.paperId,
+          examId: params.examId,
+          attemptId: activeAttempt.id,
+          mode: 'standard' as const,
+        }
+      : null,
+    [activeAttempt?.id, params.examId, params.paperId, userId],
+  )
+  const attemptSession = usePaperAttemptSession({
+    identity: attemptIdentity,
+    serverAnswers,
+  })
+  const {
+    answers,
+    flagged,
+    selectAnswer,
+    setTextAnswer,
+    toggleFlag,
+    getAnswerSnapshot,
+    flushDraft,
+    clearDraft,
+  } = attemptSession
   const attemptStartedAt = useMemo(() => {
     const parsed = Date.parse(activeAttempt?.started_at || activeAttempt?.created_at || '')
     return Number.isFinite(parsed) ? parsed : null
@@ -221,49 +476,9 @@ export default function AttemptPaperScreen() {
     [attemptStartedAt, paper?.duration_minutes],
   )
 
-  const queueDraftWrite = useCallback((operation: () => Promise<void>) => {
-    draftWriteRef.current = draftWriteRef.current
-      .catch(() => undefined)
-      .then(operation)
-      .catch(() => undefined)
-    return draftWriteRef.current
-  }, [])
-
   useEffect(() => {
-    if (!activeAttempt?.id) return
-    let active = true
-    setIsDraftReady(false)
     didAutoSubmitRef.current = false
-    setAnswers(serverAnswers)
-    setFlagged({})
-
-    void AsyncStorage.getItem(draftKey)
-      .then((raw) => {
-        if (!active || !raw) return
-        const draft = JSON.parse(raw) as Partial<AttemptDraft>
-        if (draft.attemptId !== activeAttempt.id) return
-        setAnswers({ ...serverAnswers, ...toStringRecord(draft.answers) })
-        setFlagged(toBooleanRecord(draft.flagged))
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (active) setIsDraftReady(true)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [activeAttempt?.id, draftKey, serverAnswers])
-
-  const persistDraft = useCallback((nextAnswers = answers, nextFlagged = flagged) => {
-    if (!isDraftReady || !activeAttempt?.id) return Promise.resolve()
-    const draft: AttemptDraft = { attemptId: activeAttempt.id, answers: nextAnswers, flagged: nextFlagged }
-    return queueDraftWrite(() => AsyncStorage.setItem(draftKey, JSON.stringify(draft)))
-  }, [activeAttempt?.id, answers, draftKey, flagged, isDraftReady, queueDraftWrite])
-
-  useEffect(() => {
-    void persistDraft()
-  }, [persistDraft])
+  }, [activeAttempt?.id])
 
   const attemptAgainMutation = useMutation({
     mutationFn: async () => {
@@ -271,26 +486,23 @@ export default function AttemptPaperScreen() {
         exam_id: params.examId,
         reason: 'student_retest',
       })
-      await queueDraftWrite(() => AsyncStorage.removeItem(draftKey))
+      await clearDraft()
       return nextAttempt
     },
     onMutate: () => setAttemptAgainError(null),
     onSuccess: (nextAttempt) => {
       // Reset every visible attempt surface with the query swap so the sticky
       // progress dock cannot retain the submitted attempt for a render.
-      setAnswers({})
-      setFlagged({})
       setTimeLeft(null)
-      setIsDraftReady(false)
       didAutoSubmitRef.current = false
       queryClient.setQueryData(
-        ['paper-attempt', params.paperId, params.examId],
+        attemptQueryKey,
         nextAttempt,
       )
       setSubmitOutcome(null)
       setSubmitReviewOpen(false)
       requestAnimationFrame(() => {
-        attemptScrollRef.current?.scrollTo({ y: 0, animated: false })
+        attemptScrollRef.current?.scrollToOffset({ offset: 0, animated: false })
       })
     },
     onError: () => {
@@ -308,7 +520,7 @@ export default function AttemptPaperScreen() {
         mode: 'standard',
     }),
     onSuccess: (data) => {
-      void queueDraftWrite(() => AsyncStorage.removeItem(draftKey))
+      void clearDraft()
       const isExistingSubmission = Boolean(activeAttempt?.id && data.id !== activeAttempt.id)
       const gradingStatus = String((data as { grading_status?: string }).grading_status || '').toLowerCase()
       const isChecking = gradingStatus === 'submitted' || gradingStatus === 'checking'
@@ -365,7 +577,7 @@ export default function AttemptPaperScreen() {
             attempt_id: activeAttempt?.id,
           })
           if (existing?.id && existing.id === activeAttempt?.id) {
-            void queueDraftWrite(() => AsyncStorage.removeItem(draftKey))
+            void clearDraft()
             const existingStatus = String(existing.grading_status || '').toLowerCase()
             const existingResultReady = !['submitted', 'checking', 'failed'].includes(existingStatus)
               && existing.results_visible_to_student !== false
@@ -416,12 +628,20 @@ export default function AttemptPaperScreen() {
     clearSubmitHoldTimer()
     setSubmitHoldProgress(0)
     setSubmitReviewOpen(false)
-    const answerList: AnswerEntry[] = paper.questions.map((q) => ({
-      question_id: q.id,
-      response: answers[q.id] || '',
-    }))
-    submitMutation.mutate(answerList)
-  }, [activeAttempt?.id, answers, clearSubmitHoldTimer, paper, submitMutation])
+    try {
+      const answerList = buildPaperAnswerEntries(
+        paper.questions.map((question) => question.id),
+        getAnswerSnapshot(),
+      )
+      submitMutation.mutate(answerList)
+    } catch (error) {
+      setSubmitOutcome({
+        kind: 'error',
+        title: 'Paper cannot be submitted',
+        message: error instanceof Error ? error.message : 'This paper contains invalid questions.',
+      })
+    }
+  }, [activeAttempt?.id, clearSubmitHoldTimer, getAnswerSnapshot, paper, submitMutation])
 
   useEffect(() => {
     if (!attemptDeadline) {
@@ -448,6 +668,10 @@ export default function AttemptPaperScreen() {
 
   const leaveAttempt = useCallback(() => {
     if (params.returnTo === 'PreviousPapers') {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'PapersList' }],
+      })
       navigation.getParent()?.navigate('PreviousPapers' as never)
       return
     }
@@ -455,8 +679,8 @@ export default function AttemptPaperScreen() {
   }, [navigation, params.returnTo])
 
   const handleExit = useCallback(() => {
-    void persistDraft().finally(leaveAttempt)
-  }, [leaveAttempt, persistDraft])
+    void flushDraft().finally(leaveAttempt)
+  }, [flushDraft, leaveAttempt])
 
   const startSubmitHold = () => {
     if (
@@ -499,7 +723,37 @@ export default function AttemptPaperScreen() {
     return `${m}:${s}`;
   };
 
-  if (paperQuery.isLoading || attemptQuery.isLoading) {
+  const renderQuestion = useCallback(({
+    item,
+    index,
+  }: {
+    item: QuestionInPaper
+    index: number
+  }) => (
+    <StandardQuestionCard
+      question={item}
+      index={index}
+      answer={answers[item.id]}
+      flagged={Boolean(flagged[item.id])}
+      disabled={submitMutation.isPending}
+      onSelectAnswer={selectAnswer}
+      onTextAnswer={setTextAnswer}
+      onToggleFlag={toggleFlag}
+    />
+  ), [
+    answers,
+    flagged,
+    selectAnswer,
+    setTextAnswer,
+    submitMutation.isPending,
+    toggleFlag,
+  ])
+
+  if (
+    paperQuery.isLoading
+    || attemptQuery.isLoading
+    || Boolean(activeAttempt && !attemptSession.isReady)
+  ) {
     return (
       <View style={styles.center}>
         <View style={styles.loadingMark}>
@@ -610,211 +864,40 @@ export default function AttemptPaperScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView ref={attemptScrollRef} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 112 }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.examSummary}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{totalMarks}</Text>
-            <Text style={styles.summaryLabel}>Marks</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{flaggedCount}</Text>
-            <Text style={styles.summaryLabel}>Flagged</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>
-              {Math.max(0, totalQuestions - answeredCount)}
-            </Text>
-            <Text style={styles.summaryLabel}>Left</Text>
-          </View>
-        </View>
-
-        {paper.questions.map((q, index) => (
-          <View
-            key={q.id}
-            style={[
-              styles.questionCard,
-              answers[q.id] && styles.questionCardAnswered,
-            ]}
-          >
-            <View style={styles.questionHeader}>
-              <View style={styles.questionTitleRow}>
-                <View
-                  style={[
-                    styles.questionNumBadge,
-                    answers[q.id] && styles.questionNumBadgeAnswered,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.questionNum,
-                      answers[q.id] && styles.questionNumAnswered,
-                    ]}
-                  >
-                    {String(index + 1).padStart(2, "0")}
-                  </Text>
-                </View>
-                <View style={styles.questionHeaderCopy}>
-                  <Text style={styles.questionType}>
-                    {formatQuestionType(q.question_type)}
-                  </Text>
-                  <Text style={styles.questionMarks}>
-                    {q.marks} {q.marks === 1 ? "mark" : "marks"}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => setFlagged((current) => ({ ...current, [q.id]: !current[q.id] }))}
-                style={[styles.flagButton, flagged[q.id] && styles.flagButtonActive]}
-                accessibilityRole="button"
-                accessibilityLabel={`${flagged[q.id] ? 'Remove' : 'Flag'} question ${index + 1} for review`}
-                accessibilityState={{ selected: Boolean(flagged[q.id]) }}
-              >
-                <Ionicons
-                  name={flagged[q.id] ? "flag" : "flag-outline"}
-                  size={15}
-                  color={flagged[q.id] ? colors.warning : colors.textMuted}
-                />
-              </TouchableOpacity>
+      <FlatList
+        ref={attemptScrollRef}
+        data={paper.questions}
+        keyExtractor={(question) => question.id}
+        renderItem={renderQuestion}
+        ListHeaderComponent={(
+          <View style={styles.examSummary}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{totalMarks}</Text>
+              <Text style={styles.summaryLabel}>Marks</Text>
             </View>
-            {q.visual_payload ? (
-              <QuestionVisual
-                visual={q.visual_payload}
-                containerStyle={styles.questionVisual}
-              />
-            ) : null}
-            {shouldShowQuestionStemText(q.visual_payload, "interactive") ? (
-              <LatexText
-                value={q.question_text}
-                style={styles.questionText}
-                containerStyle={styles.questionTextContainer}
-              />
-            ) : null}
-
-            {q.question_type === "mcq" && isMCQOptions(q.options) && (
-              <View style={styles.mcqOptions}>
-                {q.options.map((opt, i) => (
-                  <TouchableOpacity
-                    key={opt.id}
-                    style={[styles.mcqOption, answers[q.id] === opt.id && styles.mcqOptionSelected]}
-                    onPress={() => setAnswers((previous) => toggleSelectableAnswer(previous, q.id, opt.id))}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: answers[q.id] === opt.id }}
-                    accessibilityLabel={`Question ${index + 1}, option ${String.fromCharCode(65 + i)}: ${latexToPlainText(opt.text)}`}
-                    accessibilityHint={answers[q.id] === opt.id ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
-                  >
-                    <Text
-                      style={[
-                        styles.mcqLabel,
-                        answers[q.id] === opt.id && styles.mcqLabelSelected,
-                      ]}
-                    >
-                      {String.fromCharCode(65 + i)}
-                    </Text>
-                    <LatexText
-                      value={opt.text}
-                      style={[
-                        styles.mcqText,
-                        answers[q.id] === opt.id && styles.mcqTextSelected,
-                      ]}
-                      containerStyle={styles.mcqTextContainer}
-                    />
-                    {answers[q.id] === opt.id ? (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={18}
-                        color={colors.accent}
-                      />
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {q.question_type === "true_false" && (
-              <View style={styles.tfRow}>
-                {["True", "False"].map((val) => (
-                  <TouchableOpacity
-                    key={val}
-                    style={[styles.tfBtn, answers[q.id] === val && styles.tfBtnSelected]}
-                    onPress={() => setAnswers((previous) => toggleSelectableAnswer(previous, q.id, val))}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: answers[q.id] === val }}
-                    accessibilityLabel={`Question ${index + 1}, ${val}`}
-                    accessibilityHint={answers[q.id] === val ? 'Tap again to clear this answer.' : 'Tap to select this answer.'}
-                  >
-                    <Text
-                      style={[
-                        styles.tfText,
-                        answers[q.id] === val && styles.tfTextSelected,
-                      ]}
-                    >
-                      {val}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {["short_answer", "long_answer", "fill_blank"].includes(
-              q.question_type,
-            ) && (
-              <TextInput
-                style={[
-                  styles.textInput,
-                  q.question_type === "long_answer" && styles.textInputLong,
-                ]}
-                placeholder={
-                  q.question_type === "long_answer"
-                    ? "Write your structured answer here..."
-                    : "Type your answer here..."
-                }
-                placeholderTextColor={colors.subtle}
-                multiline
-                value={answers[q.id] || ''}
-                onChangeText={(text) => setAnswers((prev) => ({ ...prev, [q.id]: text }))}
-                accessibilityLabel={`Answer for question ${index + 1}`}
-              />
-            )}
-
-            {q.question_type === "match_columns" &&
-            isMatchColumnsOptions(q.options) ? (
-              <View style={styles.matchBox}>
-                <View style={styles.matchColumn}>
-                  <Text style={styles.matchLabel}>Column A</Text>
-                  {q.options.left.map((item, itemIndex) => (
-                    <LatexText
-                      key={`${item}-${itemIndex}`}
-                      value={`${itemIndex + 1}. ${item}`}
-                      style={styles.matchItem}
-                    />
-                  ))}
-                </View>
-                <View style={styles.matchColumn}>
-                  <Text style={styles.matchLabel}>Column B</Text>
-                  {q.options.right.map((item, itemIndex) => (
-                    <LatexText
-                      key={`${item}-${itemIndex}`}
-                      value={`${String.fromCharCode(65 + itemIndex)}. ${item}`}
-                      style={styles.matchItem}
-                    />
-                  ))}
-                </View>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter matches, e.g. 1-A, 2-C"
-                  placeholderTextColor={colors.subtle}
-                  value={answers[q.id] || ''}
-                  onChangeText={(text) => setAnswers((prev) => ({ ...prev, [q.id]: text }))}
-                  accessibilityLabel={`Matches for question ${index + 1}`}
-                />
-              </View>
-            ) : null}
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{flaggedCount}</Text>
+              <Text style={styles.summaryLabel}>Flagged</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>
+                {Math.max(0, totalQuestions - answeredCount)}
+              </Text>
+              <Text style={styles.summaryLabel}>Left</Text>
+            </View>
           </View>
-        ))}
-      </ScrollView>
+        )}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 112 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={2}
+        maxToRenderPerBatch={3}
+        updateCellsBatchingPeriod={40}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS === 'android'}
+      />
 
       <View
         style={[
