@@ -6,7 +6,7 @@ import Svg, { Circle } from 'react-native-svg'
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { isLearnerRole } from '../../auth/roles'
@@ -15,7 +15,6 @@ import type { ResultsStackParamList } from '../../navigation'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
 import type { GradingResultItem } from '../../types'
-import { presentPdf } from '../../utils/pdfDownload'
 import {
   buildCheckedPaperReport,
   checkedPaperTitle,
@@ -147,25 +146,10 @@ export default function ResultDetailScreen() {
     if (isStaff) navigation.getParent()?.navigate('StaffPapers')
     else navigation.getParent()?.navigate('Papers', { screen: 'GeneratePaper' })
   }
-  const downloadMutation = useMutation({
-    mutationFn: async () => {
-      const pdf = await checkedPapersApi.downloadPdf(id)
-      await presentPdf(pdf)
-    },
-  })
-
-  const intro = (
-    <View style={styles.pageIntro}>
-      <Text style={styles.pageOverline}>CHECKED PAPERS · ASSESSMENT INTELLIGENCE</Text>
-      <Text style={styles.pageTitle}>Performance report</Text>
-      <Text style={styles.pageSubtitle}>A score becomes a diagnosis, then one clear recovery action.</Text>
-    </View>
-  )
 
   if (!id || !data || !report) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
-        {intro}
         <View style={styles.stateSurface}>
           {isLoading ? <><ActivityIndicator color={colors.accent} size="large" /><Text style={styles.stateMessage}>Loading the performance report…</Text></> : (
             <ResultState
@@ -185,7 +169,6 @@ export default function ResultDetailScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
-      {intro}
       <View style={styles.reportSurface}>
         <View style={styles.identityRow}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to checked papers" onPress={goBack} style={styles.backButton}>
@@ -234,35 +217,15 @@ export default function ResultDetailScreen() {
               <DistributionMetric label="Missed" value={report.missed} tone={colors.danger} />
             </View>
 
-            <View style={styles.actionRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={isStaff ? 'Open paper workspace' : 'Start a focused repair practice'}
-                onPress={openPaperWorkspace}
-                style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
-              >
-                <Ionicons name={isStaff ? 'documents-outline' : 'play-outline'} size={17} color={colors.white} />
-                <Text style={styles.primaryActionText}>{isStaff ? 'Open paper workspace' : 'Start a focused repair'}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Share performance report PDF"
-                accessibilityState={{ disabled: downloadMutation.isPending }}
-                disabled={downloadMutation.isPending}
-                onPress={() => downloadMutation.mutate()}
-                style={({ pressed }) => [styles.pdfAction, pressed && styles.pressed, downloadMutation.isPending && styles.actionDisabled]}
-              >
-                {downloadMutation.isPending
-                  ? <ActivityIndicator size="small" color={colors.accentStrong} />
-                  : <Ionicons name="share-outline" size={18} color={colors.accentStrong} />}
-              </Pressable>
-            </View>
-            {downloadMutation.isError ? (
-              <View style={styles.downloadError} accessibilityLiveRegion="polite">
-                <Ionicons name="cloud-offline-outline" size={15} color={colors.danger} />
-                <Text style={styles.downloadErrorText}>The PDF could not open. Your report is safe—tap share to retry.</Text>
-              </View>
-            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isStaff ? 'Open paper workspace' : 'Start a focused repair practice'}
+              onPress={openPaperWorkspace}
+              style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
+            >
+              <Ionicons name={isStaff ? 'documents-outline' : 'play-outline'} size={17} color={colors.white} />
+              <Text style={styles.primaryActionText}>{isStaff ? 'Open paper workspace' : 'Start a focused repair'}</Text>
+            </Pressable>
 
             <View style={styles.breakdownHeader}>
               <View><Text style={styles.breakdownTitle}>Question breakdown</Text><Text style={styles.breakdownHint}>{isStaff ? 'Open a row to connect feedback and source evidence.' : 'Open a row to connect feedback, evidence, and review.'}</Text></View>
@@ -284,13 +247,9 @@ export default function ResultDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, gap: spacing[2], backgroundColor: '#dce3ea' },
-  pageIntro: { paddingHorizontal: spacing[4], paddingBottom: 2, gap: 1, zIndex: 20, elevation: 20, backgroundColor: '#dce3ea' },
-  pageOverline: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8, lineHeight: 11, letterSpacing: 0.7 },
-  pageTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 19, lineHeight: 23 },
-  pageSubtitle: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 13 },
-  reportSurface: { flex: 1, minHeight: 0, marginHorizontal: spacing[3], borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: '#07152d', borderWidth: 1, borderColor: 'rgba(7,21,45,0.16)' },
-  stateSurface: { flex: 1, marginHorizontal: spacing[3], borderTopLeftRadius: 28, borderTopRightRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf2', padding: spacing[5] },
+  root: { flex: 1, backgroundColor: '#07152d' },
+  reportSurface: { flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: '#07152d' },
+  stateSurface: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf2', padding: spacing[5] },
   identityRow: { minHeight: 58, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: '#07152d' },
   backButton: { width: 44, height: 44, borderRadius: radius.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
   identityCopy: { flex: 1, minWidth: 0 },
@@ -327,13 +286,8 @@ const styles = StyleSheet.create({
   metricRail: { width: 20, height: 2, borderRadius: 1, marginBottom: spacing[2] },
   distributionValue: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 16, lineHeight: 18 },
   distributionLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 0.7, textTransform: 'uppercase', marginTop: 2 },
-  actionRow: { flexDirection: 'row', gap: spacing[2] },
-  primaryAction: { flex: 1, minHeight: 44, borderRadius: 14, backgroundColor: '#07152d', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
+  primaryAction: { minHeight: 44, borderRadius: 14, backgroundColor: '#07152d', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   primaryActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  pdfAction: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#f5c4a7', backgroundColor: colors.accentSurface },
-  actionDisabled: { opacity: 0.62 },
-  downloadError: { minHeight: 44, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: colors.dangerSurface, borderWidth: 1, borderColor: colors.dangerBorder },
-  downloadErrorText: { flex: 1, color: colors.danger, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 14 },
   breakdownHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing[3], marginTop: spacing[1] },
   breakdownTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
   breakdownHint: { maxWidth: 250, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 8, lineHeight: 11, marginTop: 1 },
