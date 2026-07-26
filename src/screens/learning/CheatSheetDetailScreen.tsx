@@ -316,6 +316,9 @@ export default function CheatSheetDetailScreen() {
                 subject: subject.label,
                 chapter: chapter.chapter_title,
                 standard: '12th',
+                subjectId: sheet.subject_id ?? null,
+                chapterId: chapter.chapter_id ?? null,
+                trackLabel: sheet.exam_id ? String(sheet.exam_id) : undefined,
               })
             }
             style={styles.actionButton}
