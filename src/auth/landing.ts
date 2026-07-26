@@ -25,6 +25,28 @@ function isCompetitiveProfile(user: AccountMinimal) {
   )
 }
 
+const COMPETITIVE_EXAM_LEVELS = new Set(['competitive_exam', 'competitive_exams'])
+
+export function isPreviousPapersEligible(user?: AccountMinimal | null) {
+  if (
+    user?.role !== 'b2c_student' ||
+    !COMPETITIVE_EXAM_LEVELS.has(String(user.b2c_education_level ?? '').trim())
+  ) {
+    return false
+  }
+
+  return [
+    user.b2c_board,
+    user.b2c_standard,
+    user.b2c_target_exam,
+    ...(user.b2c_subjects ?? []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .includes('jee')
+}
+
 export function resolveMobileLanding(user: AccountMinimal): MobileLanding {
   if (user.role === 'b2c_student' && user.profile_completed === false) {
     return 'b2c_onboarding'

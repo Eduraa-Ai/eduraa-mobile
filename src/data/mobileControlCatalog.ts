@@ -1,7 +1,7 @@
 import type { Role } from '../types'
 
 export type MobileControlTarget =
-  | { kind: 'tab'; tab: 'Home' | 'Learning' | 'Papers' | 'Results' | 'AIStudio' | 'Profile'; screen?: string; params?: Record<string, unknown> }
+  | { kind: 'tab'; tab: 'Home' | 'Learning' | 'Papers' | 'Results' | 'AIStudio' | 'Profile' | 'PreviousPapers'; screen?: string; params?: Record<string, unknown> }
   | { kind: 'detail' }
 
 export interface MobileControl {
@@ -144,7 +144,7 @@ export const mobileControls: MobileControl[] = [
     requiresCompetitiveExam: true,
     requiresJee: true,
     nativeStatus: 'native',
-    target: { kind: 'tab', tab: 'Learning', screen: 'PreviousPapers' },
+    target: { kind: 'tab', tab: 'PreviousPapers' },
   },
   {
     id: 'teacher-students',

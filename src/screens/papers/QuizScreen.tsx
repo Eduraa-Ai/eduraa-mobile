@@ -19,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PapersStackParamList } from "../../navigation";
 import { papersApi } from "../../api/papers";
 import type { AnswerEntry, MCQOption, QuestionInPaper } from "../../types";
@@ -33,6 +33,11 @@ import {
 } from "../../components/ui";
 import { colors, radius, shadows, spacing, typography } from "../../theme";
 import { shouldShowQuestionStemText } from "../../utils/questionVisual";
+import { latexToPlainText } from "../../utils/latex";
+import {
+  selectNewestInProgressAttempt,
+  toggleSelectableAnswer,
+} from "./paperAttemptModel";
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "Quiz">;
 type Route = RouteProp<PapersStackParamList, "Quiz">;
@@ -40,14 +45,6 @@ type AssistMode = "hint" | "explain" | "mistake";
 
 function optionLabel(index: number, option?: MCQOption) {
   return option?.id || String.fromCharCode(65 + index);
-}
-
-function answerPreview(answerKey?: string | Record<string, string> | null) {
-  if (!answerKey) return null;
-  if (typeof answerKey === "string") return answerKey;
-  return Object.entries(answerKey)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join(", ");
 }
 
 function isMcqOptions(
@@ -73,7 +70,6 @@ function QuestionCard({
   assistText?: string;
   assistLoading?: boolean;
 }) {
-  const expected = answerPreview(question.answer_key);
   const answered = Boolean(answer?.trim());
 
   return (
@@ -108,6 +104,14 @@ function QuestionCard({
               <Pressable
                 key={`${question.id}-${value}`}
                 onPress={() => onAnswer(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Question ${index + 1}, option ${optionLabel(optionIndex, option)}: ${latexToPlainText(option.text)}`}
+                accessibilityHint={
+                  selected
+                    ? "Tap again to clear this answer."
+                    : "Tap to select this answer."
+                }
                 style={({ pressed }) => [
                   styles.optionRow,
                   selected && styles.optionSelected,
@@ -144,6 +148,13 @@ function QuestionCard({
               <Pressable
                 key={value}
                 onPress={() => onAnswer(value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityHint={
+                  selected
+                    ? "Tap again to clear this answer."
+                    : "Tap to select this answer."
+                }
                 style={({ pressed }) => [
                   styles.booleanButton,
                   selected && styles.booleanButtonSelected,
@@ -223,10 +234,6 @@ function QuestionCard({
           <LatexText value={assistText} style={styles.assistText} />
         </View>
       ) : null}
-
-      {expected ? (
-        <LatexText value={`Answer key: ${expected}`} style={styles.answerKey} />
-      ) : null}
     </AnimatedCard>
   );
 }
@@ -234,12 +241,12 @@ function QuestionCard({
 export default function QuizScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<Route>();
+  const queryClient = useQueryClient();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [assistByQuestion, setAssistByQuestion] = useState<
     Record<string, string>
   >({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [startTime] = useState(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const paperQuery = useQuery({
@@ -249,9 +256,43 @@ export default function QuizScreen() {
 
   const paper = paperQuery.data;
 
+  const attemptQuery = useQuery({
+    queryKey: ['paper-attempt', params.paperId, params.examId, 'interactive-quiz'],
+    queryFn: async () => {
+      const attempts = await papersApi.listAttempts(params.paperId, { exam_id: params.examId })
+      const inProgress = selectNewestInProgressAttempt(attempts.items)
+      return inProgress ?? papersApi.createAttempt(params.paperId, {
+        exam_id: params.examId,
+        reason: 'interactive_quiz',
+      })
+    },
+    enabled: Boolean(paper),
+  })
+
+  const activeAttempt = attemptQuery.data
+
   useEffect(() => {
-    if (paper?.duration_minutes) setTimeLeft(paper.duration_minutes * 60);
-  }, [paper?.duration_minutes]);
+    if (!paper?.duration_minutes || !activeAttempt) {
+      setTimeLeft(null);
+      return;
+    }
+    const startedAt = Date.parse(
+      activeAttempt.started_at || activeAttempt.created_at,
+    );
+    const elapsedSeconds = Number.isFinite(startedAt)
+      ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+      : 0;
+    setTimeLeft(Math.max(0, paper.duration_minutes * 60 - elapsedSeconds));
+  }, [activeAttempt, paper?.duration_minutes]);
+
+  const elapsedSeconds = useCallback(() => {
+    if (!activeAttempt) return 0;
+    const startedAt = Date.parse(
+      activeAttempt.started_at || activeAttempt.created_at,
+    );
+    if (!Number.isFinite(startedAt)) return 0;
+    return Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  }, [activeAttempt]);
 
   const answeredCount = useMemo(() => {
     if (!paper) return 0;
@@ -260,13 +301,22 @@ export default function QuizScreen() {
   }, [answers, paper]);
 
   const submitMutation = useMutation({
-    mutationFn: (answerList: AnswerEntry[]) =>
+    mutationFn: (answerList: AnswerEntry[]) => {
+      if (!activeAttempt) throw new Error('Quiz attempt is not ready')
+      return (
       papersApi.submit(params.paperId, {
         answers: answerList,
-        time_taken_seconds: Math.floor((Date.now() - startTime) / 1000),
-        mode: "interactive",
-      }),
-    onSuccess: (data) => {
+        attempt_id: activeAttempt.id,
+        exam_id: params.examId,
+        time_taken_seconds: elapsedSeconds(),
+        mode: "interactive_quiz",
+      })
+      );
+    },
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["paper-attempt", params.paperId],
+      });
       Alert.alert("Quiz submitted", "Your JEE practice quiz has been graded.", [
         {
           text: "View result",
@@ -284,8 +334,11 @@ export default function QuizScreen() {
       const detail = error?.response?.data?.detail;
       if (status === 500) {
         try {
-          const existing = await papersApi.getSubmission(params.paperId);
-          if (existing?.id) {
+          const existing = await papersApi.getSubmission(params.paperId, {
+            exam_id: params.examId,
+            attempt_id: activeAttempt?.id,
+          });
+          if (existing?.id && existing.id === activeAttempt?.id) {
             Alert.alert(
               "Quiz saved",
               "Your answers were saved. Open Results to review grading.",
@@ -389,22 +442,30 @@ export default function QuizScreen() {
     return `${minutes}:${secs}`;
   };
 
-  if (paperQuery.isLoading) {
+  if (paperQuery.isLoading || attemptQuery.isLoading) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
         <ActivityIndicator color={colors.paperStudio.jee} />
-        <Text style={styles.loadingText}>Loading interactive quiz</Text>
+        <Text style={styles.loadingText}>{paperQuery.isLoading ? 'Loading interactive quiz' : 'Preparing your quiz attempt'}</Text>
       </AppScreen>
     );
   }
 
-  if (paperQuery.isError || !paper) {
+  if (paperQuery.isError || !paper || attemptQuery.isError || !activeAttempt) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
         <ErrorState
-          title="Could not load quiz"
-          message="Refresh and try again."
-          onAction={() => void paperQuery.refetch()}
+          title={
+            paperQuery.isError || !paper
+              ? "Could not load quiz"
+              : "Could not prepare this attempt"
+          }
+          message="Your answers are safe. Refresh and try again."
+          onAction={() =>
+            void (paperQuery.isError || !paper
+              ? paperQuery.refetch()
+              : attemptQuery.refetch())
+          }
         />
       </AppScreen>
     );
@@ -457,7 +518,7 @@ export default function QuizScreen() {
             </View>
           </View>
           {paper.instructions ? (
-            <Text style={styles.instructions}>{paper.instructions}</Text>
+            <LatexText value={paper.instructions} style={styles.instructions} />
           ) : null}
           <AnimatedButton
             label={submitMutation.isPending ? "Submitting..." : "Submit quiz"}
@@ -472,9 +533,16 @@ export default function QuizScreen() {
             question={question}
             index={index}
             answer={answers[question.id]}
-            onAnswer={(value) =>
-              setAnswers((current) => ({ ...current, [question.id]: value }))
-            }
+            onAnswer={(value) => {
+              const isSelectable =
+                question.question_type === "mcq" ||
+                question.question_type === "true_false";
+              setAnswers((current) =>
+                isSelectable
+                  ? toggleSelectableAnswer(current, question.id, value)
+                  : { ...current, [question.id]: value },
+              );
+            }}
             onAssist={(mode) =>
               assistMutation.mutate({ questionId: question.id, mode })
             }

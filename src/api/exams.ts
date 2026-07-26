@@ -74,6 +74,10 @@ export const examsApi = {
     return response.data.items ?? []
   },
 
+  async deletePracticePaper(paperId: string) {
+    await apiClient.delete(`/papers/${paperId}`)
+  },
+
   async getPaperOptions() {
     const response = await apiClient.get<PaperGenerateOptions>('/papers/options')
     return response.data

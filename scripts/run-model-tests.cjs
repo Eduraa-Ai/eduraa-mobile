@@ -14,6 +14,11 @@ const models = [
   'src/screens/results/checkedPapersLibraryModel.ts',
   'src/screens/results/checkedPaperDetailModel.ts',
   'src/screens/learning/agenticLearningModel.ts',
+  'src/screens/learning/previousPapersModel.ts',
+  'src/screens/papers/paperAttemptModel.ts',
+  'src/screens/papers/paperDetailModel.ts',
+  'src/screens/workspace/examWorkspaceModel.ts',
+  'src/utils/mathText.ts',
   'src/utils/mathContent.ts',
   'src/utils/protectedDocumentModel.ts',
   'src/utils/latex.ts',
@@ -21,6 +26,7 @@ const models = [
   'src/utils/bookPaperGeneration.ts',
   'src/auth/queryCacheScope.ts',
   'src/auth/roles.ts',
+  'src/auth/landing.ts',
 ]
 
 const suites = [
@@ -35,6 +41,34 @@ const suites = [
   {
     file: 'scripts/agentic-learning-model.test.cjs',
     env: { AGENTIC_LEARNING_MODEL_PATH: path.join(outDir, 'screens/learning/agenticLearningModel.js') },
+  },
+  {
+    file: 'scripts/previous-papers-model.test.cjs',
+    env: { PREVIOUS_PAPERS_MODEL_PATH: path.join(outDir, 'screens/learning/previousPapersModel.js') },
+  },
+  {
+    file: 'scripts/paper-attempt-model.test.cjs',
+    env: { PAPER_ATTEMPT_MODEL_PATH: path.join(outDir, 'screens/papers/paperAttemptModel.js') },
+  },
+  {
+    file: 'scripts/paper-detail-model.test.cjs',
+    env: { PAPER_DETAIL_MODEL_PATH: path.join(outDir, 'screens/papers/paperDetailModel.js') },
+  },
+  {
+    file: 'scripts/math-text.test.cjs',
+    env: { MATH_TEXT_MODEL_PATH: path.join(outDir, 'utils/mathText.js') },
+  },
+  {
+    file: 'scripts/exam-workspace-model.test.cjs',
+    env: { EXAM_WORKSPACE_MODEL_PATH: path.join(outDir, 'screens/workspace/examWorkspaceModel.js') },
+  },
+  {
+    file: 'scripts/exam-workspace-contract.test.cjs',
+    env: {},
+  },
+  {
+    file: 'scripts/paper-detail-contract.test.cjs',
+    env: {},
   },
   {
     file: 'scripts/math-content.test.cjs',
@@ -52,6 +86,14 @@ const suites = [
     env: { QUERY_CACHE_SCOPE_PATH: path.join(outDir, 'auth/queryCacheScope.js') },
   },
   {
+    file: 'scripts/previous-papers-access.test.cjs',
+    env: { LANDING_MODEL_PATH: path.join(outDir, 'auth/landing.js') },
+  },
+  {
+    file: 'scripts/previous-papers-navigation.test.cjs',
+    env: {},
+  },
+  {
     file: 'scripts/latex.test.cjs',
     env: { LATEX_MODEL_PATH: path.join(outDir, 'utils/latex.js') },
   },
@@ -66,11 +108,11 @@ const suites = [
 ]
 
 try {
-  const tscBin = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'tsc.cmd' : 'tsc')
+  const tscBin = require.resolve('typescript/bin/tsc')
   execFileSync(
-    tscBin,
-    [...models, '--outDir', outDir, '--module', 'commonjs', '--target', 'es2020', '--esModuleInterop', '--skipLibCheck'],
-    { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' },
+    process.execPath,
+    [tscBin, ...models, '--outDir', outDir, '--module', 'commonjs', '--target', 'es2020', '--esModuleInterop', '--skipLibCheck'],
+    { cwd: root, stdio: 'inherit' },
   )
 
   for (const suite of suites) {

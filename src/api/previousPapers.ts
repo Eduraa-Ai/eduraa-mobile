@@ -53,7 +53,12 @@ export interface PreviousChapter {
 export interface StartPreviousPaperExamRequest {
   mode: 'paper' | 'subject' | 'chapter'
   subject?: string | null
+  subjects?: string[]
   chapter_id?: string | null
+  chapter_ids?: string[]
+  timer_enabled?: boolean
+  duration_minutes?: number | null
+  attempt_action?: 'auto' | 'new'
 }
 
 export interface StartPreviousPaperExamResponse {
@@ -61,6 +66,7 @@ export interface StartPreviousPaperExamResponse {
   question_count: number
   redirect_path: string
   title: string
+  reused_existing: boolean
 }
 
 export function resolvePreviousPaperAssetUrl(url?: string | null) {
@@ -75,13 +81,13 @@ export const previousPapersApi = {
     return response.data
   },
 
-  async getChapters(params: { paper_id?: string; subject?: string }) {
-    const response = await apiClient.get<PreviousChapter[]>('/previous-papers/chapters', { params })
+  async getChapters(params: { paper_id?: string; subject?: string }, signal?: AbortSignal) {
+    const response = await apiClient.get<PreviousChapter[]>('/previous-papers/chapters', { params, signal })
     return response.data
   },
 
-  async getQuestions(params: { paper_id?: string; subject?: string; chapter_id?: string }) {
-    const response = await apiClient.get<PreviousQuestion[]>('/previous-papers/questions', { params })
+  async getQuestions(params: { paper_id?: string; subject?: string; chapter_id?: string }, signal?: AbortSignal) {
+    const response = await apiClient.get<PreviousQuestion[]>('/previous-papers/questions', { params, signal })
     return response.data
   },
 
