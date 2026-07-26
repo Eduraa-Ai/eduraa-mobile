@@ -17,7 +17,13 @@ export function PremiumHeader({ eyebrow, title, subtitle, right, onBack, style }
     <View style={[styles.root, style]}>
       <View style={styles.left}>
         {onBack ? (
-          <Pressable onPress={onBack} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]} hitSlop={8}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={onBack}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+            hitSlop={8}
+          >
             <Ionicons name="chevron-back" size={22} color={colors.text} />
           </Pressable>
         ) : null}

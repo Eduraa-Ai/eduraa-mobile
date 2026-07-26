@@ -134,6 +134,7 @@ function PaperTile({ item, onPress }: { item: PaperListItem; onPress: () => void
   const duration = item.duration_minutes ? `${item.duration_minutes} min` : 'Practice'
   const subject = resolvePaperSubject(item)
   const meta = `${subject.label} - ${item.total_marks} marks - ${duration}`
+  const attemptLabel = item.is_submitted_by_me ? 'Attempted' : item.status
 
   return (
     <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={styles.paperTile}>
@@ -181,7 +182,7 @@ function PaperTile({ item, onPress }: { item: PaperListItem; onPress: () => void
           </View>
           <View style={[styles.tileChip, styles.tileStatusChip]}>
             <Ionicons name="checkmark-circle-outline" size={14} color={colors.success} />
-            <Text style={[styles.tileChipText, styles.tileStatusText]}>{item.status}</Text>
+            <Text style={[styles.tileChipText, styles.tileStatusText]}>{attemptLabel}</Text>
           </View>
         </View>
       </View>

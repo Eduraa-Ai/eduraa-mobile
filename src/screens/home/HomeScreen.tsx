@@ -594,6 +594,7 @@ function CompetitiveHome({
   isError,
   refetch,
   isRefetching,
+  previousPapersEligible,
 }: {
   analytics?: StudentDashboardLab;
   model: ReturnType<typeof useHomeModel>;
@@ -601,6 +602,7 @@ function CompetitiveHome({
   isError: boolean;
   refetch: () => void;
   isRefetching: boolean;
+  previousPapersEligible: boolean;
 }) {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
@@ -932,15 +934,15 @@ function CompetitiveHome({
             navigation.navigate("Papers", { screen: "GeneratePaper" })
           }
         />
-        <QuickAction
-          icon="library-outline"
-          label="JEE PYQs"
-          body="Previous year questions"
-          tone="#1e3a8a"
-          onPress={() =>
-            navigation.navigate("Learning", { screen: "PreviousPapers" })
-          }
-        />
+        {previousPapersEligible ? (
+          <QuickAction
+            icon="documents-outline"
+            label="Previous papers"
+            body="Previous-year JEE questions"
+            tone="#1e3a8a"
+            onPress={() => navigation.navigate("PreviousPapers")}
+          />
+        ) : null}
         <QuickAction
           icon="sparkles-outline"
           label="AI Tutor"
@@ -1066,8 +1068,10 @@ function LoadingHome() {
 
 export default function HomeScreen({
   competitive = false,
+  previousPapersEligible = false,
 }: {
   competitive?: boolean;
+  previousPapersEligible?: boolean;
 }) {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
@@ -1095,11 +1099,25 @@ export default function HomeScreen({
         isError={isError}
         refetch={refetch}
         isRefetching={isRefetching}
+        previousPapersEligible={previousPapersEligible}
       />
     );
   }
 
   const shortcuts: Shortcut[] = [
+    ...(user?.role === "student"
+      ? [
+          {
+            label: "Teacher & practice exams",
+            body: "Open assigned exams or continue your own papers.",
+            meta: "Exam workspace",
+            icon: "clipboard-outline" as keyof typeof Ionicons.glyphMap,
+            tone: colors.info,
+            onPress: () =>
+              navigation.navigate("Learning", { screen: "Exams" }),
+          },
+        ]
+      : []),
     {
       label: "Generate paper",
       body: "Generate practice from your weakest areas.",
@@ -1117,16 +1135,15 @@ export default function HomeScreen({
       onPress: () =>
         navigation.navigate("Learning", { screen: "AgenticLearning" }),
     },
-    ...(competitive
+    ...(previousPapersEligible
       ? [
           {
             label: "JEE previous papers",
             body: "Browse PYQs and start paper practice.",
-            meta: "PYQ",
-            icon: "library-outline" as keyof typeof Ionicons.glyphMap,
+            meta: "Previous years",
+            icon: "documents-outline" as keyof typeof Ionicons.glyphMap,
             tone: colors.paperStudio.jee,
-            onPress: () =>
-              navigation.navigate("Learning", { screen: "PreviousPapers" }),
+            onPress: () => navigation.navigate("PreviousPapers"),
           },
         ]
       : []),

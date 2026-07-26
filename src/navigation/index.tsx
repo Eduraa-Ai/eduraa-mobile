@@ -10,7 +10,7 @@ import { colors } from '../theme/colors'
 import { fonts } from '../theme/fonts'
 import { spacing } from '../theme/spacing'
 import type { AccountMinimal, AuthToken } from '../types'
-import { resolveMobileLanding } from '../auth/landing'
+import { isPreviousPapersEligible, resolveMobileLanding } from '../auth/landing'
 
 import LoginScreen from '../screens/auth/LoginScreen'
 import RegisterScreen from '../screens/auth/RegisterScreen'
@@ -58,12 +58,17 @@ export type AuthStackParamList = {
 }
 
 export type PapersStackParamList = {
-  PapersList: undefined;
-  GeneratePaper: undefined;
-  PaperDetail: { paperId: string; generationNotice?: string };
-  AttemptPaper: { paperId: string; examId?: string };
-  Quiz: { paperId: string };
-};
+  PapersList: undefined
+  GeneratePaper: undefined
+  PaperDetail: { paperId: string; generationNotice?: string }
+  AttemptPaper: {
+    paperId: string
+    examId?: string
+    launchKey?: string
+    returnTo?: 'PreviousPapers'
+  }
+  Quiz: { paperId: string; examId?: string }
+}
 
 export type ResultsStackParamList = {
   ResultsList: undefined;
@@ -83,7 +88,6 @@ export type LearningStackParamList = {
   AgenticLearning: { origin?: 'checked-paper'; checkedPaperId?: string } | undefined
   AgenticSubject: { subjectId: string }
   AgenticTopic: { topicId: string; topicName?: string; subjectName?: string; origin?: 'checked-paper'; checkedPaperId?: string }
-  PreviousPapers: undefined
   LearningResources: undefined
   LearningResourceDetail: { resourceId: string }
   CheatSheetDetail: { cheatSheetId: string }
@@ -125,6 +129,7 @@ export type TabParamList = {
   Papers: undefined
   Results: NavigatorScreenParams<ResultsStackParamList> | undefined
   Profile: undefined
+  PreviousPapers: undefined
 }
 
 export type StaffTabParamList = {
@@ -262,100 +267,24 @@ function ResultsNavigator() {
 
 function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
   return (
-    <LearningStack.Navigator
-      initialRouteName={competitive ? "CompetitiveExam" : "LearningHome"}
-      screenOptions={stackScreenOptions}
-    >
-      <LearningStack.Screen
-        name="LearningHome"
-        component={LearningHomeScreen}
-        options={{ title: "Learning" }}
-      />
-      <LearningStack.Screen
-        name="CompetitiveExam"
-        component={CompetitiveExamScreen}
-        options={{ title: "JEE resources" }}
-      />
-      <LearningStack.Screen
-        name="CompetitiveSubject"
-        component={CompetitiveSubjectScreen}
-        options={{ title: "Competitive subject" }}
-      />
-      <LearningStack.Screen
-        name="CompetitiveChapter"
-        component={CompetitiveChapterScreen}
-        options={{ title: "Chapter workspace" }}
-      />
-      <LearningStack.Screen
-        name="AgenticLearning"
-        component={AgenticLearningScreen}
-        options={{ headerShown: false }}
-      />
-      <LearningStack.Screen
-        name="AgenticSubject"
-        component={AgenticSubjectScreen}
-        options={{ headerShown: false }}
-      />
-      <LearningStack.Screen
-        name="AgenticTopic"
-        component={AgenticTopicScreen}
-        options={{ headerShown: false }}
-      />
-      <LearningStack.Screen
-        name="PreviousPapers"
-        component={PreviousPapersScreen}
-        options={{ title: "Previous papers" }}
-      />
-      <LearningStack.Screen
-        name="LearningResources"
-        component={LearningResourcesScreen}
-        options={{ title: "Learning resources" }}
-      />
-      <LearningStack.Screen
-        name="LearningResourceDetail"
-        component={LearningResourceDetailScreen}
-        options={{ title: "Resource" }}
-      />
-      <LearningStack.Screen
-        name="CheatSheetDetail"
-        component={CheatSheetDetailScreen}
-        options={{ title: "Cheat sheet" }}
-      />
-      <LearningStack.Screen
-        name="StudyPack"
-        component={StudyPackScreen}
-        options={{ title: "Study pack" }}
-      />
-      <LearningStack.Screen
-        name="Feature"
-        component={FeatureScreen}
-        options={{ title: "Feature" }}
-      />
-      <LearningStack.Screen
-        name="Approvals"
-        component={ApprovalsScreen}
-        options={{ title: "Approvals" }}
-      />
-      <LearningStack.Screen
-        name="Attendance"
-        component={AttendanceScreen}
-        options={{ title: "Attendance" }}
-      />
-      <LearningStack.Screen
-        name="ScanUpload"
-        component={ScanUploadScreen}
-        options={{ title: "Scan upload" }}
-      />
-      <LearningStack.Screen
-        name="Exams"
-        component={ExamsScreen}
-        options={{ title: "Exams" }}
-      />
-      <LearningStack.Screen
-        name="AIStudio"
-        component={AIStudioScreen}
-        options={{ headerShown: false }}
-      />
+    <LearningStack.Navigator initialRouteName={competitive ? 'CompetitiveExam' : 'LearningHome'} screenOptions={stackScreenOptions}>
+      <LearningStack.Screen name="LearningHome" component={LearningHomeScreen} options={{ title: 'Learning' }} />
+      <LearningStack.Screen name="CompetitiveExam" component={CompetitiveExamScreen} options={{ title: 'JEE resources' }} />
+      <LearningStack.Screen name="CompetitiveSubject" component={CompetitiveSubjectScreen} options={{ title: 'Competitive subject' }} />
+      <LearningStack.Screen name="CompetitiveChapter" component={CompetitiveChapterScreen} options={{ title: 'Chapter workspace' }} />
+      <LearningStack.Screen name="AgenticLearning" component={AgenticLearningScreen} options={{ headerShown: false }} />
+      <LearningStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} options={{ headerShown: false }} />
+      <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ headerShown: false }} />
+      <LearningStack.Screen name="LearningResources" component={LearningResourcesScreen} options={{ title: 'Learning resources' }} />
+      <LearningStack.Screen name="LearningResourceDetail" component={LearningResourceDetailScreen} options={{ title: 'Resource' }} />
+      <LearningStack.Screen name="CheatSheetDetail" component={CheatSheetDetailScreen} options={{ title: 'Cheat sheet' }} />
+      <LearningStack.Screen name="StudyPack" component={StudyPackScreen} options={{ title: 'Study pack' }} />
+      <LearningStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
+      <LearningStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
+      <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
+      <LearningStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
+      <LearningStack.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
+      <LearningStack.Screen name="AIStudio" component={AIStudioScreen} options={{ headerShown: false }} />
     </LearningStack.Navigator>
   );
 }
@@ -372,7 +301,13 @@ function ProfileNavigator() {
   );
 }
 
-function StudentTabs({ competitive = false }: { competitive?: boolean }) {
+function StudentTabs({
+  competitive = false,
+  previousPapersEligible = false,
+}: {
+  competitive?: boolean
+  previousPapersEligible?: boolean
+}) {
   return (
     <Tab.Navigator
       initialRouteName="Home"
@@ -382,26 +317,21 @@ function StudentTabs({ competitive = false }: { competitive?: boolean }) {
       }}
     >
       <Tab.Screen name="Home">
-        {() => <HomeScreen competitive={competitive} />}
+        {() => <HomeScreen competitive={competitive} previousPapersEligible={previousPapersEligible} />}
       </Tab.Screen>
       <Tab.Screen name="Learning" options={{ title: "Learning" }}>
         {() => <LearningNavigator competitive={competitive} />}
       </Tab.Screen>
-      <Tab.Screen
-        name="Papers"
-        component={PapersNavigator}
-        options={{ title: "Papers" }}
-      />
-      <Tab.Screen
-        name="Results"
-        component={ResultsNavigator}
-        options={{ title: "Results" }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileNavigator}
-        options={{ title: "Profile" }}
-      />
+      <Tab.Screen name="Papers" component={PapersNavigator} options={{ title: 'Papers' }} />
+      <Tab.Screen name="Results" component={ResultsNavigator} options={{ title: 'Results' }} />
+      <Tab.Screen name="Profile" component={ProfileNavigator} options={{ title: 'Profile' }} />
+      {previousPapersEligible ? (
+        <Tab.Screen
+          name="PreviousPapers"
+          component={PreviousPapersScreen}
+          options={{ title: 'Previous', tabBarAccessibilityLabel: 'Previous-year JEE papers' }}
+        />
+      ) : null}
     </Tab.Navigator>
   );
 }
@@ -541,13 +471,15 @@ function OnboardingNavigator() {
 }
 
 function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
-  const landing = resolveMobileLanding(user);
-  if (landing === "b2c_onboarding") return <OnboardingNavigator />;
-  if (landing === "competitive_learner") return <StudentTabs competitive />;
-  if (landing === "school_learner") return <StudentTabs />;
-  if (landing === "admin_workspace") return <StaffTabs />;
-  if (landing === "developer_workspace") return <StaffTabs />;
-  return <StaffTabs />;
+  const landing = resolveMobileLanding(user)
+  if (landing === 'b2c_onboarding') return <OnboardingNavigator />
+  if (landing === 'competitive_learner') {
+    return <StudentTabs competitive previousPapersEligible={isPreviousPapersEligible(user)} />
+  }
+  if (landing === 'school_learner') return <StudentTabs />
+  if (landing === 'admin_workspace') return <StaffTabs />
+  if (landing === 'developer_workspace') return <StaffTabs />
+  return <StaffTabs />
 }
 
 export default function RootNavigator({

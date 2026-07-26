@@ -6,7 +6,7 @@ import { AppScreen } from '../../components/ui'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 
-type LearningDestination = 'AgenticLearning' | 'CompetitiveExam' | 'PreviousPapers' | 'LearningResources'
+type LearningDestination = 'AgenticLearning' | 'CompetitiveExam' | 'LearningResources' | 'Exams'
 
 interface LearningTile {
   title: string
@@ -15,6 +15,7 @@ interface LearningTile {
   icon: keyof typeof Ionicons.glyphMap
   color: string
   destination: LearningDestination
+  b2bOnly?: boolean
 }
 
 const tiles: LearningTile[] = [
@@ -35,14 +36,6 @@ const tiles: LearningTile[] = [
     destination: 'CompetitiveExam',
   },
   {
-    title: 'JEE previous papers',
-    meta: 'B2C JEE track',
-    body: 'Browse structured PYQs, review solutions, and start timed paper practice.',
-    icon: 'library',
-    color: colors.paperStudio.jee,
-    destination: 'PreviousPapers',
-  },
-  {
     title: 'Learning resources',
     meta: 'Library',
     body: 'Formula sheets, reference books, AI cheat sheets and study packs in one place.',
@@ -50,11 +43,21 @@ const tiles: LearningTile[] = [
     color: colors.info,
     destination: 'LearningResources',
   },
+  {
+    title: 'Exams',
+    meta: 'B2B student workspace',
+    body: 'Open teacher assignments or continue your own practice papers.',
+    icon: 'clipboard',
+    color: colors.success,
+    destination: 'Exams',
+    b2bOnly: true,
+  },
 ]
 
 export default function LearningHomeScreen() {
   const navigation = useNavigation<any>()
   const role = useAuthStore((state) => state.user?.role)
+  const visibleTiles = tiles.filter((tile) => !tile.b2bOnly || role === 'student')
 
   return (
     <AppScreen contentStyle={styles.screen}>
@@ -66,13 +69,13 @@ export default function LearningHomeScreen() {
           <Text style={styles.introKicker}>Learning</Text>
           <Text style={styles.introTitle}>{role === 'b2c_student' ? 'JEE workspace' : 'Student workspace'}</Text>
           <Text style={styles.introBody} numberOfLines={2}>
-            Agentic lessons, JEE resources, and previous-year practice in one place.
+            Agentic lessons and focused JEE learning resources in one place.
           </Text>
         </View>
       </View>
 
       <View style={styles.grid}>
-        {tiles.map((tile) => (
+        {visibleTiles.map((tile) => (
           <Pressable
             key={tile.title}
             onPress={() => navigation.navigate(tile.destination)}
