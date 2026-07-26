@@ -12,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
   TextInput,
   Platform,
@@ -107,11 +108,25 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
   onTextAnswer: (questionId: string, value: string) => void
   onToggleFlag: (questionId: string) => void
 }) {
+  const [optimisticAnswer, setOptimisticAnswer] = useState(answer)
+  const selectable =
+    question.question_type === "mcq" ||
+    question.question_type === "true_false"
+  const visibleAnswer = selectable ? optimisticAnswer : answer
+
+  useEffect(() => {
+    setOptimisticAnswer(answer)
+  }, [answer])
+
+  const showImmediateSelection = useCallback((value: string) => {
+    setOptimisticAnswer((current) => (current === value ? undefined : value))
+  }, [])
+
   return (
     <View
       style={[
         styles.questionCard,
-        answer && styles.questionCardAnswered,
+        visibleAnswer && styles.questionCardAnswered,
       ]}
     >
       <View style={styles.questionHeader}>
@@ -119,13 +134,13 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
           <View
             style={[
               styles.questionNumBadge,
-              answer && styles.questionNumBadgeAnswered,
+              visibleAnswer && styles.questionNumBadgeAnswered,
             ]}
           >
             <Text
               style={[
                 styles.questionNum,
-                answer && styles.questionNumAnswered,
+                visibleAnswer && styles.questionNumAnswered,
               ]}
             >
               {String(index + 1).padStart(2, "0")}
@@ -173,13 +188,14 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
       {question.question_type === "mcq" && isMCQOptions(question.options) && (
         <View style={styles.mcqOptions}>
           {question.options.map((option, optionIndex) => {
-            const selected = answer === option.id
+            const selected = visibleAnswer === option.id
             return (
-              <TouchableOpacity
+              <Pressable
                 key={option.id}
-                activeOpacity={0.85}
                 disabled={disabled}
                 style={[styles.mcqOption, selected && styles.mcqOptionSelected]}
+                onTouchStart={() => showImmediateSelection(option.id)}
+                onTouchCancel={() => setOptimisticAnswer(answer)}
                 onPress={() => onSelectAnswer(question.id, option.id)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected, disabled }}
@@ -209,7 +225,7 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
                     color={colors.accent}
                   />
                 ) : null}
-              </TouchableOpacity>
+              </Pressable>
             )
           })}
         </View>
@@ -218,13 +234,14 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
       {question.question_type === "true_false" && (
         <View style={styles.tfRow}>
           {["True", "False"].map((value) => {
-            const selected = answer === value
+            const selected = visibleAnswer === value
             return (
-              <TouchableOpacity
+              <Pressable
                 key={value}
-                activeOpacity={0.85}
                 disabled={disabled}
                 style={[styles.tfBtn, selected && styles.tfBtnSelected]}
+                onTouchStart={() => showImmediateSelection(value)}
+                onTouchCancel={() => setOptimisticAnswer(answer)}
                 onPress={() => onSelectAnswer(question.id, value)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected, disabled }}
@@ -239,7 +256,7 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
                 >
                   {value}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             )
           })}
         </View>

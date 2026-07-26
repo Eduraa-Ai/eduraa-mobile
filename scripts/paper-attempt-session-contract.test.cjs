@@ -44,3 +44,12 @@ test('question cards are memoized and receive stable shared callbacks', () => {
   assert.match(standardAttempt, /onSelectAnswer=\{selectAnswer\}/)
   assert.match(interactiveQuiz, /onAnswer=\{handleAnswer\}/)
 })
+
+test('selectable answers show card-local feedback before shared persistence', () => {
+  for (const source of [standardAttempt, interactiveQuiz]) {
+    assert.match(source, /const \[optimisticAnswer, setOptimisticAnswer\] = useState\(answer\)/)
+    assert.match(source, /onTouchStart=\{\(\) => showImmediateSelection\(/)
+    assert.match(source, /onTouchCancel=\{\(\) => setOptimisticAnswer\(answer\)\}/)
+    assert.match(source, /onPress=\{\(\) => /)
+  }
+})

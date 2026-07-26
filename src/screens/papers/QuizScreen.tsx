@@ -74,7 +74,20 @@ const QuestionCard = React.memo(function QuestionCard({
   assistText?: string;
   assistLoading?: boolean;
 }) {
-  const answered = Boolean(answer?.trim());
+  const [optimisticAnswer, setOptimisticAnswer] = useState(answer);
+  const selectable =
+    question.question_type === "mcq" ||
+    question.question_type === "true_false";
+  const visibleAnswer = selectable ? optimisticAnswer : answer;
+  const answered = Boolean(visibleAnswer?.trim());
+
+  useEffect(() => {
+    setOptimisticAnswer(answer);
+  }, [answer]);
+
+  const showImmediateSelection = useCallback((value: string) => {
+    setOptimisticAnswer((current) => (current === value ? undefined : value));
+  }, []);
 
   return (
     <AnimatedCard style={styles.questionCard}>
@@ -103,11 +116,13 @@ const QuestionCard = React.memo(function QuestionCard({
         <View style={styles.optionList}>
           {question.options.map((option, optionIndex) => {
             const value = option.id || optionLabel(optionIndex);
-            const selected = answer === value;
+            const selected = visibleAnswer === value;
             return (
               <Pressable
                 key={`${question.id}-${value}`}
                 disabled={disabled}
+                onTouchStart={() => showImmediateSelection(value)}
+                onTouchCancel={() => setOptimisticAnswer(answer)}
                 onPress={() => onAnswer(question.id, value, true)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected, disabled }}
@@ -148,11 +163,13 @@ const QuestionCard = React.memo(function QuestionCard({
       {question.question_type === "true_false" ? (
         <View style={styles.booleanRow}>
           {["True", "False"].map((value) => {
-            const selected = answer === value;
+            const selected = visibleAnswer === value;
             return (
               <Pressable
                 key={value}
                 disabled={disabled}
+                onTouchStart={() => showImmediateSelection(value)}
+                onTouchCancel={() => setOptimisticAnswer(answer)}
                 onPress={() => onAnswer(question.id, value, true)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected, disabled }}
