@@ -8,48 +8,12 @@ import type {
   ChatResponse,
   UserMemoryItem,
 } from "../types";
-
-interface StreamEvent {
-  type?: string;
-  event?: string;
-  delta?: string;
-  token?: string;
-  text?: string;
-  content?: string;
-  response?: string;
-  conversation_id?: string;
-  message_id?: string;
-  timestamp?: string;
-  detail?: string;
-  error?: string;
-}
-
-function decodeStreamEvent(raw: string): StreamEvent | null {
-  const value = raw.trim();
-  if (!value || value === "[DONE]") return null;
-  try {
-    return JSON.parse(value) as StreamEvent;
-  } catch {
-    return { delta: value };
-  }
-}
-
-function eventDelta(event: StreamEvent) {
-  const eventType = (event.type || event.event || "").toLowerCase();
-  if (event.delta) return event.delta;
-  if (event.token) return event.token;
-  if (
-    eventType.includes("token") ||
-    eventType.includes("delta") ||
-    eventType.includes("chunk") ||
-    eventType === "content" ||
-    eventType === "message" ||
-    (!eventType && Boolean(event.content || event.text))
-  ) {
-    return event.content || event.text || "";
-  }
-  return "";
-}
+import {
+  buildAiStreamRequest,
+  decodeStreamEvent,
+  eventDelta,
+  streamEventError,
+} from "./aiStream";
 
 export const aiApi = {
   /** List all conversations for the current user, newest first */
@@ -101,14 +65,15 @@ export const aiApi = {
     signal?: AbortSignal,
   ): Promise<ChatResponse> => {
     const token = await getAccessToken();
-    const response = await fetch(`${API_BASE_URL}/api/v1/ai/chat/stream`, {
+    const streamRequest = buildAiStreamRequest(payload);
+    const response = await fetch(`${API_BASE_URL}${streamRequest.path}`, {
       method: "POST",
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(streamRequest.body),
       signal,
     });
 
@@ -139,9 +104,8 @@ export const aiApi = {
       );
       if (!event) return;
 
-      if (event.error || event.detail) {
-        throw new Error(event.error || event.detail);
-      }
+      const eventError = streamEventError(event);
+      if (eventError) throw new Error(eventError);
 
       conversationId = event.conversation_id || conversationId;
       messageId = event.message_id || messageId;

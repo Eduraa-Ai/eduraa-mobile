@@ -3,6 +3,7 @@ import {
   Platform,
   StyleSheet,
   Text,
+  ScrollView,
   View,
   type StyleProp,
   type TextStyle,
@@ -22,6 +23,9 @@ type LatexTextProps = {
   style?: StyleProp<TextStyle>;
   containerStyle?: StyleProp<ViewStyle>;
   selectable?: boolean;
+  displayMathScrollable?: boolean;
+  preserveOuterWhitespace?: boolean;
+  promoteComplexInlineMath?: boolean;
 };
 
 class LatexRenderBoundary extends React.Component<
@@ -44,13 +48,24 @@ export function LatexText({
   style,
   containerStyle,
   selectable,
+  displayMathScrollable,
+  preserveOuterWhitespace,
+  promoteComplexInlineMath,
 }: LatexTextProps) {
-  const normalized = normalizeLatexContent(value);
+  const rawValue = value == null ? "" : String(value);
+  const normalizedCore = normalizeLatexContent(rawValue);
+  const normalized = normalizedCore;
+  const boundarySpacing: ViewStyle | undefined = preserveOuterWhitespace
+    ? {
+        marginLeft: /^\s/.test(rawValue) ? 3 : 0,
+        marginRight: /\s$/.test(rawValue) ? 3 : 0,
+      }
+    : undefined;
   const flattenedTextStyle = StyleSheet.flatten(style) ?? {};
 
   if (!containsLatex(normalized)) {
     return (
-      <View style={[styles.container, containerStyle]}>
+      <View style={[styles.container, boundarySpacing, containerStyle]}>
         <Text style={style} selectable={selectable}>
           {normalized}
         </Text>
@@ -79,7 +94,7 @@ export function LatexText({
       accessible
       accessibilityRole="text"
       accessibilityLabel={latexToPlainText(normalized)}
-      style={[styles.container, containerStyle]}
+      style={[styles.container, boundarySpacing, containerStyle]}
     >
       <LatexRenderBoundary key={normalized} fallback={fallback}>
         <View style={styles.flow}>
@@ -96,27 +111,55 @@ export function LatexText({
               );
             }
 
-            const isDisplay = segment.kind === "display-math";
+            const promoteInline =
+              promoteComplexInlineMath &&
+              segment.kind === "inline-math" &&
+              /\\(?:d?frac|begin|int|lim|prod|sum)\b/.test(segment.value) &&
+              segment.value.length > 24;
+            const isDisplay =
+              segment.kind === "display-math" || Boolean(promoteInline);
+            const renderedFontSize = isDisplay ? fontSize + 2 : fontSize;
+            const renderedMathValue = promoteInline
+              ? segment.value.startsWith("$")
+                ? `\\[${segment.value.slice(1, -1)}\\]`
+                : `\\[${segment.value.slice(2, -2)}\\]`
+              : segment.value;
             const webFontStyle =
               Platform.OS === "web"
-                ? ({ fontSize } as unknown as ViewStyle)
+                ? ({ fontSize: renderedFontSize } as unknown as ViewStyle)
                 : {};
             const mathStyle: ViewStyle = {
               ...styles.math,
               ...webFontStyle,
               ...(isDisplay ? styles.displayMath : {}),
             };
-            return (
+            const math = (
               <MathJaxSvg
-                key={`${segment.kind}-${index}`}
                 color={color}
                 fontCache
-                fontSize={Platform.OS === "web" ? 2 : fontSize}
+                fontSize={Platform.OS === "web" ? 2.25 : renderedFontSize}
                 style={mathStyle}
                 textStyle={mathTextStyle}
               >
-                {escapeMathJaxHtml(segment.value)}
+                {escapeMathJaxHtml(renderedMathValue)}
               </MathJaxSvg>
+            );
+
+            return isDisplay && displayMathScrollable ? (
+              <ScrollView
+                key={`${segment.kind}-${index}`}
+                horizontal
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                style={styles.displayScroll}
+                contentContainerStyle={styles.displayScrollContent}
+              >
+                {math}
+              </ScrollView>
+            ) : (
+              <React.Fragment key={`${segment.kind}-${index}`}>
+                {math}
+              </React.Fragment>
             );
           })}
         </View>
@@ -142,6 +185,14 @@ const styles = StyleSheet.create({
   },
   displayMath: {
     width: "100%",
+    justifyContent: "center",
+  },
+  displayScroll: {
+    width: "100%",
+    maxWidth: "100%",
+  },
+  displayScrollContent: {
+    minWidth: "100%",
     justifyContent: "center",
   },
 });

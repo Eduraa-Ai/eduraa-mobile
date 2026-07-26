@@ -18,7 +18,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Markdown from "react-native-markdown-display";
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -34,6 +33,7 @@ import type {
   UserMemoryItem,
 } from "../../types";
 import { AuthLogoMark } from "../../components/ui";
+import { AIResponseRenderer } from "../../components/ai/AIResponseRenderer";
 import { useAuth } from "../../hooks/useAuth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -241,15 +241,15 @@ function AIBlocks({ blocks }: { blocks: AIBlock[] }) {
         if (block.type === "text") {
           const isPrimary = block.role === "primary";
           return (
-            <Text
+            <AIResponseRenderer
               key={i}
-              style={[
-                mb.aiText,
-                isPrimary ? mb.blockPrimary : mb.blockSecondary,
-              ]}
-            >
-              {block.content}
-            </Text>
+              content={block.content}
+              textStyle={
+                isPrimary
+                  ? [mb.aiText, mb.blockPrimary]
+                  : [mb.aiText, mb.blockSecondary]
+              }
+            />
           );
         }
         if (block.type === "callout") {
@@ -270,19 +270,24 @@ function AIBlocks({ blocks }: { blocks: AIBlock[] }) {
                 color={isWarning ? colors.warning : colors.accent}
                 style={{ marginTop: 1, flexShrink: 0 }}
               />
-              <Text
-                style={[mb.calloutText, isWarning && mb.calloutTextWarning]}
-              >
-                {block.content}
-              </Text>
+              <AIResponseRenderer
+                content={block.content}
+                containerStyle={mb.calloutContent}
+                textStyle={[
+                  mb.calloutText,
+                  isWarning && mb.calloutTextWarning,
+                ]}
+              />
             </View>
           );
         }
         // fallback for unknown block types
         return block.content ? (
-          <Text key={i} style={mb.aiText}>
-            {block.content}
-          </Text>
+          <AIResponseRenderer
+            key={i}
+            content={block.content}
+            textStyle={mb.aiText}
+          />
         ) : null;
       })}
     </View>
@@ -345,7 +350,7 @@ const MessageBubble = React.memo(function MessageBubble({
         ) : isUser ? (
           <Text style={[mb.text, mb.userText]}>{msg.content}</Text>
         ) : (
-          <Markdown style={markdownStyles}>{msg.content}</Markdown>
+          <AIResponseRenderer content={msg.content} />
         )}
         {msg.pending ? <View style={mb.streamingCursor} /> : null}
         <Text style={[mb.time, isUser ? mb.userTime : mb.aiTime]}>
@@ -472,6 +477,7 @@ const mb = StyleSheet.create({
     color: colors.accentStrong,
   },
   calloutTextWarning: { color: colors.warningText },
+  calloutContent: { flex: 1, width: "auto" },
   time: { fontSize: 10 },
   userTime: { color: "rgba(255,255,255,0.55)", textAlign: "right" },
   aiTime: { color: colors.subtle },
@@ -510,72 +516,6 @@ const mb = StyleSheet.create({
     fontSize: 11,
     fontFamily: fonts.bold,
   },
-});
-
-const markdownStyles = StyleSheet.create({
-  body: {
-    color: colors.ink,
-    fontSize: 14,
-    lineHeight: 22,
-    fontFamily: fonts.regular,
-  },
-  heading1: {
-    color: "#07152D",
-    fontSize: 22,
-    lineHeight: 28,
-    fontFamily: fonts.displayBold,
-    marginTop: spacing[2],
-    marginBottom: spacing[2],
-  },
-  heading2: {
-    color: "#07152D",
-    fontSize: 19,
-    lineHeight: 25,
-    fontFamily: fonts.displaySemibold,
-    marginTop: spacing[3],
-    marginBottom: spacing[2],
-  },
-  heading3: {
-    color: "#07152D",
-    fontSize: 17,
-    lineHeight: 23,
-    fontFamily: fonts.displaySemibold,
-    marginTop: spacing[2],
-    marginBottom: spacing[1],
-  },
-  paragraph: { marginTop: 0, marginBottom: spacing[2] },
-  strong: { color: "#07152D", fontFamily: fonts.bold },
-  em: { color: colors.textSecondary, fontFamily: fonts.medium },
-  bullet_list: { marginBottom: spacing[2] },
-  ordered_list: { marginBottom: spacing[2] },
-  list_item: { marginBottom: spacing[1] },
-  code_inline: {
-    color: "#07152D",
-    backgroundColor: "#FFF0E5",
-    borderColor: "#F7CBAF",
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[1],
-    fontFamily: fonts.semibold,
-  },
-  fence: {
-    color: "#07152D",
-    backgroundColor: "#FFF0E5",
-    borderLeftColor: colors.accent,
-    borderLeftWidth: 3,
-    borderRadius: radius.sm,
-    padding: spacing[3],
-    fontFamily: fonts.medium,
-  },
-  blockquote: {
-    backgroundColor: "#FFF8EE",
-    borderLeftColor: colors.accent,
-    borderLeftWidth: 3,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-  },
-  link: { color: colors.accentStrong, textDecorationLine: "underline" },
 });
 
 function CalmStart({ onChoose }: { onChoose: (prompt: string) => void }) {
