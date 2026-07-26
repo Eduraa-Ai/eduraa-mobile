@@ -1,4 +1,10 @@
-import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,7 +32,7 @@ import { fonts } from "../../theme/fonts";
 import { layout, radius, shadows, spacing } from "../../theme/spacing";
 import type { Chapter, Difficulty, PaperGenerateRequest } from "../../types";
 import {
-  getAvailableBookCountCandidates,
+  findLargestAvailableBookCount,
   isBookQuestionShortage,
   withBookMcqCount,
 } from "../../utils/bookPaperGeneration";
@@ -715,6 +721,9 @@ export default function GeneratePaperScreen() {
   const [durationTouched, setDurationTouched] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [generationError, setGenerationError] = useState<string | null>(null);
+  // Latches once the student picks a source themselves, so the smart default
+  // below never overrides a deliberate choice. Reset on subject/exam pivot.
+  const userChoseSourceRef = useRef(false);
   const durationResult = useMemo(
     () => parsePaperDuration(durationInput),
     [durationInput],
@@ -809,15 +818,41 @@ export default function GeneratePaperScreen() {
     if (!division && options?.divisions?.[0]) setDivision(options.divisions[0]);
   }, [board, division, options, standard]);
 
+  // Smart default: prefer Books whenever this (exam, subject) pair actually has
+  // indexed book chapters, and only fall back to AI when the book shelf comes
+  // back empty. Keying off `chapters.length` rather than `aiSourceAvailable`
+  // matters — every JEE subject makes AI "available", so the old check pushed
+  // students onto AI even when a full book bank existed. Stops the moment the
+  // student picks a source themselves.
   useEffect(() => {
-    if (aiSourceAvailable) {
-      setChapterSource("ai");
-    } else {
+    if (userChoseSourceRef.current) return;
+    if (!subjectId) {
+      if (chapterSource !== "books") setChapterSource("books");
+      return;
+    }
+    if (chaptersLoading) return;
+    if (chapters.length === 0 && aiSourceAvailable) {
+      if (chapterSource !== "ai") {
+        setChapterSource("ai");
+      }
+    } else if (chapters.length > 0 && chapterSource !== "books") {
       setChapterSource("books");
     }
+  }, [
+    aiSourceAvailable,
+    chapterSource,
+    chapters.length,
+    chaptersLoading,
+    subjectId,
+  ]);
+
+  // Pivoting subject or exam invalidates any chapter ids/keys from the previous
+  // source, and re-arms the smart default for the new pair.
+  useEffect(() => {
+    userChoseSourceRef.current = false;
     setChapterIds([]);
     setSubtopicNames([]);
-  }, [aiSourceAvailable, board, subjectId]);
+  }, [board, subjectId]);
 
   useEffect(() => {
     if (!subjectId) {
@@ -835,7 +870,11 @@ export default function GeneratePaperScreen() {
     setChapterIds([]);
     setSubtopicNames([]);
     papersApi
-      .getChapters(subjectId)
+      .getChapters(subjectId, {
+        board,
+        standard: effectiveStandard,
+        indexedOnly: true,
+      })
       .then((items) => {
         if (cancelled) return;
         setChapters(items as ChapterWithSubtopics[]);
@@ -853,7 +892,7 @@ export default function GeneratePaperScreen() {
     return () => {
       cancelled = true;
     };
-  }, [chapterLoadKey, subjectId]);
+  }, [board, chapterLoadKey, effectiveStandard, subjectId]);
 
   useEffect(() => {
     setSubtopicNames((current) => {
@@ -910,30 +949,20 @@ export default function GeneratePaperScreen() {
         };
       }
 
-      let lastShortageError: unknown;
-      for (const count of getAvailableBookCountCandidates(
+      const largest = await findLargestAvailableBookCount(
         input.payload.mcq_count,
-      )) {
-        try {
-          const paper = await papersApi.generate(
-            withBookMcqCount(input.payload, count),
-          );
-          return {
-            paper,
-            requestedCount: input.payload.mcq_count,
-            generatedCount: paper.questions.length,
-          };
-        } catch (error) {
-          if (!isBookQuestionShortage(error)) throw error;
-          lastShortageError = error;
-        }
-      }
-      throw (
-        lastShortageError ??
-        new Error(
-          "No approved book questions are available for this selection.",
-        )
+        (count) => papersApi.generate(withBookMcqCount(input.payload, count)),
       );
+      if (!largest) {
+        throw new Error(
+          "No approved book questions are available for these chapters.",
+        );
+      }
+      return {
+        paper: largest.result,
+        requestedCount: input.payload.mcq_count,
+        generatedCount: largest.result.questions.length,
+      };
     },
     onMutate: () => setGenerationError(null),
     onSuccess: ({ paper, requestedCount, generatedCount }) =>
@@ -1295,6 +1324,7 @@ export default function GeneratePaperScreen() {
                         disabled && styles.disabledBlock,
                       ]}
                       onPress={() => {
+                        userChoseSourceRef.current = true;
                         setChapterSource(source);
                         clearChapters();
                       }}
@@ -1703,7 +1733,7 @@ export default function GeneratePaperScreen() {
               body={
                 chapterSource === "books" &&
                 isBookQuestionShortage(generationError)
-                  ? `The ${difficulty} bank cannot fill all ${totals.questions} questions for this selection. Generate the largest available set with its textbook images, or use AI syllabus for the full count.`
+                  ? `These chapters do not have ${totals.questions} approved book questions yet. Generate the largest available set with its textbook images, or use AI syllabus for the full count.`
                   : `${generationError} Your topic, question mix, and settings are still here.`
               }
               retryLabel={
@@ -1733,6 +1763,7 @@ export default function GeneratePaperScreen() {
                 isBookQuestionShortage(generationError) &&
                 aiSourceAvailable
                   ? () => {
+                      userChoseSourceRef.current = true;
                       setChapterSource("ai");
                       clearChapters();
                       setGenerationError(null);

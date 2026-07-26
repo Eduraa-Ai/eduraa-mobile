@@ -3,6 +3,7 @@
  */
 
 import apiClient from './client'
+import { normalizeStandardValue } from '../data/authOptions'
 import type { DownloadedPdf } from '../utils/pdfDownload'
 import type {
   Paper,
@@ -34,6 +35,25 @@ type JeeGenerateFormPaperResponse = {
   error?: string | null
 }
 
+/**
+ * Shape a standard for the `/chapters` query the way the web client does.
+ * Numeric standards become `Std 11`; `Std 11` stays put; exam labels such as
+ * `JEE (Mains & Advanced)` normalise to their stored form. Mirrors
+ * `standardRequestValue` in the web's BlueprintExamMode.
+ */
+function standardRequestValue(value?: string | null): string | undefined {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return undefined
+  if (/^std\.?\s*/i.test(trimmed)) {
+    const withoutPrefix = trimmed.replace(/^std\.?\s*/i, '').trim()
+    return /^\d+$/.test(withoutPrefix)
+      ? `Std ${withoutPrefix}`
+      : normalizeStandardValue(withoutPrefix)
+  }
+  if (/^\d+$/.test(trimmed)) return `Std ${trimmed}`
+  return normalizeStandardValue(trimmed)
+}
+
 function downloadFilename(contentDisposition: unknown, fallback: string) {
   if (typeof contentDisposition !== 'string') return fallback
   const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
@@ -53,10 +73,31 @@ export const papersApi = {
     return response.data
   },
 
-  /** Chapters are fetched separately per subject — GET /chapters?subject_id=... */
-  getChapters: async (subjectId: string): Promise<Chapter[]> => {
+  /**
+   * Chapters for a subject — GET /chapters?subject_id=...&board=...&standard=...&indexed_only=true
+   *
+   * `board` and `standard` are load-bearing, not cosmetic. The backend only
+   * narrows to books that actually hold questions once BOTH are present:
+   * `indexed_only` + a non-class standard turns on its static-bank fallback,
+   * which keeps only chapters with approved book MCQs and matches JEE books on
+   * `board LIKE '%jee%'` (so a "JEE Mains" learner still reaches the
+   * JEE-Advanced-labelled bank). Sending `subject_id` alone returns every
+   * chapter of every book for that subject — including empty decoy chapters
+   * that can never fill a book paper.
+   */
+  getChapters: async (
+    subjectId: string,
+    options?: { board?: string; standard?: string; indexedOnly?: boolean },
+  ): Promise<Chapter[]> => {
+    const board = options?.board?.trim() || undefined
+    const standard = standardRequestValue(options?.standard)
     const response = await apiClient.get<Chapter[]>('/chapters', {
-      params: { subject_id: subjectId },
+      params: {
+        subject_id: subjectId,
+        board,
+        standard,
+        indexed_only: options?.indexedOnly ?? true,
+      },
     })
     return response.data
   },
