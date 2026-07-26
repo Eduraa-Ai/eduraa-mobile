@@ -54,6 +54,7 @@ export function usePaperAttemptSession({
   const writeChainRef = useRef<Promise<void>>(Promise.resolve())
   const lastQueuedRevisionRef = useRef(-1)
   const lastSavedRevisionRef = useRef(-1)
+  const draftDisabledRef = useRef(false)
 
   const publishState = useCallback((nextState: PaperAttemptState) => {
     stateRef.current = nextState
@@ -64,6 +65,7 @@ export function usePaperAttemptSession({
     snapshot: PaperAttemptState,
     force = false,
   ): Promise<void> => {
+    if (draftDisabledRef.current) return writeChainRef.current
     if (!snapshot.hydrated) return writeChainRef.current
     if (!force && snapshot.revision <= lastQueuedRevisionRef.current) {
       return writeChainRef.current
@@ -100,10 +102,13 @@ export function usePaperAttemptSession({
     }
     await hydrationPromiseRef.current.catch(() => undefined)
     const snapshot = stateRef.current
-    if (snapshot?.hydrated) await enqueueSnapshot(snapshot, true)
+    if (snapshot?.hydrated && !draftDisabledRef.current) {
+      await enqueueSnapshot(snapshot, true)
+    }
   }, [enqueueSnapshot])
 
   const clearDraft = useCallback(async () => {
+    draftDisabledRef.current = true
     if (persistTimerRef.current) {
       clearTimeout(persistTimerRef.current)
       persistTimerRef.current = null
@@ -133,6 +138,7 @@ export function usePaperAttemptSession({
     hydrationGenerationRef.current = generation
     lastQueuedRevisionRef.current = -1
     lastSavedRevisionRef.current = -1
+    draftDisabledRef.current = false
 
     if (!identity || !identityKey) {
       stateRef.current = null
@@ -173,8 +179,6 @@ export function usePaperAttemptSession({
             type: 'finishHydration',
             identityKey,
           })
-      publishState(hydrated)
-
       if (migratedLegacy) {
         try {
           await AsyncStorage.setItem(
@@ -187,6 +191,7 @@ export function usePaperAttemptSession({
           // Keep the legacy draft so migration can retry safely.
         }
       }
+      publishState(hydrated)
     })()
   }, [identityKey, publishState])
 
