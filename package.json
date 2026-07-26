@@ -15,6 +15,8 @@
     "web:remote": "node scripts/start-web.cjs --web",
     "api-bridge": "node scripts/dev-api-bridge.cjs",
     "check:deps": "expo install --check",
+    "audit:critical": "node scripts/audit-critical.cjs",
+    "test:audit": "node --test scripts/audit-critical.test.cjs",
     "validate:release-env": "node scripts/validate-release-env.cjs",
     "eas-build-post-install": "npm run validate:release-env",
     "typecheck": "tsc --noEmit",
@@ -22,7 +24,7 @@
     "test:release-env": "node --test scripts/release-env.test.cjs",
     "test:bridge": "node --test scripts/dev-api-bridge.test.cjs",
     "test:models": "node scripts/run-model-tests.cjs",
-    "test": "npm run test:config && npm run test:release-env && npm run test:bridge && npm run test:models",
+    "test": "npm run test:config && npm run test:release-env && npm run test:bridge && npm run test:audit && npm run test:models",
     "export:web": "node scripts/validate-release-env.cjs --release && expo export --platform web",
     "export:ci": "node scripts/validate-release-env.cjs --release && expo export --platform all"
   },

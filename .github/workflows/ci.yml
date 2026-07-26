@@ -41,7 +41,7 @@ jobs:
         run: npm ci
 
       - name: Reject critical dependency advisories
-        run: npm audit --audit-level=critical
+        run: npm run audit:critical
 
       - name: Check Expo dependency alignment
         run: npm run check:deps
