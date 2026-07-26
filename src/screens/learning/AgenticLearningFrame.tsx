@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { AuthLogoMark } from '../../components/ui'
+import { AuthLogoMark, MathText } from '../../components/ui'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
 
 export function AgenticHeader({ meta, pill, onBack }: { meta: string; pill?: string; onBack: () => void }) {
@@ -38,7 +38,7 @@ export function AgenticIntro({ kicker, title, subtitle }: { kicker: string; titl
     <View style={styles.intro}>
       <Text style={styles.kicker}>{kicker}</Text>
       <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {subtitle ? <MathText style={styles.subtitle} value={subtitle} /> : null}
     </View>
   )
 }

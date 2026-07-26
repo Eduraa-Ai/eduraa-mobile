@@ -4,14 +4,20 @@ import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetInfo } from '@react-native-community/netinfo'
-import { agenticLearningApi } from '../../api/agenticLearning'
+import { agenticFailureKind, agenticLearningApi } from '../../api/agenticLearning'
 import { getHttpStatus } from '../../api/queryReliability'
-import { AppScreen, ErrorState } from '../../components/ui'
+import { AppScreen, ErrorState, MathText } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { AgenticHeader, AgenticIntro, AgenticSectionHeader, AgenticSurface } from './AgenticLearningFrame'
 import { clampPercent, nextOpenTopic, topicStatusLabel } from './agenticLearningModel'
 
-type RouteParams = { topicId: string; topicName?: string; subjectName?: string }
+type RouteParams = {
+  topicId: string
+  topicName?: string
+  subjectName?: string
+  origin?: 'checked-paper'
+  checkedPaperId?: string
+}
 
 function StatTile({ value, label }: { value: string; label: string }) {
   return (
@@ -80,16 +86,18 @@ function LessonConnectionStatus({ failed, offline, loading, onRetry }: { failed:
   )
 }
 
-export default function AgenticTopicScreen() {
+function AgenticTopicContent() {
   const navigation = useNavigation<any>()
   const route = useRoute()
-  const { topicId, topicName, subjectName } = route.params as RouteParams
+  const { topicId, topicName, subjectName, origin, checkedPaperId } = route.params as RouteParams
   const netInfo = useNetInfo()
   const queryClient = useQueryClient()
   const topicQuery = useQuery({
     queryKey: ['agentic-topic', topicId],
     queryFn: ({ signal }) => agenticLearningApi.getTopic(topicId, signal),
-    refetchOnMount: 'always',
+    staleTime: 30 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
   })
   const topic = topicQuery.data
   const subtopicsQuery = useQuery({
@@ -108,11 +116,21 @@ export default function AgenticTopicScreen() {
       ])
     },
   })
+  const goBack = () => {
+    if (origin === 'checked-paper' && checkedPaperId) {
+      navigation.getParent()?.navigate('Results', {
+        screen: 'ResultDetail',
+        params: { checkedPaperId },
+      })
+      return
+    }
+    navigation.goBack()
+  }
 
   if (topicQuery.isLoading) {
     return (
       <AppScreen protectedChrome contentStyle={styles.screen}>
-        <AgenticHeader meta="Building concept lesson" pill="Repair" onBack={() => navigation.goBack()} />
+        <AgenticHeader meta="Building concept lesson" pill="Repair" onBack={goBack} />
         <AgenticIntro kicker="Concept repair" title="Preparing your lesson" subtitle="Connecting attempts, checked work, and repeated mistake evidence." />
         <View style={styles.loadingState}><ActivityIndicator color={colors.accent} /><View style={styles.skeletonHero} /><View style={styles.skeletonBody} /></View>
       </AppScreen>
@@ -122,18 +140,27 @@ export default function AgenticTopicScreen() {
   const isOffline = netInfo.isConnected === false || netInfo.isInternetReachable === false
   const status = getHttpStatus(topicQuery.error)
   const isGone = status === 404 || status === 410
+  const failureKind = agenticFailureKind(topicQuery.error)
 
   if (!topic) {
-    const title = isOffline ? 'Waiting for connection' : isGone ? 'Lesson no longer available' : 'Lesson refresh paused'
+    const title = isOffline
+      ? 'Waiting for connection'
+      : isGone
+        ? 'Lesson no longer available'
+        : failureKind === 'content'
+          ? 'Lesson content needs repair'
+          : 'Lesson service unavailable'
     const message = isOffline
       ? 'Your learning evidence is safe. This lesson will refresh automatically when you are back online.'
       : isGone
         ? 'This concept may have moved as your learning map changed. Return and choose the latest lesson.'
-        : 'Eduraa could not refresh the lesson. Your learning evidence and progress remain safely stored.'
+        : failureKind === 'content'
+          ? 'The lesson response was incomplete. Retry to rebuild it from your saved evidence.'
+          : 'Eduraa could not reach the lesson service. Your learning evidence and progress remain safely stored.'
 
     return (
       <AppScreen protectedChrome key={`concept-error-${topicId}`} contentStyle={styles.screen}>
-        <AgenticHeader meta={subjectName || 'Concept lesson'} pill={isOffline ? 'Offline' : 'Progress safe'} onBack={() => navigation.goBack()} />
+        <AgenticHeader meta={subjectName || 'Concept lesson'} pill={isOffline ? 'Offline' : 'Progress safe'} onBack={goBack} />
         <AgenticIntro kicker="Concept repair" title={topicName || 'Your concept lesson'} subtitle="Your place in this learning route is preserved." />
         <ErrorState
           kind={isOffline ? 'offline' : 'error'}
@@ -153,12 +180,12 @@ export default function AgenticTopicScreen() {
   const nextTopic = nextOpenTopic(subtopicsQuery.data ?? [], topic.topic_id)
   const curriculumMeta = [topic.curriculum_label, topic.chapter_title].filter(Boolean).join(' · ')
   const updateError = resolveMutation.isError ? 'The update did not reach Eduraa. Your current status is unchanged; try again.' : null
-  const showRefreshFailure = topicQuery.isError
+  const showRefreshFailure = topicQuery.isError || topicQuery.isRefetchError
 
   if (isResolved) {
     return (
       <AppScreen protectedChrome key={`resolved-concept-${topicId}-${showRefreshFailure ? 'recovery' : 'ready'}`} contentStyle={styles.screen}>
-        <AgenticHeader meta={curriculumMeta || topic.subject_name} pill="Resolved" onBack={() => navigation.goBack()} />
+        <AgenticHeader meta={curriculumMeta || topic.subject_name} pill="Resolved" onBack={goBack} />
         <AgenticIntro kicker="Loop closed" title="Concept resolved" />
         <LessonConnectionStatus failed={showRefreshFailure} offline={isOffline} loading={topicQuery.isFetching} onRetry={() => void topicQuery.refetch()} />
 
@@ -221,7 +248,7 @@ export default function AgenticTopicScreen() {
 
   return (
     <AppScreen protectedChrome key={`concept-lesson-${topicId}-${showRefreshFailure ? 'recovery' : 'ready'}`} contentStyle={styles.screen}>
-      <AgenticHeader meta={curriculumMeta || topic.subject_name} pill={topicStatusLabel({ status: topic.status, mastery_score: topic.mastery_score })} onBack={() => navigation.goBack()} />
+      <AgenticHeader meta={curriculumMeta || topic.subject_name} pill={topicStatusLabel({ status: topic.status, mastery_score: topic.mastery_score })} onBack={goBack} />
       <AgenticIntro kicker="Concept repair" title={topic.topic_name} subtitle={topic.summary} />
       <LessonConnectionStatus failed={showRefreshFailure} offline={isOffline} loading={topicQuery.isFetching} onRetry={() => void topicQuery.refetch()} />
 
@@ -240,8 +267,8 @@ export default function AgenticTopicScreen() {
 
       <AgenticSurface style={styles.coreCard}>
         <Text style={styles.cardKicker}>Core idea</Text>
-        <Text style={styles.coreText}>{topic.concept_explanation || topic.summary}</Text>
-        {topic.text_diagram ? <View style={styles.diagram}><Text style={styles.diagramText}>{topic.text_diagram}</Text></View> : null}
+        <MathText style={styles.coreText} value={topic.concept_explanation || topic.summary} />
+        {topic.text_diagram ? <View style={styles.diagram}><MathText style={styles.diagramText} value={topic.text_diagram} /></View> : null}
       </AgenticSurface>
 
       {(topic.memory_tips.length > 0 || topic.easy_ways_to_learn.length > 0) ? (
@@ -250,7 +277,7 @@ export default function AgenticTopicScreen() {
           {(topic.memory_tips.length ? topic.memory_tips : topic.easy_ways_to_learn).slice(0, 3).map((tip, index) => (
             <View key={`${index}-${tip}`} style={styles.anchorRow}>
               <View style={styles.anchorIcon}><Ionicons name="diamond" size={9} color={colors.info} /></View>
-              <Text style={styles.anchorText}>{tip}</Text>
+              <MathText style={styles.anchorText} value={tip} />
             </View>
           ))}
         </AgenticSurface>
@@ -265,7 +292,7 @@ export default function AgenticTopicScreen() {
           {topic.practice_questions.slice(0, 4).map((prompt, index) => (
             <View key={`${index}-${prompt}`} style={styles.practiceRow}>
               <View style={styles.practiceNumber}><Text style={styles.practiceNumberText}>{index + 1}</Text></View>
-              <Text style={styles.practiceText}>{prompt}</Text>
+              <MathText style={styles.practiceText} value={prompt} />
             </View>
           ))}
         </AgenticSurface>
@@ -274,13 +301,55 @@ export default function AgenticTopicScreen() {
       {topic.coach_note ? (
         <View style={styles.coachCard}>
           <View style={styles.coachIcon}><Ionicons name="school" size={17} color={colors.accentStrong} /></View>
-          <View style={styles.coachCopy}><Text style={styles.coachTitle}>Coach note</Text><Text style={styles.coachText}>{topic.coach_note}</Text></View>
+          <View style={styles.coachCopy}><Text style={styles.coachTitle}>Coach note</Text><MathText style={styles.coachText} value={topic.coach_note} /></View>
         </View>
       ) : null}
 
       {updateError ? <Text style={styles.inlineError}>{updateError}</Text> : null}
       <PrimaryAction label={resolveMutation.isPending ? 'Updating concept…' : 'Mark resolved'} loading={resolveMutation.isPending} onPress={() => resolveMutation.mutate(true)} />
     </AppScreen>
+  )
+}
+
+class AgenticLessonBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: unknown) {
+    console.warn('[AgenticLearning][rendering]', error)
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <AppScreen protectedChrome contentStyle={styles.screen}>
+        <AgenticIntro
+          kicker="Concept repair"
+          title="Lesson display paused"
+          subtitle="Your lesson is saved. Reload this view to render it again."
+        />
+        <ErrorState
+          title="Lesson rendering failed"
+          message="The lesson data is safe. Retry the display without creating another lesson request."
+          actionLabel="Retry display"
+          onAction={() => this.setState({ failed: false })}
+        />
+      </AppScreen>
+    )
+  }
+}
+
+export default function AgenticTopicScreen() {
+  return (
+    <AgenticLessonBoundary>
+      <AgenticTopicContent />
+    </AgenticLessonBoundary>
   )
 }
 

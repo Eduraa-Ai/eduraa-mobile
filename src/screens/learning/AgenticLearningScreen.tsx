@@ -1,7 +1,7 @@
 import React from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import Svg, { Circle } from 'react-native-svg'
 import { agenticLearningApi, AgenticLearningSubjectBucket } from '../../api/agenticLearning'
@@ -91,8 +91,22 @@ function HubSkeleton() {
 
 export default function AgenticLearningScreen() {
   const navigation = useNavigation<any>()
-  const subjectsQuery = useQuery({ queryKey: ['agentic-subjects'], queryFn: agenticLearningApi.getSubjects })
-  const quickActionsQuery = useQuery({ queryKey: ['agentic-quick-actions'], queryFn: agenticLearningApi.getQuickActions })
+  const route = useRoute()
+  const params = route.params as { origin?: 'checked-paper'; checkedPaperId?: string } | undefined
+  const subjectsQuery = useQuery({
+    queryKey: ['agentic-subjects'],
+    queryFn: agenticLearningApi.getSubjects,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
+  })
+  const quickActionsQuery = useQuery({
+    queryKey: ['agentic-quick-actions'],
+    queryFn: agenticLearningApi.getQuickActions,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
+  })
 
   const subjects = subjectsQuery.data ?? []
   const quickAction = priorityAction(quickActionsQuery.data ?? [])
@@ -108,29 +122,50 @@ export default function AgenticLearningScreen() {
         topicId: quickAction.target_topic_id,
         topicName: priorityTitle,
         subjectName: prioritySubject?.subject_name,
+        origin: params?.origin,
+        checkedPaperId: params?.checkedPaperId,
       })
       return
     }
     if (prioritySubject) navigation.navigate('AgenticSubject', { subjectId: prioritySubject.subject_id })
   }
+  const goBack = () => {
+    if (params?.origin === 'checked-paper' && params.checkedPaperId) {
+      navigation.getParent()?.navigate('Results', {
+        screen: 'ResultDetail',
+        params: { checkedPaperId: params.checkedPaperId },
+      })
+      return
+    }
+    navigation.navigate('LearningHome')
+  }
+  const hasCachedSubjects = subjects.length > 0
 
   return (
     <AppScreen protectedChrome contentStyle={styles.screen} refreshControl={undefined}>
-      <AgenticHeader meta="JEE Mains + Advanced" pill="Learn" onBack={() => navigation.navigate('LearningHome')} />
+      <AgenticHeader meta="JEE Mains + Advanced" pill="Learn" onBack={goBack} />
       <AgenticIntro
         kicker="Agentic learning"
         title={subjectsQuery.isLoading ? 'Building your learning map' : openCount > 0 ? `${openCount} concepts need work` : 'Your concept map is steady'}
         subtitle="Topic cards built from your attempts, checked papers, and repeated mistakes."
       />
 
-      {subjectsQuery.isLoading ? <HubSkeleton /> : null}
+      {subjectsQuery.isLoading && !hasCachedSubjects ? <HubSkeleton /> : null}
 
-      {subjectsQuery.isError ? (
+      {subjectsQuery.isError && !hasCachedSubjects ? (
         <ErrorState
           title="Learning map unavailable"
           message="Your existing progress is safe. Retry when the learning signal is available."
+          loading={subjectsQuery.isFetching || quickActionsQuery.isFetching}
           onAction={() => void Promise.all([subjectsQuery.refetch(), quickActionsQuery.refetch()])}
         />
+      ) : null}
+
+      {subjectsQuery.isRefetchError && hasCachedSubjects ? (
+        <View accessibilityRole="alert" style={styles.refreshNotice}>
+          <Ionicons name="cloud-offline-outline" size={15} color={colors.warning} />
+          <Text style={styles.refreshNoticeText}>Showing your saved learning map. Refresh will resume automatically.</Text>
+        </View>
       ) : null}
 
       {!subjectsQuery.isLoading && !subjectsQuery.isError && subjects.length === 0 ? (
@@ -141,7 +176,7 @@ export default function AgenticLearningScreen() {
         </AgenticSurface>
       ) : null}
 
-      {!subjectsQuery.isLoading && !subjectsQuery.isError && subjects.length > 0 ? (
+      {hasCachedSubjects ? (
         <>
           <Pressable
             accessibilityRole="button"
@@ -241,6 +276,24 @@ const styles = StyleSheet.create({
   skeletonStack: { gap: spacing[3] },
   skeletonHero: { height: 112, borderRadius: radius.xl, backgroundColor: colors.slate[200] },
   skeletonRow: { height: 86, borderRadius: radius.lg, backgroundColor: colors.slate[100], borderWidth: 1, borderColor: colors.borderSubtle },
+  refreshNotice: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    borderRadius: radius.md,
+    backgroundColor: colors.warningSurface,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    paddingHorizontal: spacing[3],
+  },
+  refreshNoticeText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 11,
+    lineHeight: 16,
+  },
   emptySurface: { alignItems: 'center', gap: spacing[3], paddingVertical: spacing[8] },
   emptyIcon: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
   emptyTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 19, textAlign: 'center' },

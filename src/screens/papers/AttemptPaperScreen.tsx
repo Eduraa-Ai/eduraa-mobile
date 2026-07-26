@@ -17,6 +17,7 @@ import { colors } from '../../theme/colors'
 import { spacing, radius, shadows } from '../../theme/spacing'
 import { typography } from '../../theme/typography'
 import type { AnswerEntry, MatchColumnsOptions, MCQOption, QuestionInPaper } from '../../types'
+import { MathText } from '../../components/ui'
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, 'AttemptPaper'>
 type Route = RouteProp<PapersStackParamList, 'AttemptPaper'>
@@ -567,7 +568,7 @@ export default function AttemptPaperScreen() {
             {q.visual_payload?.asset_url ? (
               <AuthenticatedQuestionImage uri={q.visual_payload.asset_url} alt={q.visual_payload.alt_text || `Diagram for question ${index + 1}`} />
             ) : null}
-            <Text style={styles.questionText}>{readableMathText(q.question_text)}</Text>
+            <MathText style={styles.questionText} value={q.question_text} />
 
             {q.question_type === 'mcq' && isMCQOptions(q.options) && (
               <View style={styles.mcqOptions}>
@@ -580,9 +581,7 @@ export default function AttemptPaperScreen() {
                     <Text style={[styles.mcqLabel, answers[q.id] === opt.id && styles.mcqLabelSelected]}>
                       {String.fromCharCode(65 + i)}
                     </Text>
-                    <Text style={[styles.mcqText, answers[q.id] === opt.id && styles.mcqTextSelected]}>
-                      {readableMathText(opt.text)}
-                    </Text>
+                    <MathText style={[styles.mcqText, answers[q.id] === opt.id && styles.mcqTextSelected]} value={opt.text} />
                     {answers[q.id] === opt.id ? <Ionicons name="checkmark-circle" size={18} color={colors.accent} /> : null}
                   </TouchableOpacity>
                 ))}
@@ -618,11 +617,11 @@ export default function AttemptPaperScreen() {
               <View style={styles.matchBox}>
                 <View style={styles.matchColumn}>
                   <Text style={styles.matchLabel}>Column A</Text>
-                  {q.options.left.map((item, itemIndex) => <Text key={`${item}-${itemIndex}`} style={styles.matchItem}>{itemIndex + 1}. {readableMathText(item)}</Text>)}
+                  {q.options.left.map((item, itemIndex) => <MathText key={`${item}-${itemIndex}`} style={styles.matchItem} value={`${itemIndex + 1}. ${item}`} />)}
                 </View>
                 <View style={styles.matchColumn}>
                   <Text style={styles.matchLabel}>Column B</Text>
-                  {q.options.right.map((item, itemIndex) => <Text key={`${item}-${itemIndex}`} style={styles.matchItem}>{String.fromCharCode(65 + itemIndex)}. {readableMathText(item)}</Text>)}
+                  {q.options.right.map((item, itemIndex) => <MathText key={`${item}-${itemIndex}`} style={styles.matchItem} value={`${String.fromCharCode(65 + itemIndex)}. ${item}`} />)}
                 </View>
                 <TextInput
                   style={styles.textInput}

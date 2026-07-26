@@ -17,6 +17,7 @@ import type { RouteProp } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import type { PapersStackParamList } from '../../navigation'
 import { papersApi } from '../../api/papers'
+import { MathText } from '../../components/ui'
 import { colors } from '../../theme/colors'
 import { spacing, radius, shadows } from '../../theme/spacing'
 
@@ -198,7 +199,7 @@ export default function PaperDetailScreen() {
                 </View>
               </View>
             </View>
-            <Text style={styles.questionText}>{q.question_text}</Text>
+            <MathText style={styles.questionText} value={q.question_text} />
             {q.options && Array.isArray(q.options) && (
               <View style={styles.optionsList}>
                 {(q.options as Array<{ id: string; text: string }>).map((opt, i) => (
@@ -206,7 +207,7 @@ export default function PaperDetailScreen() {
                     <View style={styles.optionLetter}>
                       <Text style={styles.optionLetterText}>{String.fromCharCode(65 + i)}</Text>
                     </View>
-                    <Text style={styles.optionText}>{opt.text}</Text>
+                    <MathText style={styles.optionText} value={opt.text} />
                   </View>
                 ))}
               </View>
