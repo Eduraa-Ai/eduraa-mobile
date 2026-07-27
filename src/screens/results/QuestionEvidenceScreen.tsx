@@ -38,6 +38,7 @@ import {
   readableMathText,
   type DetailedExplanationSection,
   type QuestionEvidenceTab,
+  type QuestionOptionContext,
   type QuestionReviewFigure,
   type QuestionReviewOption,
 } from './checkedPaperDetailModel'
@@ -265,6 +266,44 @@ function OptionRow({ option }: { option: QuestionReviewOption }) {
   )
 }
 
+function OptionContextNotice({
+  context,
+  isStaff,
+  onRetry,
+  onReport,
+}: {
+  context: QuestionOptionContext
+  isStaff: boolean
+  onRetry: () => void
+  onReport: () => void
+}) {
+  const unavailable = context.status === 'unavailable'
+  const title = unavailable ? 'Options unavailable' : 'Some options are unavailable'
+  const message = unavailable
+    ? 'The original answer choices were not included in this checked-paper result. No options have been inferred.'
+    : `This result includes ${context.actualCount} of ${context.expectedCount} original answer choices. The available options are shown without inventing the missing content.`
+
+  return (
+    <View accessibilityRole="alert" style={styles.missingContext}>
+      <Ionicons name="alert-circle-outline" size={22} color={colors.danger} />
+      <View style={styles.missingContextCopy}>
+        <Text style={styles.missingContextTitle}>{title}</Text>
+        <Text style={styles.missingContextText}>{message}</Text>
+      </View>
+      <View style={styles.optionContextActions}>
+        <Pressable accessibilityRole="button" onPress={onRetry} style={styles.inlineAction}>
+          <Text style={styles.inlineActionText}>Retry</Text>
+        </Pressable>
+        {!isStaff ? (
+          <Pressable accessibilityRole="button" onPress={onReport} style={styles.inlineAction}>
+            <Text style={styles.inlineActionText}>Report incomplete record</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  )
+}
+
 function ExplanationSection({ section }: { section: DetailedExplanationSection }) {
   return (
     <View style={styles.explanationSection}>
@@ -423,6 +462,11 @@ export default function QuestionEvidenceScreen() {
     setActiveTab('review')
   }
 
+  const reportMissingOptions = () => {
+    setReviewNote((current) => current || 'Some or all original answer options are missing from this reviewed question.')
+    setActiveTab('review')
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -554,6 +598,14 @@ export default function QuestionEvidenceScreen() {
                     >
                       {review.options.map((option) => <OptionRow key={option.key} option={option} />)}
                     </View>
+                  ) : null}
+                  {review.optionBased && (review.optionContext.status === 'partial' || review.optionContext.status === 'unavailable') ? (
+                    <OptionContextNotice
+                      context={review.optionContext}
+                      isStaff={isStaff}
+                      onRetry={() => void refetch()}
+                      onReport={reportMissingOptions}
+                    />
                   ) : null}
                 </View>
 
@@ -760,6 +812,7 @@ const styles = StyleSheet.create({
   missingContextText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15 },
   inlineAction: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing[2] },
   inlineActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  optionContextActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing[1] },
   optionRow: { width: '100%', minHeight: 54, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], backgroundColor: 'transparent' },
   optionExpected: { borderLeftWidth: 3, borderLeftColor: colors.success, paddingLeft: spacing[2], backgroundColor: colors.successSurface },
   optionSelected: { borderLeftWidth: 3, borderLeftColor: colors.accent, paddingLeft: spacing[2], backgroundColor: colors.accentSurface },
