@@ -36,7 +36,10 @@ import {
   isBookQuestionShortage,
   withBookMcqCount,
 } from "../../utils/bookPaperGeneration";
-import { parsePaperDuration } from "./generatePaperSettingsModel";
+import {
+  buildJeeFormPaperRequest,
+  parsePaperDuration,
+} from "./generatePaperSettingsModel";
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "GeneratePaper">;
 type Stage = 0 | 1 | 2;
@@ -106,6 +109,7 @@ type GenerateInput = {
     marks: number;
     subtopic?: string;
     title: string;
+    durationMinutes: number | null;
   };
 };
 
@@ -913,15 +917,9 @@ export default function GeneratePaperScreen() {
   const generateMutation = useMutation({
     mutationFn: async (input: GenerateInput) => {
       if (input.ai) {
-        const response = await papersApi.generateJeeFormPaper({
-          exam_type: input.ai.examType,
-          subject: input.ai.subject,
-          chapter_keys: input.ai.chapterKeys,
-          count: input.ai.count,
-          question_marks: input.ai.marks,
-          subtopic: input.ai.subtopic,
-          title: input.ai.title,
-        });
+        const response = await papersApi.generateJeeFormPaper(
+          buildJeeFormPaperRequest(input.ai, input.ai.durationMinutes),
+        );
         if (response.status === "failed") {
           throw new Error(
             response.error ||
@@ -1114,6 +1112,7 @@ export default function GeneratePaperScreen() {
               marks: marks.marks_per_mcq,
               subtopic: subtopicNames[0],
               title: effectivePaperName,
+              durationMinutes: durationResult.minutes,
             }
           : undefined,
     });

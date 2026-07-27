@@ -20,6 +20,7 @@ export function ProtectedContentImage({
   contentHeight = 150,
   errorHeight = 112,
   onLoadStateChange,
+  onNaturalSizeChange,
 }: {
   uri?: string | null
   accessibilityLabel: string
@@ -27,6 +28,7 @@ export function ProtectedContentImage({
   contentHeight?: number
   errorHeight?: number
   onLoadStateChange?: (state: ProtectedContentImageState) => void
+  onNaturalSizeChange?: (width: number, height: number) => void
 }) {
   const normalizedUri = useMemo(() => resolveAssetUrl(uri), [uri])
   const needsAuth = Boolean(normalizedUri && requiresApiAuthorization(normalizedUri, API_BASE_URL))
@@ -159,7 +161,10 @@ export function ProtectedContentImage({
         source={source}
         accessibilityLabel={accessibilityLabel}
         onLoadStart={markLoading}
-        onLoad={() => {
+        onLoad={({ nativeEvent }) => {
+          const width = nativeEvent.source?.width
+          const height = nativeEvent.source?.height
+          if (width && height) onNaturalSizeChange?.(width, height)
           setIsLoading(false)
           onLoadStateChange?.('loaded')
         }}

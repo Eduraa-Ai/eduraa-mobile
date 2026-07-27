@@ -4,7 +4,10 @@ const test = require('node:test')
 const modelPath = process.env.GENERATE_PAPER_SETTINGS_MODEL_PATH
 if (!modelPath) throw new Error('GENERATE_PAPER_SETTINGS_MODEL_PATH is required')
 
-const { parsePaperDuration } = require(modelPath)
+const {
+  buildJeeFormPaperRequest,
+  parsePaperDuration,
+} = require(modelPath)
 
 test('treats blank duration as no timer', () => {
   assert.deepEqual(parsePaperDuration('  '), {
@@ -27,4 +30,28 @@ test('rejects zero, decimals, negatives, and text', () => {
       error: 'Enter a positive whole number of minutes.',
     })
   }
+})
+
+test('preserves optional duration in AI paper requests', () => {
+  const input = {
+    examType: 'jee_mains',
+    subject: 'chemistry',
+    chapterKeys: ['12th::chemistry::solid-state'],
+    count: 5,
+    marks: 4,
+    subtopic: 'Crystal lattices',
+    title: 'Chemistry practice',
+  }
+
+  assert.deepEqual(buildJeeFormPaperRequest(input, null), {
+    exam_type: 'jee_mains',
+    subject: 'chemistry',
+    chapter_keys: ['12th::chemistry::solid-state'],
+    count: 5,
+    question_marks: 4,
+    subtopic: 'Crystal lattices',
+    title: 'Chemistry practice',
+    duration_minutes: null,
+  })
+  assert.equal(buildJeeFormPaperRequest(input, 45).duration_minutes, 45)
 })

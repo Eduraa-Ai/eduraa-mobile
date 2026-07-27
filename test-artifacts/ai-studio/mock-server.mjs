@@ -64,6 +64,7 @@ let previousPapersFailureCount = 0
 let previousCheckingPollCount = 0
 let paperDetailMode = 'checking'
 let paperDetailDeleted = false
+let questionVisualMode = 'ready'
 let examWorkspaceMode = 'ready'
 const examWorkspaceAudit = []
 
@@ -418,6 +419,21 @@ const buildPreviousAttemptPaper = (
         subject_name: question.subject,
         chapter_id: question.chapter_id,
         chapter_title: question.chapter_title,
+        ...(index === 0 ? {
+            visual_payload: {
+                kind: 'document_figure',
+                asset_url: '/api/v1/documents/visuals/electric-flux-cube.svg',
+                asset_urls: [
+                    '/api/v1/documents/visuals/electric-flux-cube.svg',
+                    '/api/v1/documents/visuals/gaussian-surface.svg',
+                ],
+                alt_text: 'Electric flux through a cube surrounding a point charge',
+                captions: [
+                    'Point charge at the centre of a cube',
+                    'Gaussian surface and outward flux',
+                ],
+            },
+        } : {}),
     })),
     }
 }
@@ -646,6 +662,13 @@ const server = http.createServer(async (request, response) => {
         return
     }
 
+    if (request.method === 'POST' && path === '/__test__/question-visual-mode') {
+        const payload = await readBody(request)
+        questionVisualMode = String(payload.mode || 'ready')
+        json(response, 200, { mode: questionVisualMode })
+        return
+    }
+
     if (request.method === 'POST' && path === '/api/v1/auth/login') {
         const payload = await readBody(request)
         const b2bExamJourney = String(payload.identifier || payload.email || '').includes('exam-b2b')
@@ -669,6 +692,52 @@ const server = http.createServer(async (request, response) => {
                 division: b2bExamJourney ? 'A' : undefined,
             },
         })
+        return
+    }
+
+    const visualMatch = path.match(/^\/api\/v1\/documents\/visuals\/(electric-flux-cube|gaussian-surface)\.svg$/)
+    if (request.method === 'GET' && visualMatch) {
+        if (!String(request.headers.authorization || '').startsWith('Bearer synthetic-')) {
+            json(response, 401, { detail: 'Synthetic visual requires authorization.' })
+            return
+        }
+        if (questionVisualMode === 'loading') {
+            await new Promise(resolve => setTimeout(resolve, 6000))
+        }
+        if (questionVisualMode === 'error') {
+            json(response, 503, { detail: 'Synthetic visual unavailable.' })
+            return
+        }
+        const isCube = visualMatch[1] === 'electric-flux-cube'
+        const svg = isCube
+            ? `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="620" viewBox="0 0 960 620">
+                <rect width="960" height="620" rx="32" fill="#f8f2e8"/>
+                <path d="M250 180 555 115l165 150-305 66zM250 180v245l165 82V331M720 265v240l-305 2" fill="none" stroke="#18243a" stroke-width="12" stroke-linejoin="round"/>
+                <circle cx="475" cy="311" r="42" fill="#f36c21"/>
+                <text x="475" y="324" text-anchor="middle" font-family="Arial" font-size="38" font-weight="700" fill="white">+q</text>
+                <path d="m475 250 0-75m65 99 80-48m-80 122 88 52m-153-27v86m-64-111-86 51m86-126-78-45" stroke="#a9401b" stroke-width="8" stroke-linecap="round"/>
+                <text x="480" y="565" text-anchor="middle" font-family="Arial" font-size="30" font-weight="600" fill="#18243a">Equal flux through six faces</text>
+              </svg>`
+            : `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="620" viewBox="0 0 960 620">
+                <rect width="960" height="620" rx="32" fill="#f8f2e8"/>
+                <ellipse cx="480" cy="305" rx="270" ry="195" fill="#dce9f3" stroke="#18243a" stroke-width="12" stroke-dasharray="22 14"/>
+                <circle cx="480" cy="305" r="40" fill="#f36c21"/>
+                <text x="480" y="318" text-anchor="middle" font-family="Arial" font-size="36" font-weight="700" fill="white">q</text>
+                ${[0, 45, 90, 135, 180, 225, 270, 315].map(angle => {
+                    const radians = angle * Math.PI / 180
+                    const x1 = 480 + Math.cos(radians) * 70
+                    const y1 = 305 + Math.sin(radians) * 70
+                    const x2 = 480 + Math.cos(radians) * 235
+                    const y2 = 305 + Math.sin(radians) * 165
+                    return `<path d="M${x1} ${y1}L${x2} ${y2}" stroke="#a9401b" stroke-width="8" stroke-linecap="round"/>`
+                }).join('')}
+                <text x="480" y="565" text-anchor="middle" font-family="Arial" font-size="30" font-weight="600" fill="#18243a">Closed Gaussian surface</text>
+              </svg>`
+        response.writeHead(200, {
+            'Content-Type': 'image/svg+xml',
+            'Cache-Control': 'no-store',
+        })
+        response.end(svg)
         return
     }
 
