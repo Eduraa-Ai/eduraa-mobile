@@ -9,6 +9,9 @@ coverage
 .env.production.local
 .env.development
 
+# Personal Codex automation
+.codex/skills/start-mobile/
+
 # OS / editor noise
 .DS_Store
 Thumbs.db
