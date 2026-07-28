@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +11,17 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { API_BASE_URL } from "../../api/client";
 import { colors, radius, spacing, typography } from "../../theme";
 import type { QuestionVisualPayload } from "../../types";
@@ -19,6 +29,7 @@ import {
   getQuestionVisualAssetUrls,
   resolveQuestionVisualUrl,
 } from "../../utils/questionVisual";
+import { ProtectedContentImage } from "./ProtectedContentImage";
 
 type QuestionVisualProps = {
   visual: QuestionVisualPayload;
@@ -41,75 +52,225 @@ function QuestionVisualAsset({
   style,
   containerStyle,
 }: QuestionVisualAssetProps) {
+  const { height, width } = useWindowDimensions();
+  const [imageState, setImageState] = useState<
+    "loading" | "loaded" | "error"
+  >("loading");
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const scale = useSharedValue(1);
+  const startingScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const startingX = useSharedValue(0);
+  const startingY = useSharedValue(0);
+  const inlineHeight = Math.max(176, Math.min(280, width * 0.58));
+  const viewerWidth = Math.max(1, width - spacing[8]);
+  const viewerImageHeight = Math.max(
+    220,
+    Math.min(height - 220, viewerWidth / aspectRatio),
+  );
 
-  useEffect(() => {
-    let active = true;
-    Image.getSize(
-      uri,
-      (width, height) => {
-        if (active && width > 0 && height > 0) setAspectRatio(width / height);
-      },
-      () => undefined,
-    );
-    return () => {
-      active = false;
-    };
-  }, [uri, retryKey]);
+  const resetZoom = useCallback(() => {
+    scale.value = withTiming(1);
+    translateX.value = withTiming(0);
+    translateY.value = withTiming(0);
+    setZoomLevel(1);
+  }, [scale, translateX, translateY]);
 
-  if (failed) {
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Retry question image"
-        onPress={() => {
-          setFailed(false);
-          setLoaded(false);
-          setRetryKey((current) => current + 1);
-        }}
-        style={[styles.state, containerStyle]}
-      >
-        <Ionicons name="image-outline" size={20} color={colors.textMuted} />
-        <Text style={styles.stateTitle}>Question image unavailable</Text>
-        <Text style={styles.stateAction}>Tap to retry</Text>
-      </Pressable>
-    );
-  }
+  const changeZoom = useCallback(
+    (next: number) => {
+      const clamped = Math.max(1, Math.min(4, next));
+      scale.value = withTiming(clamped);
+      if (clamped === 1) {
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+      }
+      setZoomLevel(clamped);
+    },
+    [scale, translateX, translateY],
+  );
+
+  const closeViewer = useCallback(() => {
+    setViewerVisible(false);
+    resetZoom();
+  }, [resetZoom]);
+
+  const pinchGesture = useMemo(
+    () =>
+      Gesture.Pinch()
+        .onBegin(() => {
+          startingScale.value = scale.value;
+        })
+        .onUpdate((event) => {
+          scale.value = Math.max(
+            1,
+            Math.min(4, startingScale.value * event.scale),
+          );
+        })
+        .onEnd(() => {
+          runOnJS(setZoomLevel)(Math.round(scale.value * 10) / 10);
+          if (scale.value <= 1.01) {
+            translateX.value = withTiming(0);
+            translateY.value = withTiming(0);
+          }
+        }),
+    [scale, startingScale, translateX, translateY],
+  );
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .onBegin(() => {
+          startingX.value = translateX.value;
+          startingY.value = translateY.value;
+        })
+        .onUpdate((event) => {
+          if (scale.value <= 1) return;
+          const limit = (scale.value - 1) * 160;
+          translateX.value = Math.max(
+            -limit,
+            Math.min(limit, startingX.value + event.translationX),
+          );
+          translateY.value = Math.max(
+            -limit,
+            Math.min(limit, startingY.value + event.translationY),
+          );
+        }),
+    [scale, startingX, startingY, translateX, translateY],
+  );
+
+  const viewerGesture = useMemo(
+    () => Gesture.Simultaneous(pinchGesture, panGesture),
+    [panGesture, pinchGesture],
+  );
+  const animatedImageStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   return (
     <View style={containerStyle}>
       <View style={styles.frame}>
-        {!loaded ? (
-          <View
-            accessibilityLabel="Loading question image"
-            style={styles.loadingState}
-          >
-            <ActivityIndicator color={colors.accent} />
-          </View>
-        ) : null}
-        <Image
-          key={`${uri}-${retryKey}`}
-          source={{ uri }}
+        <ProtectedContentImage
+          uri={uri}
           accessibilityLabel={alt}
-          resizeMode="contain"
-          onError={() => setFailed(true)}
-          onLoad={({ nativeEvent }) => {
-            const width = nativeEvent.source?.width;
-            const height = nativeEvent.source?.height;
-            if (width && height) setAspectRatio(width / height);
-            setLoaded(true);
-          }}
-          style={[
-            styles.image,
-            { aspectRatio, opacity: loaded ? 1 : 0 },
-            style,
-          ]}
+          contentHeight={inlineHeight}
+          errorHeight={144}
+          onLoadStateChange={setImageState}
+          onNaturalSizeChange={(naturalWidth, naturalHeight) =>
+            setAspectRatio(naturalWidth / naturalHeight)
+          }
+          style={[styles.image, style]}
         />
+        {imageState === "loaded" ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${alt} full screen`}
+            accessibilityHint="Opens a viewer where you can zoom and move around the figure."
+            onPress={() => {
+              resetZoom();
+              setViewerVisible(true);
+            }}
+            hitSlop={8}
+            style={styles.expandButton}
+          >
+            <Ionicons name="expand-outline" size={18} color={colors.white} />
+          </Pressable>
+        ) : null}
       </View>
       {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+
+      <Modal
+        visible={viewerVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeViewer}
+      >
+        <GestureHandlerRootView style={styles.viewerBackdrop}>
+          <View style={styles.viewerHeader}>
+            <View style={styles.viewerTitleGroup}>
+              <Text style={styles.viewerKicker}>Question figure</Text>
+              <Text style={styles.viewerTitle}>
+                Pinch or use the controls to inspect details.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close figure viewer"
+              onPress={closeViewer}
+              style={styles.viewerClose}
+            >
+              <Ionicons name="close" size={22} color={colors.white} />
+            </Pressable>
+          </View>
+
+          <View style={styles.viewerCanvas}>
+            <GestureDetector gesture={viewerGesture}>
+              <Animated.View
+                style={[styles.viewerFigure, animatedImageStyle]}
+              >
+                <ProtectedContentImage
+                  uri={uri}
+                  accessibilityLabel={alt}
+                  contentHeight={viewerImageHeight}
+                  errorHeight={144}
+                  style={styles.viewerImage}
+                />
+              </Animated.View>
+            </GestureDetector>
+          </View>
+
+          {caption ? (
+            <Text numberOfLines={2} style={styles.viewerCaption}>
+              {caption}
+            </Text>
+          ) : null}
+          <View style={styles.viewerControls}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Zoom out"
+              accessibilityState={{ disabled: zoomLevel <= 1 }}
+              disabled={zoomLevel <= 1}
+              onPress={() => changeZoom(zoomLevel - 0.5)}
+              style={[
+                styles.viewerControl,
+                zoomLevel <= 1 && styles.viewerControlDisabled,
+              ]}
+            >
+              <Ionicons name="remove" size={21} color={colors.white} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reset zoom"
+              onPress={resetZoom}
+              style={styles.viewerReset}
+            >
+              <Text style={styles.viewerResetText}>
+                {Math.round(zoomLevel * 100)}%
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Zoom in"
+              accessibilityState={{ disabled: zoomLevel >= 4 }}
+              disabled={zoomLevel >= 4}
+              onPress={() => changeZoom(zoomLevel + 0.5)}
+              style={[
+                styles.viewerControl,
+                zoomLevel >= 4 && styles.viewerControlDisabled,
+              ]}
+            >
+              <Ionicons name="add" size={21} color={colors.white} />
+            </Pressable>
+          </View>
+        </GestureHandlerRootView>
+      </Modal>
     </View>
   );
 }
@@ -178,38 +339,19 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     backgroundColor: colors.white,
   },
-  loadingState: {
-    ...StyleSheet.absoluteFillObject,
-    minHeight: 120,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   image: {
     width: "100%",
-    maxHeight: 360,
   },
-  state: {
-    width: "100%",
-    minHeight: 144,
+  expandButton: {
+    position: "absolute",
+    right: spacing[2],
+    bottom: spacing[2],
+    width: 42,
+    height: 42,
+    borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing[2],
-    padding: spacing[4],
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.backgroundMuted,
-  },
-  stateTitle: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-    textAlign: "center",
-  },
-  stateAction: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
+    backgroundColor: "rgba(7, 21, 45, 0.88)",
   },
   caption: {
     marginTop: spacing[1],
@@ -217,5 +359,94 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.body,
     fontSize: 11,
     lineHeight: 16,
+  },
+  viewerBackdrop: {
+    flex: 1,
+    paddingTop: spacing[8],
+    paddingBottom: spacing[6],
+    paddingHorizontal: spacing[4],
+    backgroundColor: "rgba(4, 12, 28, 0.98)",
+  },
+  viewerHeader: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+  },
+  viewerTitleGroup: {
+    flex: 1,
+  },
+  viewerKicker: {
+    color: colors.accent,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  viewerTitle: {
+    marginTop: spacing[1],
+    color: colors.white,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  viewerClose: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+  },
+  viewerCanvas: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  viewerFigure: {
+    width: "100%",
+  },
+  viewerImage: {
+    backgroundColor: colors.white,
+  },
+  viewerCaption: {
+    marginBottom: spacing[3],
+    color: "rgba(255, 255, 255, 0.72)",
+    fontFamily: typography.fonts.body,
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+  },
+  viewerControls: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[3],
+  },
+  viewerControl: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
+  },
+  viewerControlDisabled: {
+    opacity: 0.35,
+  },
+  viewerReset: {
+    minWidth: 78,
+    height: 48,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accentStrong,
+  },
+  viewerResetText: {
+    color: colors.white,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
   },
 });

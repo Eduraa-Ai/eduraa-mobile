@@ -5,6 +5,7 @@
 import apiClient from './client'
 import { normalizeStandardValue } from '../data/authOptions'
 import type { DownloadedPdf } from '../utils/pdfDownload'
+import { normalizeQuestionVisualPayload } from '../utils/questionVisual'
 import type {
   Paper,
   PaperListItem,
@@ -33,6 +34,17 @@ type JeeGenerateFormPaperResponse = {
   status: string
   failed_count?: number
   error?: string | null
+}
+
+export type JeeGenerateFormPaperRequest = {
+  exam_type: string
+  subject: string
+  chapter_keys: string[]
+  count: number
+  question_marks: number
+  subtopic?: string
+  title: string
+  duration_minutes: number | null
 }
 
 /**
@@ -65,6 +77,16 @@ function downloadFilename(contentDisposition: unknown, fallback: string) {
     }
   }
   return contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] || fallback
+}
+
+function normalizePaperQuestionVisuals(paper: Paper): Paper {
+  return {
+    ...paper,
+    questions: paper.questions.map((question) => ({
+      ...question,
+      visual_payload: normalizeQuestionVisualPayload(question),
+    })),
+  }
 }
 
 export const papersApi = {
@@ -104,7 +126,7 @@ export const papersApi = {
 
   generate: async (data: PaperGenerateRequest): Promise<Paper> => {
     const response = await apiClient.post<Paper>('/papers/generate', data)
-    return response.data
+    return normalizePaperQuestionVisuals(response.data)
   },
 
   getJeeSyllabus: async (params: { exam_type: string; subject: string }): Promise<JeeSyllabusResponse> => {
@@ -112,15 +134,9 @@ export const papersApi = {
     return response.data
   },
 
-  generateJeeFormPaper: async (data: {
-    exam_type: string
-    subject: string
-    chapter_keys: string[]
-    count: number
-    question_marks: number
-    subtopic?: string
-    title: string
-  }): Promise<JeeGenerateFormPaperResponse> => {
+  generateJeeFormPaper: async (
+    data: JeeGenerateFormPaperRequest,
+  ): Promise<JeeGenerateFormPaperResponse> => {
     const response = await apiClient.post<JeeGenerateFormPaperResponse>('/ai/jee/generate-form-paper', data, { timeout: 240000 })
     return response.data
   },
@@ -139,7 +155,7 @@ export const papersApi = {
 
   getById: async (paperId: string): Promise<Paper> => {
     const response = await apiClient.get<Paper>(`/papers/${paperId}`)
-    return response.data
+    return normalizePaperQuestionVisuals(response.data)
   },
 
   submit: async (paperId: string, data: PaperSubmissionCreate): Promise<PaperSubmissionRead> => {

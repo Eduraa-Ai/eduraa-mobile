@@ -3,6 +3,7 @@ import { normalizeMathContent } from '../../utils/mathContent'
 
 export type QuestionEvidenceTab = 'feedback' | 'details' | 'review'
 export type CheckedPaperQuestionStatus = 'correct' | 'wrong' | 'missed' | 'pending'
+export type QuestionOptionContextStatus = 'not_applicable' | 'complete' | 'partial' | 'unavailable'
 
 export const CHECKED_PAPER_POLL_INTERVAL_MS = 3000
 export const CHECKING_ESTIMATE_MS = 60 * 1000
@@ -13,6 +14,12 @@ export interface QuestionReviewOption {
   imageUrl: string | null
   selected: boolean
   expected: boolean
+}
+
+export interface QuestionOptionContext {
+  status: QuestionOptionContextStatus
+  expectedCount: number | null
+  actualCount: number
 }
 
 export interface QuestionReviewFigure {
@@ -384,6 +391,26 @@ export function normalizeQuestionOptions(item: GradingResultItem): QuestionRevie
   }))
 }
 
+function questionOptionContext(questionType: unknown, actualCount: number): QuestionOptionContext {
+  const normalizedType = normalizedToken(questionType).replace(/\s+/g, '_')
+  const expectedCount = normalizedType === 'mcq'
+    ? 4
+    : normalizedType === 'true_false'
+      ? 2
+      : null
+
+  if (expectedCount == null) {
+    return { status: 'not_applicable', expectedCount, actualCount }
+  }
+  if (actualCount === 0) {
+    return { status: 'unavailable', expectedCount, actualCount }
+  }
+  if (actualCount < expectedCount) {
+    return { status: 'partial', expectedCount, actualCount }
+  }
+  return { status: 'complete', expectedCount, actualCount }
+}
+
 export function buildDetailedExplanation(item: GradingResultItem): DetailedExplanationSection[] {
   const status = questionStatus(item)
   const unsuccessful = status === 'wrong' || status === 'missed'
@@ -416,12 +443,14 @@ export function buildQuestionReview(item: GradingResultItem) {
   const options = normalizeQuestionOptions(item)
   const questionFigure = normalizeQuestionFigure(item)
   const optionBased = ['mcq', 'true_false'].includes(normalizedToken(item.question_type).replace(/\s+/g, '_'))
+  const optionContext = questionOptionContext(item.question_type, options.length)
   return {
     questionText,
     contextAvailable: Boolean(questionText),
     questionFigure,
     optionBased,
     options,
+    optionContext,
     unanswered: !hasMeaningfulAnswer(responseValue),
     studentAnswer: answerDisplay(responseValue),
     expectedAnswer: answerDisplay(item.expected_answer),

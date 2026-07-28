@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const test = require('node:test')
 
 const modelPath = process.env.CHECKED_PAPER_DETAIL_MODEL_PATH
@@ -147,10 +149,12 @@ test('MCQ options match selected and expected keys without changing stored answe
       { id: 'A', text: 'Alpha' },
       { id: 'B', text: '$\\beta$' },
       { id: 'C', text: 'Gamma' },
+      { id: 'D', text: 'Delta' },
     ],
   })
   const review = model.buildQuestionReview(item)
-  assert.equal(review.options.length, 3)
+  assert.equal(review.options.length, 4)
+  assert.deepEqual(review.optionContext, { status: 'complete', expectedCount: 4, actualCount: 4 })
   assert.equal(review.options[1].selected, true)
   assert.equal(review.options[1].expected, false)
   assert.equal(review.options[2].selected, false)
@@ -162,11 +166,71 @@ test('unanswered MCQs have no selected option and preserve the expected option',
   const review = model.buildQuestionReview(question(1, 0, 1, {
     response: '',
     expected_answer: 'A',
-    options: [{ id: 'A', text: 'One' }, { id: 'B', text: 'Two' }],
+    options: [
+      { id: 'A', text: 'One' },
+      { id: 'B', text: 'Two' },
+      { id: 'C', text: 'Three' },
+      { id: 'D', text: 'Four' },
+    ],
   }))
   assert.equal(review.unanswered, true)
   assert.equal(review.options.some((option) => option.selected), false)
   assert.equal(review.options[0].expected, true)
+})
+
+test('missing and partial MCQ option payloads remain explicit without fabricating content', () => {
+  const missing = model.buildQuestionReview(question(1, 0, 1, {
+    options: null,
+  }))
+  assert.deepEqual(missing.options, [])
+  assert.deepEqual(missing.optionContext, { status: 'unavailable', expectedCount: 4, actualCount: 0 })
+
+  const partial = model.buildQuestionReview(question(1, 0, 1, {
+    options: [
+      { id: 'A', text: 'Alpha' },
+      { id: 'B', text: 'Beta' },
+      { id: 'C', text: 'Gamma' },
+    ],
+  }))
+  assert.deepEqual(partial.options.map((option) => option.key), ['A', 'B', 'C'])
+  assert.deepEqual(partial.optionContext, { status: 'partial', expectedCount: 4, actualCount: 3 })
+})
+
+test('true or false accepts two options and image-only MCQ options preserve complete context', () => {
+  const trueFalse = model.buildQuestionReview(question(1, 0, 1, {
+    question_type: 'true_false',
+    options: { A: 'True', B: 'False' },
+  }))
+  assert.deepEqual(trueFalse.optionContext, { status: 'complete', expectedCount: 2, actualCount: 2 })
+
+  const imageOnly = model.buildQuestionReview(question(1, 0, 1, {
+    options: [
+      { id: 'A', image_url: '/options/a.png' },
+      { id: 'B', visual_payload: { asset_url: '/options/b.png' } },
+      { id: 'C', asset_url: '/options/c.png' },
+      { id: 'D', image: '/options/d.png' },
+    ],
+  }))
+  assert.deepEqual(imageOnly.options.map((option) => option.imageUrl), [
+    '/options/a.png',
+    '/options/b.png',
+    '/options/c.png',
+    '/options/d.png',
+  ])
+  assert.deepEqual(imageOnly.optionContext, { status: 'complete', expectedCount: 4, actualCount: 4 })
+})
+
+test('question evidence renders a recoverable notice for incomplete option context', () => {
+  const source = fs.readFileSync(
+    path.join(process.cwd(), 'src/screens/results/QuestionEvidenceScreen.tsx'),
+    'utf8',
+  )
+  assert.match(source, /review\.optionContext\.status === 'partial'/)
+  assert.match(source, /review\.optionContext\.status === 'unavailable'/)
+  assert.match(source, /Options unavailable/)
+  assert.match(source, /Some options are unavailable/)
+  assert.match(source, /onRetry=\{\(\) => void refetch\(\)\}/)
+  assert.match(source, /Report incomplete record/)
 })
 
 test('legacy option containers still produce a complete question context', () => {
@@ -193,9 +257,12 @@ test('legacy option containers still produce a complete question context', () =>
     options: JSON.stringify([
       { id: 'A', text: 'Alpha' },
       { id: 'B', text: 'Beta' },
+      { id: 'C', text: 'Gamma' },
+      { id: 'D', text: 'Delta' },
     ]),
   }))
-  assert.equal(encoded.options.length, 2)
+  assert.equal(encoded.options.length, 4)
+  assert.equal(encoded.optionContext.status, 'complete')
 })
 
 test('question figures normalize current and legacy checked-paper payloads', () => {

@@ -3,6 +3,16 @@ export type PaperDurationResult = {
   error: string | null
 }
 
+export type AiPaperGenerationInput = {
+  examType: string
+  subject: string
+  chapterKeys: string[]
+  count: number
+  marks: number
+  subtopic?: string
+  title: string
+}
+
 const DURATION_ERROR = 'Enter a positive whole number of minutes.'
 
 export function parsePaperDuration(value: string): PaperDurationResult {
@@ -18,4 +28,20 @@ export function parsePaperDuration(value: string): PaperDurationResult {
   }
 
   return { minutes, error: null }
+}
+
+export function buildJeeFormPaperRequest(
+  input: AiPaperGenerationInput,
+  durationMinutes: number | null,
+) {
+  return {
+    exam_type: input.examType,
+    subject: input.subject,
+    chapter_keys: input.chapterKeys,
+    count: input.count,
+    question_marks: input.marks,
+    subtopic: input.subtopic,
+    title: input.title,
+    duration_minutes: durationMinutes,
+  }
 }

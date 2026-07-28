@@ -3,6 +3,7 @@ const test = require('node:test')
 
 const {
     getQuestionVisualAssetUrls,
+    normalizeQuestionVisualPayload,
     resolveQuestionVisualUrl,
     shouldShowQuestionStemText,
 } = require(process.env.QUESTION_VISUAL_MODEL_PATH)
@@ -55,5 +56,43 @@ test('hides crop OCR interactively but falls back when its image is missing', ()
             'interactive',
         ),
         true,
+    )
+})
+
+test('normalizes legacy generated-paper visual fields', () => {
+    assert.deepEqual(
+        normalizeQuestionVisualPayload({
+            question_visual: JSON.stringify({
+                image_urls: [
+                    '/api/v1/ai/jee/diagrams/first.png',
+                    '/api/v1/ai/jee/diagrams/second.png',
+                ],
+                caption: 'Two-part geometry diagram',
+            }),
+        }),
+        {
+            kind: 'generated_diagram',
+            asset_url: '/api/v1/ai/jee/diagrams/first.png',
+            asset_urls: [
+                '/api/v1/ai/jee/diagrams/first.png',
+                '/api/v1/ai/jee/diagrams/second.png',
+            ],
+            alt_text: 'Two-part geometry diagram',
+            captions: [],
+        },
+    )
+
+    assert.deepEqual(
+        normalizeQuestionVisualPayload({
+            question_image_url: '/api/v1/documents/visuals/legacy.png',
+            question_image_alt: 'Legacy textbook figure',
+        }),
+        {
+            kind: 'generated_diagram',
+            asset_url: '/api/v1/documents/visuals/legacy.png',
+            asset_urls: ['/api/v1/documents/visuals/legacy.png'],
+            alt_text: 'Legacy textbook figure',
+            captions: [],
+        },
     )
 })
