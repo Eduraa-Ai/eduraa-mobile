@@ -155,23 +155,17 @@ export default function LearningResourcesScreen() {
         )
       }
       const s = item.sheet
-      const title = (s.title || '').toLowerCase()
-      const summary = (s.payload?.scope_summary || '').toLowerCase()
-      const chapters = s.payload?.chapters || []
       return (
-        title.includes(query) ||
-        summary.includes(query) ||
-        chapters.some((c) => (c.chapter_title || '').toLowerCase().includes(query))
+        s.title.toLowerCase().includes(query) ||
+        s.payload.scope_summary.toLowerCase().includes(query) ||
+        s.payload.chapters.some((c) => c.chapter_title.toLowerCase().includes(query))
       )
     })
   }, [merged, filter, search])
 
   const trackLabel = user?.b2c_target_exam || user?.b2c_standard || user?.b2c_board || 'Your library'
   const isLoading = resourcesQuery.isLoading || cheatSheetsQuery.isLoading
-  const bothFailed = resourcesQuery.isError && cheatSheetsQuery.isError
-  const resourcesFailed = resourcesQuery.isError && !resourcesQuery.isLoading
-  const sheetsFailed = cheatSheetsQuery.isError && !cheatSheetsQuery.isLoading
-  const partialFailure = !bothFailed && (resourcesFailed || sheetsFailed)
+  const anyError = resourcesQuery.isError && cheatSheetsQuery.isError
 
   return (
     <AppScreen contentStyle={styles.screen}>
@@ -244,7 +238,7 @@ export default function LearningResourcesScreen() {
         </View>
       ) : null}
 
-      {!isLoading && bothFailed ? (
+      {!isLoading && anyError ? (
         <ErrorState
           title="Could not load your library"
           message="Refresh and try again."
@@ -255,32 +249,7 @@ export default function LearningResourcesScreen() {
         />
       ) : null}
 
-      {!isLoading && partialFailure ? (
-        <View style={styles.warningBanner}>
-          <Ionicons name="warning-outline" size={16} color={colors.warning} />
-          <View style={styles.warningCopy}>
-            <Text style={styles.warningTitle}>
-              {resourcesFailed ? "Reference resources didn't load" : "Cheat sheets didn't load"}
-            </Text>
-            <Text style={styles.warningBody} numberOfLines={2}>
-              You can still browse what's below — pull to refresh to try again.
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => {
-              if (resourcesFailed) void resourcesQuery.refetch()
-              if (sheetsFailed) void cheatSheetsQuery.refetch()
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Retry"
-          >
-            <Text style={styles.warningAction}>Retry</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {!isLoading && !bothFailed && filtered.length === 0 ? (
+      {!isLoading && !anyError && filtered.length === 0 ? (
         <AnimatedCard style={styles.emptyCard}>
           <View style={styles.emptyIcon}>
             <Ionicons name="sparkles-outline" size={20} color={colors.accentStrong} />
@@ -300,7 +269,7 @@ export default function LearningResourcesScreen() {
         </AnimatedCard>
       ) : null}
 
-      {!isLoading && !bothFailed ? (
+      {!isLoading && !anyError ? (
         <View style={styles.list}>
           {filtered.map((item) => {
             if (item.kind === 'resource') {
@@ -599,40 +568,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 11.5,
     lineHeight: 16,
-  },
-  warningBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    borderRadius: radius.md,
-    backgroundColor: colors.warningSurface,
-    borderWidth: 1,
-    borderColor: '#f6dcae',
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[3],
-  },
-  warningCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  warningTitle: {
-    color: colors.warning,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12.5,
-  },
-  warningBody: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 11.5,
-    lineHeight: 15,
-  },
-  warningAction: {
-    color: colors.warning,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[1],
   },
   emptyCard: {
     padding: spacing[5],

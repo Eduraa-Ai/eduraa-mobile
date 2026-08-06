@@ -91,14 +91,7 @@ export type LearningStackParamList = {
   LearningResources: undefined
   LearningResourceDetail: { resourceId: string }
   CheatSheetDetail: { cheatSheetId: string }
-  StudyPack: {
-    subject?: string
-    chapter?: string
-    standard?: '11th' | '12th'
-    subjectId?: string | null
-    chapterId?: string | null
-    trackLabel?: string
-  }
+  StudyPack: { subject?: string; chapter?: string; standard?: '11th' | '12th' }
   Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
