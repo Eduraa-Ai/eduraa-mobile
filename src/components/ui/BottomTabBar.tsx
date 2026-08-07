@@ -23,6 +23,8 @@ const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   Papers: 'document-text-outline',
   Results: 'bar-chart-outline',
   PreviousPapers: 'documents-outline',
+  LearningResources: 'book-outline',
+  CheatSheets: 'reader-outline',
   ScanUpload: 'scan-outline',
   Attendance: 'today-outline',
   AIStudio: 'sparkles-outline',
