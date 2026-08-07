@@ -376,15 +376,15 @@ function PdfPageViewerModal({
 }) {
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
-
-  if (!resource) return null
-  const pageCount = resource.page_count ?? 0
-  const assetId = resource.original_asset_id ?? null
-  const canRenderPages = pageCount > 0 && Boolean(assetId)
+  const pageCount = resource?.page_count ?? 0
+  const assetId = resource?.original_asset_id ?? null
   const pages = useMemo(
     () => Array.from({ length: pageCount }, (_, i) => i + 1),
     [pageCount],
   )
+
+  if (!resource) return null
+  const canRenderPages = pageCount > 0 && Boolean(assetId)
   const contentWidth = Math.min(width - spacing[4] * 2, 720)
   const pageHeight = Math.round(contentWidth * 1.414) // A4 aspect ratio
 

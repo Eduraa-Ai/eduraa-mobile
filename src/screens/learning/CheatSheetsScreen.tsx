@@ -44,7 +44,30 @@ const DOWNLOAD_ERROR = 'Unable to download this PDF.'
 const PAGE_ERROR = 'Unable to load this page.'
 
 // Web uses fixed order: Full Cheat Sheet | Physics | Chemistry | Mathematics.
-const SUBJECT_ORDER = ['Full Cheat Sheet', 'Physics', 'Chemistry', 'Mathematics']
+const FULL_CHEAT_SHEET_SUBJECT = 'Full Cheat Sheet'
+const SUBJECT_ORDER = [
+  FULL_CHEAT_SHEET_SUBJECT,
+  'Physics',
+  'Chemistry',
+  'Mathematics',
+]
+
+function normalizeKey(value: string | null | undefined) {
+  return String(value || '').trim().toLocaleLowerCase()
+}
+
+// Match the web's normalizeSubject exactly. Resources without a subject_name
+// (or with "full"/"master" in the name) fold into "Full Cheat Sheet" so no
+// resource is silently dropped.
+function normalizeSubject(value: string | null | undefined) {
+  const subject = String(value || 'General').trim()
+  const key = normalizeKey(subject)
+  if (key.includes('full') || key.includes('master')) return FULL_CHEAT_SHEET_SUBJECT
+  if (key.includes('physics')) return 'Physics'
+  if (key.includes('chem')) return 'Chemistry'
+  if (key.includes('math')) return 'Mathematics'
+  return subject || 'General'
+}
 
 function formatLabel(value: string) {
   return value
@@ -71,11 +94,18 @@ function orderSubjects(subjects: string[]): string[] {
   return [...ordered, ...Array.from(set).sort()]
 }
 
+// Web: getChapters — only 'chapter' node_type, trimmed and non-empty.
 function scopeChapters(resource: LearningResource): string[] {
   const names = resource.scopes
+    .filter((s) => s.node_type === 'chapter')
     .map((s) => (s.node_name || '').trim())
     .filter((s): s is string => Boolean(s))
   return Array.from(new Set(names))
+}
+
+function isResourceInChapter(resource: LearningResource, chapter: string) {
+  const key = normalizeKey(chapter)
+  return scopeChapters(resource).some((c) => normalizeKey(c) === key)
 }
 
 export default function CheatSheetsScreen() {
@@ -96,48 +126,37 @@ export default function CheatSheetsScreen() {
 
   const resources = listQuery.data?.items ?? []
 
-  // Cheat sheets are the subset of resources whose type is a cheat sheet.
-  const cheatSheets = useMemo(
-    () =>
-      resources.filter((r) =>
-        r.resource_type.toLowerCase().includes('cheat'),
-      ),
-    [resources],
-  )
+  // Web parity: NO resource_type prefilter. Every resource returned by the
+  // API is a candidate; the subject/chapter picker is the only filter. This
+  // matches StudentCheatSheets.tsx which never inspects resource_type.
+  const resourcesByBucket = useMemo(() => {
+    const map = new Map<string, LearningResource[]>()
+    for (const r of resources) {
+      const bucket = normalizeSubject(r.subject_name)
+      const bucketList = map.get(bucket)
+      if (bucketList) bucketList.push(r)
+      else map.set(bucket, [r])
+    }
+    return map
+  }, [resources])
 
   const subjects = useMemo(
-    () =>
-      orderSubjects(
-        Array.from(
-          new Set(
-            cheatSheets
-              .map((r) => (r.subject_name || '').trim())
-              .filter((v): v is string => Boolean(v)),
-          ),
-        ),
-      ),
-    [cheatSheets],
+    () => orderSubjects(Array.from(resourcesByBucket.keys())),
+    [resourcesByBucket],
   )
 
   const chapters = useMemo(() => {
     if (!subject) return []
-    return Array.from(
-      new Set(
-        cheatSheets
-          .filter((r) => r.subject_name === subject)
-          .flatMap(scopeChapters),
-      ),
-    ).sort()
-  }, [cheatSheets, subject])
+    const bucketResources = resourcesByBucket.get(subject) ?? []
+    return Array.from(new Set(bucketResources.flatMap(scopeChapters))).sort()
+  }, [resourcesByBucket, subject])
 
   const sheetsForChapter = useMemo(() => {
     if (!subject) return []
-    return cheatSheets.filter((r) => {
-      if (r.subject_name !== subject) return false
-      if (!chapter) return true
-      return scopeChapters(r).includes(chapter)
-    })
-  }, [cheatSheets, subject, chapter])
+    const bucketResources = resourcesByBucket.get(subject) ?? []
+    if (!chapter) return bucketResources
+    return bucketResources.filter((r) => isResourceInChapter(r, chapter))
+  }, [resourcesByBucket, subject, chapter])
 
   // Auto-select first subject on first load.
   useEffect(() => {
@@ -487,15 +506,15 @@ function SheetViewerModal({
 }) {
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
-
-  if (!resource) return null
-  const pageCount = resource.page_count ?? 0
-  const assetId = resource.original_asset_id ?? null
-  const canRenderPages = pageCount > 0 && Boolean(assetId)
+  const pageCount = resource?.page_count ?? 0
+  const assetId = resource?.original_asset_id ?? null
   const pages = useMemo(
     () => Array.from({ length: pageCount }, (_, i) => i + 1),
     [pageCount],
   )
+
+  if (!resource) return null
+  const canRenderPages = pageCount > 0 && Boolean(assetId)
   const contentWidth = Math.min(width - spacing[4] * 2, 720)
   const pageHeight = Math.round(contentWidth * 1.414)
 
