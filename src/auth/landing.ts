@@ -47,6 +47,17 @@ export function isPreviousPapersEligible(user?: AccountMinimal | null) {
     .includes('jee')
 }
 
+// Both Learning Resources and Cheat Sheets are shown to any competitive-exam
+// b2c student. Web navLinks: requiresCompetitiveExam: true, no requiresJee.
+export function isLearningResourcesEligible(user?: AccountMinimal | null) {
+  if (user?.role !== 'b2c_student') return false
+  return COMPETITIVE_EXAM_LEVELS.has(String(user.b2c_education_level ?? '').trim())
+}
+
+export function isCheatSheetsEligible(user?: AccountMinimal | null) {
+  return isLearningResourcesEligible(user)
+}
+
 export function resolveMobileLanding(user: AccountMinimal): MobileLanding {
   if (user.role === 'b2c_student' && user.profile_completed === false) {
     return 'b2c_onboarding'

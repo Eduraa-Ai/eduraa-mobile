@@ -10,7 +10,12 @@ import { colors } from '../theme/colors'
 import { fonts } from '../theme/fonts'
 import { spacing } from '../theme/spacing'
 import type { AccountMinimal, AuthToken } from '../types'
-import { isPreviousPapersEligible, resolveMobileLanding } from '../auth/landing'
+import {
+  isCheatSheetsEligible,
+  isLearningResourcesEligible,
+  isPreviousPapersEligible,
+  resolveMobileLanding,
+} from '../auth/landing'
 
 import LoginScreen from '../screens/auth/LoginScreen'
 import RegisterScreen from '../screens/auth/RegisterScreen'
@@ -36,9 +41,7 @@ import AgenticSubjectScreen from '../screens/learning/AgenticSubjectScreen'
 import AgenticTopicScreen from '../screens/learning/AgenticTopicScreen'
 import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
 import LearningResourcesScreen from '../screens/learning/LearningResourcesScreen'
-import LearningResourceDetailScreen from '../screens/learning/LearningResourceDetailScreen'
-import CheatSheetDetailScreen from '../screens/learning/CheatSheetDetailScreen'
-import StudyPackScreen from '../screens/learning/StudyPackScreen'
+import CheatSheetsScreen from '../screens/learning/CheatSheetsScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
 import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
@@ -88,17 +91,6 @@ export type LearningStackParamList = {
   AgenticLearning: { origin?: 'checked-paper'; checkedPaperId?: string } | undefined
   AgenticSubject: { subjectId: string }
   AgenticTopic: { topicId: string; topicName?: string; subjectName?: string; origin?: 'checked-paper'; checkedPaperId?: string }
-  LearningResources: undefined
-  LearningResourceDetail: { resourceId: string }
-  CheatSheetDetail: { cheatSheetId: string }
-  StudyPack: {
-    subject?: string
-    chapter?: string
-    standard?: '11th' | '12th'
-    subjectId?: string | null
-    chapterId?: string | null
-    trackLabel?: string
-  }
   Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
@@ -137,6 +129,8 @@ export type TabParamList = {
   Results: NavigatorScreenParams<ResultsStackParamList> | undefined
   Profile: undefined
   PreviousPapers: undefined
+  LearningResources: undefined
+  CheatSheets: undefined
 }
 
 export type StaffTabParamList = {
@@ -282,10 +276,6 @@ function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
       <LearningStack.Screen name="AgenticLearning" component={AgenticLearningScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ headerShown: false }} />
-      <LearningStack.Screen name="LearningResources" component={LearningResourcesScreen} options={{ title: 'Learning resources' }} />
-      <LearningStack.Screen name="LearningResourceDetail" component={LearningResourceDetailScreen} options={{ title: 'Resource' }} />
-      <LearningStack.Screen name="CheatSheetDetail" component={CheatSheetDetailScreen} options={{ title: 'Cheat sheet' }} />
-      <LearningStack.Screen name="StudyPack" component={StudyPackScreen} options={{ title: 'Study pack' }} />
       <LearningStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <LearningStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
@@ -311,9 +301,13 @@ function ProfileNavigator() {
 function StudentTabs({
   competitive = false,
   previousPapersEligible = false,
+  learningResourcesEligible = false,
+  cheatSheetsEligible = false,
 }: {
   competitive?: boolean
   previousPapersEligible?: boolean
+  learningResourcesEligible?: boolean
+  cheatSheetsEligible?: boolean
 }) {
   return (
     <Tab.Navigator
@@ -337,6 +331,20 @@ function StudentTabs({
           name="PreviousPapers"
           component={PreviousPapersScreen}
           options={{ title: 'Previous', tabBarAccessibilityLabel: 'Previous-year JEE papers' }}
+        />
+      ) : null}
+      {learningResourcesEligible ? (
+        <Tab.Screen
+          name="LearningResources"
+          component={LearningResourcesScreen}
+          options={{ title: 'Resources', tabBarAccessibilityLabel: 'Learning resources' }}
+        />
+      ) : null}
+      {cheatSheetsEligible ? (
+        <Tab.Screen
+          name="CheatSheets"
+          component={CheatSheetsScreen}
+          options={{ title: 'Cheat sheets', tabBarAccessibilityLabel: 'Cheat sheets' }}
         />
       ) : null}
     </Tab.Navigator>
@@ -481,7 +489,14 @@ function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
   const landing = resolveMobileLanding(user)
   if (landing === 'b2c_onboarding') return <OnboardingNavigator />
   if (landing === 'competitive_learner') {
-    return <StudentTabs competitive previousPapersEligible={isPreviousPapersEligible(user)} />
+    return (
+      <StudentTabs
+        competitive
+        previousPapersEligible={isPreviousPapersEligible(user)}
+        learningResourcesEligible={isLearningResourcesEligible(user)}
+        cheatSheetsEligible={isCheatSheetsEligible(user)}
+      />
+    )
   }
   if (landing === 'school_learner') return <StudentTabs />
   if (landing === 'admin_workspace') return <StaffTabs />

@@ -6,7 +6,7 @@ import { AppScreen } from '../../components/ui'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 
-type LearningDestination = 'AgenticLearning' | 'CompetitiveExam' | 'LearningResources' | 'Exams'
+type LearningDestination = 'AgenticLearning' | 'CompetitiveExam' | 'Exams'
 
 interface LearningTile {
   title: string
@@ -34,14 +34,6 @@ const tiles: LearningTile[] = [
     icon: 'book',
     color: colors.warning,
     destination: 'CompetitiveExam',
-  },
-  {
-    title: 'Learning resources',
-    meta: 'Library',
-    body: 'Formula sheets, reference books, AI cheat sheets and study packs in one place.',
-    icon: 'reader',
-    color: colors.info,
-    destination: 'LearningResources',
   },
   {
     title: 'Exams',
