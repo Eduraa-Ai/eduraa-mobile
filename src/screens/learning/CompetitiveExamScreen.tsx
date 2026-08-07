@@ -173,10 +173,6 @@ export default function CompetitiveExamScreen() {
           <Text style={styles.sectionKicker}>Published revision library</Text>
           <Text style={styles.sectionTitle}>Quick revision resources</Text>
         </View>
-        <Pressable onPress={() => navigation.navigate('LearningResources')} hitSlop={8} style={({ pressed }) => [styles.libraryLink, pressed && styles.libraryLinkPressed]}>
-          <Text style={styles.libraryLinkText}>Open library</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.accentStrong} />
-        </Pressable>
       </View>
 
       <View style={styles.chipRow}>
@@ -418,27 +414,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing[2],
-  },
-  libraryLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: spacing[3],
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.accentSurface,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
-  },
-  libraryLinkPressed: {
-    transform: [{ scale: 0.97 }],
-    opacity: 0.9,
-  },
-  libraryLinkText: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    letterSpacing: 0.4,
   },
   inlineLoading: {
     flexDirection: 'row',
