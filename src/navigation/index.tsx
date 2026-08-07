@@ -84,7 +84,6 @@ export type LearningStackParamList = {
   AgenticLearning: { origin?: 'checked-paper'; checkedPaperId?: string } | undefined
   AgenticSubject: { subjectId: string }
   AgenticTopic: { topicId: string; topicName?: string; subjectName?: string; origin?: 'checked-paper'; checkedPaperId?: string }
-  PreviousPapers: undefined
   Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
@@ -268,7 +267,6 @@ function LearningNavigator({ competitive = false }: { competitive?: boolean }) {
       <LearningStack.Screen name="AgenticLearning" component={AgenticLearningScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} options={{ headerShown: false }} />
       <LearningStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ headerShown: false }} />
-      <LearningStack.Screen name="PreviousPapers" component={PreviousPapersScreen} options={{ title: 'Previous papers' }} />
       <LearningStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <LearningStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <LearningStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
