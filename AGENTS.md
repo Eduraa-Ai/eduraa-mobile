@@ -2,6 +2,8 @@
 
 For every task within this mobile application, use the repository-local `eduraa-mobile-class-apart` skill at `.codex/skills/eduraa-mobile-class-apart/SKILL.md` as the primary product, UI/UX, implementation, and quality workflow.
 
+When the user says `StartMobile`, asks to use the StartMobile skill, or requests the app on localhost and Expo Go with a fresh QR, use the repository-local `start-mobile` skill at `.codex/skills/start-mobile/SKILL.md`.
+
 When a user asks to implement, build, match, finish, or refine a React Native page or feature represented in `design-mocks/main-html-whole-workflow.html`, also use the repository-local `eduraa-wireframe-row-implementer` skill at `.codex/skills/eduraa-wireframe-row-implementer/SKILL.md`. It defines how to resolve the named page to its complete feature row and how to implement, test with synthetic data, repair, render, and independently review that row.
 
 Do not use mandatory “User Problem,” “Root Cause,” “Files Likely Involved,” or similar ceremonial pre-coding headings. Communicate the intended experience, important decisions, progress, testing, and remaining uncertainty naturally and concisely.

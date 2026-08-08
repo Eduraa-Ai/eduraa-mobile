@@ -29,6 +29,7 @@ import type { RouteProp } from "@react-navigation/native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { PapersStackParamList } from "../../navigation";
+import { navigateToCheckedPapers } from "../../navigation/paperResultsNavigation";
 import { papersApi } from "../../api/papers";
 import { useAuthStore } from "../../stores/authStore";
 import { colors } from "../../theme/colors";
@@ -713,18 +714,26 @@ export default function AttemptPaperScreen() {
   };
 
   useEffect(() => {
+    if (!isFocused) return
     submittedResultOpeningRef.current = false
     setIsOpeningSubmittedResult(false)
-  }, [submitOutcome?.submissionId])
+  }, [isFocused, submitOutcome?.submissionId])
 
   const openSubmittedResult = () => {
     if (!submitOutcome?.submissionId || submittedResultOpeningRef.current) return
+    const didNavigate = navigateToCheckedPapers(navigation, submitOutcome.submissionId)
+    if (!didNavigate) {
+      setAttemptAgainError('Checked papers could not open. Please return to Papers and try again.')
+      return
+    }
     submittedResultOpeningRef.current = true
     setIsOpeningSubmittedResult(true)
-    navigation.getParent()?.navigate("Results", {
-      screen: "ResultDetail",
-      params: { checkedPaperId: submitOutcome.submissionId },
-    })
+  }
+
+  const openCheckedPapers = () => {
+    if (!navigateToCheckedPapers(navigation)) {
+      setAttemptAgainError('Checked papers could not open. Please return to Papers and try again.')
+    }
   }
 
   const formatTime = (secs: number) => {
@@ -1167,6 +1176,23 @@ export default function AttemptPaperScreen() {
                 </>
               )}
             </View>
+            {submitOutcome.kind !== "error" ? (
+              <Pressable
+                onPress={openCheckedPapers}
+                style={({ pressed }) => [
+                  styles.checkedPapersLink,
+                  pressed && styles.checkedPapersLinkPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Open checked papers"
+              >
+                <View style={styles.checkedPapersLinkLabel}>
+                  <Ionicons name="library-outline" size={18} color={colors.nav} />
+                  <Text style={styles.checkedPapersLinkText}>Open checked papers</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={17} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
           </View>
         </View>
       ) : null}
@@ -1746,6 +1772,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing[3],
     marginTop: spacing[2],
+  },
+  checkedPapersLink: {
+    minHeight: 52,
+    marginTop: spacing[3],
+    paddingHorizontal: spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 12,
+  },
+  checkedPapersLinkPressed: {
+    backgroundColor: colors.backgroundMuted,
+  },
+  checkedPapersLinkLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  checkedPapersLinkText: {
+    color: colors.nav,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
   },
   submitCancelButton: {
     flex: 1,

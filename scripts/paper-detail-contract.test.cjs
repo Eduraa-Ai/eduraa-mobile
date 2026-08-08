@@ -8,6 +8,8 @@ const detailSource = fs.readFileSync(path.join(root, 'src/screens/papers/PaperDe
 const attemptSource = fs.readFileSync(path.join(root, 'src/screens/papers/AttemptPaperScreen.tsx'), 'utf8')
 const listSource = fs.readFileSync(path.join(root, 'src/screens/papers/PapersScreen.tsx'), 'utf8')
 const apiSource = fs.readFileSync(path.join(root, 'src/api/papers.ts'), 'utf8')
+const resultDetailSource = fs.readFileSync(path.join(root, 'src/screens/results/ResultDetailScreen.tsx'), 'utf8')
+const resultsNavigationSource = fs.readFileSync(path.join(root, 'src/navigation/paperResultsNavigation.ts'), 'utf8')
 
 test('paper detail keeps retest, download, and owned-paper delete in the top-right action area', () => {
   assert.match(detailSource, /headerRight/)
@@ -38,4 +40,13 @@ test('result and fresh-attempt actions are explicit rather than conflated', () =
   assert.match(detailSource, /View Results/)
   assert.match(detailSource, /Retest/)
   assert.match(detailSource, /reason: 'retest'/)
+})
+
+test('submitted papers can always leave for learner or staff checked papers', () => {
+  assert.match(resultsNavigationSource, /names\.includes\('Results'\)/)
+  assert.match(resultsNavigationSource, /names\.includes\('StaffResults'\)/)
+  assert.match(attemptSource, /Open checked papers/)
+  assert.match(attemptSource, /navigateToCheckedPapers\(navigation, submitOutcome\.submissionId\)/)
+  assert.match(detailSource, /navigateToCheckedPapers\(navigation, submittedAttempt\.id\)/)
+  assert.match(resultDetailSource, /const goBack = \(\) => navigation\.navigate\('ResultsList'\)/)
 })
