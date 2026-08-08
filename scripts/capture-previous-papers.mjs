@@ -112,6 +112,27 @@ async function clickByText(session, text, { allowFirst = false } = {}) {
   await sleep(300)
 }
 
+async function pressByText(session, text) {
+  const point = await evaluate(session, `(() => {
+    const expected = ${JSON.stringify(text)};
+    const target = [...document.querySelectorAll('[role="button"], button, [tabindex="0"]')]
+      .find((item) => (item.innerText || item.textContent || '').trim().replace(/\\s+/g, ' ').includes(expected));
+    if (!target) return null;
+    const rect = target.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`)
+  if (!point) throw new Error(`Could not find button containing "${text}".`)
+  await session.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y })
+  await session.call('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+  await sleep(150)
+  return point
+}
+
+async function releasePress(session, point) {
+  await session.call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+  await sleep(350)
+}
+
 async function clickByAriaLabel(session, label) {
   const clicked = await evaluate(
     session,
@@ -189,6 +210,17 @@ async function setViewport(session, width, height) {
     screenHeight: height,
   })
   await sleep(300)
+}
+
+async function setFontScale(session, scale) {
+  await evaluate(session, `(() => {
+    for (const item of document.querySelectorAll('[dir="auto"]')) {
+      const style = getComputedStyle(item);
+      item.style.fontSize = Math.round(parseFloat(style.fontSize) * ${scale} * 10) / 10 + 'px';
+      if (style.lineHeight.endsWith('px')) item.style.lineHeight = Math.round(parseFloat(style.lineHeight) * ${scale} * 10) / 10 + 'px';
+    }
+  })()`)
+  await sleep(350)
 }
 
 async function capture(session, fileName) {
@@ -475,20 +507,43 @@ try {
   )
   if (timerVisible) throw new Error('Untimed previous-paper attempt rendered a countdown timer.')
 
-  await clickByText(session, 'B', { allowFirst: true })
-  await waitForText(session, '0/3 answered')
-  await waitForText(session, '0/3 complete')
-  await capture(session, '14b-selected-option-cleared-390x844.png')
-  await clickByText(session, 'B', { allowFirst: true })
+  const hasResumedAnswer = await evaluate(
+    session,
+    `document.body?.innerText?.includes('1/3 answered')`,
+  )
+  if (!hasResumedAnswer) {
+    await clickByText(session, 'B', { allowFirst: true })
+  }
   await waitForText(session, '1/3 answered')
+  await capture(session, '14b-answer-ready-390x844.png')
 
   await clickByText(session, 'Submit')
   await waitForText(session, 'Ready to submit?')
   await longPressByText(session, 'Hold to submit')
   await waitForText(session, 'Paper submitted')
-  await waitForText(session, 'Attempt again')
+  await waitForText(session, 'Retest')
   await capture(session, '17-checking-attempt-again-390x844.png')
-  await clickByText(session, 'Attempt again')
+  await setViewport(session, 360, 800)
+  await setFontScale(session, 1.3)
+  await capture(session, '17a-submitted-enlarged-type-360x800.png')
+  await setFontScale(session, 1 / 1.3)
+  await setViewport(session, 390, 844)
+  const checkedPapersPress = await pressByText(session, 'Open checked papers')
+  await capture(session, '17a2-open-checked-papers-pressed-390x844.png')
+  await releasePress(session, checkedPapersPress)
+  await waitForText(session, 'Results that')
+  await capture(session, '17b-return-to-checked-papers-390x844.png')
+  await clickByAriaLabel(session, 'Papers')
+  await waitForText(session, 'Paper submitted')
+  await clickByText(session, 'View results')
+  await waitForText(session, 'PERFORMANCE REPORT')
+  await capture(session, '17c-view-results-390x844.png')
+  await clickByAriaLabel(session, 'Back to checked papers')
+  await waitForText(session, 'Results that')
+  await clickByAriaLabel(session, 'Papers')
+  await waitForText(session, 'Paper submitted')
+  await capture(session, '17d-submitted-context-restored-390x844.png')
+  await clickByText(session, 'Retest')
   await waitForText(session, '0/3 answered')
   await waitForText(session, '0/3 complete')
   await evaluate(

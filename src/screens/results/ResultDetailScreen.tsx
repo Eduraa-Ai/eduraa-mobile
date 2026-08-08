@@ -236,7 +236,7 @@ export default function ResultDetailScreen() {
     const topicIds = (data.grading_results ?? []).map((item) => item.topic_id || '').filter(Boolean)
     void prefetchAgenticLearning(queryClient, data.id, topicIds)
   }, [data, isChecking, queryClient, report?.percent])
-  const goBack = () => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('ResultsList')
+  const goBack = () => navigation.navigate('ResultsList')
   const refreshManually = async () => {
     if (manualRefreshing) return
     setManualRefreshing(true)

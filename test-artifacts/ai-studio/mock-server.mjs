@@ -480,6 +480,45 @@ const previousAttempts = [
     },
 ]
 
+const buildPreviousCheckedPaper = () => {
+    const submittedAttempt = [...previousAttempts]
+        .reverse()
+        .find(attempt => Boolean(attempt.submitted_at))
+    if (!submittedAttempt) return null
+    return {
+        id: submittedAttempt.id,
+        student_id: submittedAttempt.b2c_student_id,
+        teacher_id: '00000000-0000-4000-8000-000000000040',
+        exam_id: null,
+        ocr_text: '',
+        identifier_text: 'Synthetic previous-paper submission',
+        status: 'graded',
+        total_score: 8,
+        max_score: 12,
+        checking_progress_percent: 100,
+        grading_feedback: 'Two questions are secure. Review the final concept once more.',
+        grading_results: previousQuestions.map((question, index) => ({
+            question_id: question.id,
+            question_number: index + 1,
+            question_text: question.question_text,
+            question_type: question.question_type,
+            response: submittedAttempt.answers?.find(answer => answer.question_id === question.id)?.response || '',
+            expected_answer: question.answer_key,
+            score: index < 2 ? 4 : 0,
+            max_score: 4,
+            feedback: index < 2 ? 'Correct.' : 'Review the key relationship and try again.',
+        })),
+        needs_review: false,
+        is_teacher_override: false,
+        manual_review_requested: false,
+        student_name: 'Synthetic learner',
+        exam_name: previousAttemptPaper.title,
+        subject_name: 'Physics',
+        created_at: submittedAttempt.submitted_at,
+        updated_at: submittedAttempt.submitted_at,
+    }
+}
+
 const buildGeneratedPaper = (payload = {}) => {
     const questionCount = Math.max(1, Number(payload.count || payload.mcq_count || 10))
     const marks = Number(payload.question_marks || payload.marks_per_mcq || 1)
@@ -1196,6 +1235,22 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && path === '/api/v1/ai/chat/stream') {
         const payload = await readBody(request)
         streamAnswer(request, response, payload)
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/checked-papers') {
+        const checkedPaper = buildPreviousCheckedPaper()
+        json(response, 200, checkedPaper ? [checkedPaper] : [])
+        return
+    }
+
+    if (request.method === 'GET' && path.startsWith('/api/v1/checked-papers/')) {
+        const checkedPaper = buildPreviousCheckedPaper()
+        if (!checkedPaper || path !== `/api/v1/checked-papers/${checkedPaper.id}`) {
+            json(response, 404, { detail: 'Synthetic checked paper not found.' })
+            return
+        }
+        json(response, 200, checkedPaper)
         return
     }
 

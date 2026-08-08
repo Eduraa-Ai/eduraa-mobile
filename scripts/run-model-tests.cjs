@@ -19,6 +19,7 @@ const models = [
   'src/screens/papers/paperAttemptModel.ts',
   'src/screens/papers/paperDetailModel.ts',
   'src/screens/workspace/examWorkspaceModel.ts',
+  'src/navigation/paperResultsNavigation.ts',
   'src/utils/mathText.ts',
   'src/utils/mathContent.ts',
   'src/utils/protectedDocumentModel.ts',
@@ -79,6 +80,10 @@ const suites = [
   {
     file: 'scripts/paper-detail-contract.test.cjs',
     env: {},
+  },
+  {
+    file: 'scripts/paper-results-navigation.test.cjs',
+    env: { PAPER_RESULTS_NAVIGATION_PATH: path.join(outDir, 'navigation/paperResultsNavigation.js') },
   },
   {
     file: 'scripts/math-content.test.cjs',

@@ -22,6 +22,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PapersStackParamList } from "../../navigation";
+import { navigateToCheckedPapers } from "../../navigation/paperResultsNavigation";
 import { papersApi } from "../../api/papers";
 import { presentPdf } from "../../utils/pdfDownload";
 import { useAuthStore } from "../../stores/authStore";
@@ -233,12 +234,13 @@ export default function PaperDetailScreen() {
   const hPad = width < 380 ? spacing[4] : spacing[5];
   const openSubmittedResult = () => {
     if (!submittedAttempt?.id || resultOpeningRef.current) return
+    const didNavigate = navigateToCheckedPapers(navigation, submittedAttempt.id)
+    if (!didNavigate) {
+      setActionError('Checked papers could not open. Please return to Papers and try again.')
+      return
+    }
     resultOpeningRef.current = true
     setIsOpeningResult(true)
-    navigation.getParent()?.navigate('Results', {
-      screen: 'ResultDetail',
-      params: { checkedPaperId: submittedAttempt.id },
-    })
   }
 
   return (
