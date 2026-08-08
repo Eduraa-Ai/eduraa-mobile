@@ -38,6 +38,7 @@ export interface LearningResource {
   version: number
   metadata: Record<string, unknown>
   page_count?: number | null
+  original_asset_id?: string | null
   view_url?: string | null
   download_url?: string | null
   scopes: LearningResourceScope[]
@@ -56,6 +57,14 @@ export function resolveResourceUrl(url?: string | null) {
   if (!url) return null
   if (/^https?:\/\//i.test(url)) return url
   return `${API_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`
+}
+
+export function learningResourcePageImagePath(
+  resourceId: string,
+  assetId: string,
+  pageNumber: number,
+) {
+  return `/api/v1/learning-resources/${resourceId}/assets/${assetId}/pages/${pageNumber}.png`
 }
 
 export const learningResourcesApi = {
