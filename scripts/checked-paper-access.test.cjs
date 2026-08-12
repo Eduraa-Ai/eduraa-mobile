@@ -52,6 +52,30 @@ test('builds a safe authenticated checked-paper PDF download request', () => {
   assert.equal(documents.safeDocumentFileStem('***'), 'checked-paper')
 })
 
+test('names cached protected images stably and per source URL', () => {
+  const first = 'https://api.example.test/api/v1/documents/visuals/chapter2_q105.png'
+  const second = 'https://api.example.test/api/v1/documents/visuals/book-b/chapter2_q105.png'
+
+  assert.equal(
+    documents.protectedImageCacheFileName(first),
+    documents.protectedImageCacheFileName(first),
+  )
+  assert.notEqual(
+    documents.protectedImageCacheFileName(first),
+    documents.protectedImageCacheFileName(second),
+  )
+  assert.match(documents.protectedImageCacheFileName(first), /^visual-chapter2_q105-[a-z0-9]+\.png$/)
+  assert.match(
+    documents.protectedImageCacheFileName('https://api.example.test/api/v1/documents/visuals/1'),
+    /^visual-1-[a-z0-9]+\.img$/,
+  )
+  assert.doesNotMatch(
+    documents.protectedImageCacheFileName('https://api.example.test/visuals/a%20b c.PNG?v=2'),
+    /[^a-z0-9_.-]/i,
+  )
+  assert.throws(() => documents.protectedImageCacheFileName('  '))
+})
+
 test('student roles retain learner actions while staff roles do not', () => {
   assert.equal(roles.isLearnerRole('student'), true)
   assert.equal(roles.isLearnerRole('b2c_student'), true)

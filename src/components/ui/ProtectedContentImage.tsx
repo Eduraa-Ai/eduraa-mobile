@@ -1,9 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View, type ImageStyle, type StyleProp } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import apiClient, { API_BASE_URL, getAccessToken } from '../../api/client'
+import { API_BASE_URL } from '../../api/client'
 import { colors, radius, spacing, typography } from '../../theme'
 import { requiresApiAuthorization, resolveDocumentUrl } from '../../utils/protectedDocumentModel'
+import {
+  invalidateProtectedImage,
+  loadProtectedImage,
+  peekProtectedImage,
+  resolveProtectedImageToken,
+} from '../../utils/protectedImageCache'
 
 function resolveAssetUrl(url?: string | null) {
   const value = String(url || '').trim()
@@ -32,9 +38,12 @@ export function ProtectedContentImage({
 }) {
   const normalizedUri = useMemo(() => resolveAssetUrl(uri), [uri])
   const needsAuth = Boolean(normalizedUri && requiresApiAuthorization(normalizedUri, API_BASE_URL))
-  const [token, setToken] = useState<string | null>(null)
-  const [tokenResolved, setTokenResolved] = useState(false)
-  const [objectUrl, setObjectUrl] = useState<string | null>(null)
+  // A warmed figure has to be readable on the first render, otherwise every
+  // remount of a virtualized cell flashes the placeholder again.
+  const [cachedUri, setCachedUri] = useState<string | null>(() =>
+    normalizedUri && needsAuth ? peekProtectedImage(normalizedUri) : null,
+  )
+  const [directToken, setDirectToken] = useState<{ value: string | null } | null>(null)
   const [failed, setFailed] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -53,59 +62,55 @@ export function ProtectedContentImage({
   }, [markLoading, normalizedUri])
 
   useEffect(() => {
-    let active = true
-    getAccessToken()
-      .then((value) => {
-        if (active) {
-          setToken(value)
-          setTokenResolved(true)
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setToken(null)
-          setTokenResolved(true)
-        }
-      })
-    return () => {
-      active = false
+    setFailed(false)
+    setDirectToken(null)
+    if (!normalizedUri || !needsAuth) {
+      setCachedUri(null)
+      return
     }
-  }, [])
 
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !normalizedUri || !needsAuth) {
-      setObjectUrl(null)
-      setFailed(false)
+    const warmed = peekProtectedImage(normalizedUri)
+    if (warmed) {
+      setCachedUri(warmed)
       return
     }
 
     let active = true
-    let nextObjectUrl: string | null = null
-    setObjectUrl(null)
-    setFailed(false)
-    apiClient
-      .get<Blob>(normalizedUri, { responseType: 'blob' })
-      .then((response) => {
-        if (!active) return
-        nextObjectUrl = URL.createObjectURL(response.data)
-        setObjectUrl(nextObjectUrl)
+    setCachedUri(null)
+    loadProtectedImage(normalizedUri)
+      .then((uri) => {
+        if (active) setCachedUri(uri)
       })
       .catch(() => {
-        if (active) failImage()
+        if (!active) return
+        if (Platform.OS === 'web') {
+          failImage()
+          return
+        }
+        // A cache miss must not hide a figure the platform loader can still
+        // stream itself, so fall back to the authorized remote source.
+        void resolveProtectedImageToken().then((value) => {
+          if (active) setDirectToken({ value })
+        })
       })
 
     return () => {
       active = false
-      if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl)
     }
   }, [failImage, needsAuth, normalizedUri, retryKey])
 
-  const waitingForCredentials = Platform.OS !== 'web' && needsAuth && !tokenResolved
-  const source = !normalizedUri || failed || waitingForCredentials
-    ? null
-    : Platform.OS === 'web' && needsAuth
-      ? objectUrl ? { uri: objectUrl } : null
-      : { uri: normalizedUri, headers: needsAuth && token ? { Authorization: `Bearer ${token}` } : undefined }
+  const source = useMemo(() => {
+    if (!normalizedUri || failed) return null
+    if (!needsAuth) return { uri: normalizedUri }
+    if (cachedUri) return { uri: cachedUri }
+    if (directToken) {
+      return {
+        uri: normalizedUri,
+        headers: directToken.value ? { Authorization: `Bearer ${directToken.value}` } : undefined,
+      }
+    }
+    return null
+  }, [cachedUri, directToken, failed, needsAuth, normalizedUri])
 
   if (failed) {
     return (
@@ -125,6 +130,8 @@ export function ProtectedContentImage({
           onPress={() => {
             markLoading()
             setFailed(false)
+            // Retry has to bypass the shared copy, which may be what failed.
+            if (normalizedUri && needsAuth) invalidateProtectedImage(normalizedUri)
             setRetryKey((current) => current + 1)
           }}
           style={styles.retryButton}
@@ -172,7 +179,8 @@ export function ProtectedContentImage({
         resizeMode="contain"
         style={[styles.image, style]}
       />
-      {isLoading ? (
+      {/* A shared copy decodes locally, so only a remote stream needs the overlay. */}
+      {isLoading && !cachedUri ? (
         <View accessibilityRole="progressbar" accessibilityLabel="Loading question figure" style={styles.loadingOverlay}>
           <View style={styles.loadingArtwork} importantForAccessibility="no-hide-descendants">
             <View style={styles.loadingImageMark}><Ionicons name="image-outline" size={21} color={colors.accentStrong} /></View>

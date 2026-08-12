@@ -31,6 +31,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { PapersStackParamList } from "../../navigation";
 import { navigateToCheckedPapers } from "../../navigation/paperResultsNavigation";
+import { API_BASE_URL } from "../../api/client";
 import { papersApi } from "../../api/papers";
 import { useAuthStore } from "../../stores/authStore";
 import { colors } from "../../theme/colors";
@@ -44,7 +45,11 @@ import type {
 } from "../../types";
 import { ErrorState, LatexText, QuestionVisual } from "../../components/ui";
 import { latexToPlainText } from "../../utils/latex";
-import { shouldShowQuestionStemText } from "../../utils/questionVisual";
+import { prefetchProtectedImages } from "../../utils/protectedImageCache";
+import {
+  planQuestionVisualPrefetch,
+  shouldShowQuestionStemText,
+} from "../../utils/questionVisual";
 import {
   buildPaperAnswerEntries,
   clampCheckingProgress,
@@ -77,6 +82,12 @@ function isMCQOptions(
 
 const HOLD_DURATION_MS = 3000;
 const HOLD_TICK_MS = 50;
+// Book papers replace the stem with a photo of the question, so the figures a
+// learner is about to reach are warmed ahead of their virtualized cells. The
+// window stays small so the visible figure keeps the bandwidth.
+const VISUAL_PREFETCH_AHEAD = 3;
+const VISUAL_PREFETCH_LIMIT = 4;
+const visualPrefetchViewability = { itemVisiblePercentThreshold: 10 };
 const checkingStatuses = new Set(['submitted', 'checking', 'processing', 'uploaded'])
 const failedCheckingStatuses = new Set(['failed', 'error', 'grading_failed', 'checking_failed'])
 
@@ -416,6 +427,48 @@ export default function AttemptPaperScreen() {
     },
   })
   const activeAttempt = attemptQuery.data
+  const visualPrefetchRef = useRef<{
+    questions: QuestionInPaper[]
+    lastIndex: number
+  }>({ questions: [], lastIndex: -1 })
+
+  // The first figures start downloading as soon as the paper resolves, instead of
+  // waiting for their cells to mount.
+  useEffect(() => {
+    const questions = paper?.questions ?? []
+    visualPrefetchRef.current = { questions, lastIndex: questions.length ? 0 : -1 }
+    if (!questions.length) return
+    prefetchProtectedImages(
+      planQuestionVisualPrefetch(questions, {
+        apiBaseUrl: API_BASE_URL,
+        ahead: VISUAL_PREFETCH_AHEAD,
+        limit: VISUAL_PREFETCH_LIMIT,
+      }),
+    )
+  }, [paper?.questions])
+
+  const prefetchVisualsAhead = useCallback(
+    (info: { viewableItems: Array<{ index: number | null }> }) => {
+      const state = visualPrefetchRef.current
+      let firstVisible = -1
+      for (const item of info.viewableItems) {
+        if (item.index == null) continue
+        if (firstVisible < 0 || item.index < firstVisible) firstVisible = item.index
+      }
+      if (firstVisible < 0 || firstVisible === state.lastIndex) return
+      state.lastIndex = firstVisible
+      prefetchProtectedImages(
+        planQuestionVisualPrefetch(state.questions, {
+          apiBaseUrl: API_BASE_URL,
+          startIndex: firstVisible,
+          ahead: VISUAL_PREFETCH_AHEAD,
+          limit: VISUAL_PREFETCH_LIMIT,
+        }),
+      )
+    },
+    [],
+  )
+
   const checkingSubmissionQuery = useQuery({
     queryKey: ['paper-submission-checking', params.paperId, submitOutcome?.submissionId],
     queryFn: () => papersApi.getSubmission(params.paperId, {
@@ -958,6 +1011,8 @@ export default function AttemptPaperScreen() {
         updateCellsBatchingPeriod={40}
         windowSize={3}
         removeClippedSubviews={Platform.OS === 'android'}
+        onViewableItemsChanged={prefetchVisualsAhead}
+        viewabilityConfig={visualPrefetchViewability}
       />
 
       <View

@@ -125,6 +125,10 @@ const suites = [
     env: { QUESTION_VISUAL_MODEL_PATH: path.join(outDir, 'utils/questionVisual.js') },
   },
   {
+    file: 'scripts/question-visual-prefetch.test.cjs',
+    env: {},
+  },
+  {
     file: 'scripts/book-paper-generation.test.cjs',
     env: { BOOK_PAPER_GENERATION_MODEL_PATH: path.join(outDir, 'utils/bookPaperGeneration.js') },
   },
