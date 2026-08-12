@@ -14,6 +14,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path } from "react-native-svg";
 import { analyticsApi } from "../../api/analytics";
 import {
+  isPreviousPapersEligible,
+  resolveMobileLanding,
+} from "../../auth/landing";
+import {
   AnimatedButton,
   AnimatedCard,
   AppScreen,
@@ -832,9 +836,7 @@ function CompetitiveHome({
           </Text>
           <View style={styles.compAiActions}>
             <Pressable
-              onPress={() =>
-                navigation.navigate("Learning", { screen: "AgenticLearning" })
-              }
+              onPress={() => navigation.navigate("AgenticLearning")}
               style={({ pressed }) => [
                 styles.compAiPrimary,
                 pressed && styles.pressed,
@@ -843,9 +845,7 @@ function CompetitiveHome({
               <Text style={styles.compAiPrimaryText}>Start learning</Text>
             </Pressable>
             <Pressable
-              onPress={() =>
-                navigation.navigate("Learning", { screen: "AIStudio" })
-              }
+              onPress={() => navigation.navigate("AIStudio")}
               style={({ pressed }) => [
                 styles.compAiSecondary,
                 pressed && styles.pressed,
@@ -872,9 +872,8 @@ function CompetitiveHome({
           <Pressable
             key={subject.name}
             onPress={() =>
-              navigation.navigate("Learning", {
-                screen: "CompetitiveSubject",
-                params: { subjectName: subject.name },
+              navigation.navigate("CompetitiveSubject", {
+                subjectName: subject.name,
               })
             }
             style={({ pressed }) => [
@@ -948,9 +947,7 @@ function CompetitiveHome({
           label="AI Tutor"
           body="Explain concepts deeply"
           tone="#7c3aed"
-          onPress={() =>
-            navigation.navigate("Learning", { screen: "AIStudio" })
-          }
+          onPress={() => navigation.navigate("AIStudio")}
         />
         <QuickAction
           icon="ribbon-outline"
@@ -965,9 +962,7 @@ function CompetitiveHome({
 
       {/* JEE Launchpad Banner */}
       <Pressable
-        onPress={() =>
-          navigation.navigate("Learning", { screen: "CompetitiveExam" })
-        }
+        onPress={() => navigation.navigate("CompetitiveExam")}
         style={({ pressed }) => [
           styles.compLaunchpad,
           pressed && styles.pressed,
@@ -1066,15 +1061,17 @@ function LoadingHome() {
   );
 }
 
-export default function HomeScreen({
-  competitive = false,
-  previousPapersEligible = false,
-}: {
-  competitive?: boolean;
-  previousPapersEligible?: boolean;
-}) {
+export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
+
+  // Derived from the session rather than passed down, so the Home tab and the
+  // Home stack can register this screen with `component` instead of an inline
+  // element factory (which remounts the screen on every parent render).
+  const competitive = user
+    ? resolveMobileLanding(user) === "competitive_learner"
+    : false;
+  const previousPapersEligible = isPreviousPapersEligible(user);
 
   const {
     data: analytics,
@@ -1113,8 +1110,7 @@ export default function HomeScreen({
             meta: "Exam workspace",
             icon: "clipboard-outline" as keyof typeof Ionicons.glyphMap,
             tone: colors.info,
-            onPress: () =>
-              navigation.navigate("Learning", { screen: "Exams" }),
+            onPress: () => navigation.navigate("Exams"),
           },
         ]
       : []),
@@ -1132,8 +1128,7 @@ export default function HomeScreen({
       meta: "Learning",
       icon: "sparkles",
       tone: colors.ai.violet,
-      onPress: () =>
-        navigation.navigate("Learning", { screen: "AgenticLearning" }),
+      onPress: () => navigation.navigate("AgenticLearning"),
     },
     ...(previousPapersEligible
       ? [
@@ -1161,7 +1156,7 @@ export default function HomeScreen({
       meta: "Tutor",
       icon: "sparkles-outline",
       tone: colors.ai.violet,
-      onPress: () => navigation.navigate("Learning", { screen: "AIStudio" }),
+      onPress: () => navigation.navigate("AIStudio"),
     },
   ];
 
@@ -1200,9 +1195,7 @@ export default function HomeScreen({
             onPractice={() =>
               navigation.navigate("Papers", { screen: "GeneratePaper" })
             }
-            onAskAi={() =>
-              navigation.navigate("Learning", { screen: "AIStudio" })
-            }
+            onAskAi={() => navigation.navigate("AIStudio")}
           />
 
           <MetricSummary
@@ -1218,9 +1211,7 @@ export default function HomeScreen({
 
           <NextBestActionCard
             focusChapter={model.focusChapter}
-            onStart={() =>
-              navigation.navigate("Learning", { screen: "AgenticLearning" })
-            }
+            onStart={() => navigation.navigate("AgenticLearning")}
             onResult={() =>
               navigation.navigate("Results", { screen: "ResultsList" })
             }

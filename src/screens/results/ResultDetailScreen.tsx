@@ -253,7 +253,7 @@ export default function ResultDetailScreen() {
   })
   const openPaperWorkspace = () => {
     if (isStaff) navigation.getParent()?.navigate('StaffPapers')
-    else navigation.getParent()?.navigate('Learning', {
+    else navigation.getParent()?.navigate('Home', {
       screen: 'AgenticLearning',
       params: { origin: 'checked-paper', checkedPaperId: id },
     })

@@ -18,7 +18,6 @@ const ACTIVE_ORB_SIZE = 46
 
 const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
-  Learning: 'library-outline',
   Exams: 'calendar-outline',
   Papers: 'document-text-outline',
   Results: 'bar-chart-outline',

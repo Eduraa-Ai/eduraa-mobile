@@ -268,7 +268,6 @@ async function captureStudentNavigationLayouts(session, width, height) {
   await setViewport(session, width, height)
   const layouts = [
     ['Home', 'home'],
-    ['Learning', 'learning'],
     ['Papers', 'papers'],
     ['Results', 'results'],
     ['Profile', 'profile'],

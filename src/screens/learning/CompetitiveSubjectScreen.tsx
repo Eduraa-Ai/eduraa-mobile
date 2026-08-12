@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import type { LearningStackParamList } from '../../navigation'
+import type { HomeStackParamList } from '../../navigation'
 import { AppScreen } from '../../components/ui'
 import { competitiveExamApi, CompetitiveChapterOption, CompetitiveStandard } from '../../api/competitiveExam'
 import { getCompetitiveSyllabus } from '../../data/competitiveSyllabus'
@@ -24,7 +24,7 @@ import {
   subjectTone,
 } from './competitiveExamUtils'
 
-type Route = RouteProp<LearningStackParamList, 'CompetitiveSubject'>
+type Route = RouteProp<HomeStackParamList, 'CompetitiveSubject'>
 
 interface ChapterLoadResult {
   chapters: CompetitiveChapterOption[]

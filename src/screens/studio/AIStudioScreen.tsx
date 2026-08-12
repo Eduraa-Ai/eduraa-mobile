@@ -2101,8 +2101,8 @@ export default function AIStudioScreen() {
     }
 
     const routeNames = navigation.getState().routeNames;
-    if (routeNames.includes("LearningHome")) {
-      navigation.reset({ index: 0, routes: [{ name: "LearningHome" }] });
+    if (routeNames.includes("HomeMain")) {
+      navigation.reset({ index: 0, routes: [{ name: "HomeMain" }] });
       return;
     }
     if (routeNames.includes("StaffWorkspace")) {

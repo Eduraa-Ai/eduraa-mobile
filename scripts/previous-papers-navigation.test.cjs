@@ -16,7 +16,7 @@ test('previous papers is an eligible final root tab with an accessible symbol', 
   assert.ok(previousPapersIndex > profileIndex)
   assert.match(navigation, /previousPapersEligible\s*\?\s*\(/)
   assert.match(navigation, /tabBarAccessibilityLabel:\s*'Previous-year JEE papers'/)
-  assert.doesNotMatch(navigation, /<LearningStack\.Screen name="PreviousPapers"/)
+  assert.doesNotMatch(navigation, /<HomeStack\.Screen name="PreviousPapers"/)
   assert.match(bottomTabBar, /function ConstellationField\(/)
   assert.match(bottomTabBar, /PreviousPapers:\s*'documents-outline'/)
   assert.match(bottomTabBar, /options\?\.tabBarAccessibilityLabel \?\? label/)
@@ -32,12 +32,10 @@ test('the library back action falls back to Home without history', () => {
 test('all previous-paper shortcuts target the independent tab', () => {
   const home = read('src/screens/home/HomeScreen.tsx')
   const catalog = read('src/data/mobileControlCatalog.ts')
-  const learningHome = read('src/screens/learning/LearningHomeScreen.tsx')
 
   assert.match(home, /navigate\("PreviousPapers"\)/)
   assert.doesNotMatch(home, /screen:\s*"PreviousPapers"/)
   assert.match(catalog, /tab:\s*'PreviousPapers'/)
-  assert.doesNotMatch(learningHome, /destination:\s*'PreviousPapers'/)
 })
 
 test('leaving a previous paper clears the papers stack before restoring its independent tab', () => {
