@@ -55,6 +55,19 @@ test('leaving a previous paper clears the papers stack before restoring its inde
   assert.ok(restorePreviousPapersIndex > resetPapersIndex)
 })
 
+test('a submitted previous paper can be left while checking keeps running', () => {
+  const attempt = read('src/screens/papers/AttemptPaperScreen.tsx')
+
+  assert.match(attempt, /leaveLabel = returnsToPreviousPapers/)
+  assert.match(attempt, /'Back to previous papers'/)
+  assert.match(attempt, /accessibilityLabel=\{leaveLabel\}/)
+  assert.match(attempt, /BackHandler\.addEventListener\('hardwareBackPress'/)
+  // Leaving must never resubmit, restart, or duplicate the accepted attempt.
+  assert.match(attempt, /if \(submitOutcome && submitOutcome\.kind !== 'error'\) return/)
+  // Foregrounding has to reconcile the checking status past the shared staleTime.
+  assert.match(attempt, /refetchOnWindowFocus: 'always'/)
+})
+
 test('the PYQ implementation has no checked-paper dependency', () => {
   const screen = read('src/screens/learning/PreviousPapersScreen.tsx')
   const api = read('src/api/previousPapers.ts')

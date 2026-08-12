@@ -9,6 +9,7 @@ import React, {
 import {
   View,
   Text,
+  BackHandler,
   FlatList,
   StyleSheet,
   TouchableOpacity,
@@ -63,6 +64,9 @@ type SubmitOutcome = {
   submissionId?: string
   scoreText?: string
   checkingProgressPercent?: number
+  // Set when the server accepted the paper for checking, so the sheet copy can
+  // settle once polling reports the marks instead of still inviting a wait.
+  submittedWhileChecking?: boolean
 }
 
 function isMCQOptions(
@@ -427,6 +431,9 @@ export default function AttemptPaperScreen() {
       const status = String(query.state.data?.grading_status || '').toLowerCase()
       return checkingStatuses.has(status) ? 2000 : false
     },
+    // Polling pauses while the app is backgrounded, and the shared five-minute
+    // staleTime would otherwise skip the focus refetch on the way back in.
+    refetchOnWindowFocus: 'always',
   })
 
   useEffect(() => {
@@ -540,6 +547,7 @@ export default function AttemptPaperScreen() {
         queryClient.invalidateQueries({ queryKey: ['papers'] }),
         queryClient.invalidateQueries({ queryKey: ['paper-attempts-detail', params.paperId] }),
         queryClient.invalidateQueries({ queryKey: ['paper-submission', params.paperId] }),
+        queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
         queryClient.invalidateQueries({ queryKey: ['exams', 'practice'] }),
         queryClient.invalidateQueries({ queryKey: ['exams', 'teacher'] }),
       ])
@@ -549,24 +557,26 @@ export default function AttemptPaperScreen() {
           kind: 'existing',
           title: 'Already submitted',
           message: isChecking
-            ? 'This attempt was already submitted and is being checked. Select View results to follow its status and see the marks when ready.'
+            ? 'This attempt was already submitted and is being checked. You can leave now — checking keeps running until the marks are ready.'
             : 'This attempt was already submitted from another session. Its recorded result is ready to view.',
           submissionId: data.id,
           scoreText,
           checkingProgressPercent: clampCheckingProgress(data.checking_progress_percent) ?? undefined,
+          submittedWhileChecking: isChecking,
         })
         return
       }
 
       setSubmitOutcome({
         kind: "submitted",
-        title: isChecking ? "Paper submitted" : "Paper submitted",
+        title: "Paper submitted",
         message: isChecking
-          ? "Your paper is being checked. Select View results to follow its status and see your marks as soon as they are ready."
+          ? "Your paper is being checked. You can leave now — checking keeps running, and your marks appear in results when they are ready."
           : "Your answers have been recorded and graded.",
         submissionId: data.id,
         scoreText,
         checkingProgressPercent: clampCheckingProgress(data.checking_progress_percent) ?? undefined,
+        submittedWhileChecking: isChecking,
       })
     },
     onError: async (err: any) => {
@@ -597,6 +607,7 @@ export default function AttemptPaperScreen() {
                 ? `${existing.total_score} / ${existing.max_score}`
                 : undefined,
               checkingProgressPercent: clampCheckingProgress(existing.checking_progress_percent) ?? undefined,
+              submittedWhileChecking: checkingStatuses.has(existingStatus),
             })
             return
           }
@@ -631,6 +642,9 @@ export default function AttemptPaperScreen() {
 
   const doSubmit = useCallback(() => {
     if (!paper || !activeAttempt?.id || submitMutation.isPending) return
+    // An accepted submission is final for this attempt: repeated taps, a late
+    // hold tick, and the expiry auto-submit must not send it twice.
+    if (submitOutcome && submitOutcome.kind !== 'error') return
     clearSubmitHoldTimer()
     setSubmitHoldProgress(0)
     setSubmitReviewOpen(false)
@@ -647,7 +661,7 @@ export default function AttemptPaperScreen() {
         message: error instanceof Error ? error.message : 'This paper contains invalid questions.',
       })
     }
-  }, [activeAttempt?.id, clearSubmitHoldTimer, getAnswerSnapshot, paper, submitMutation])
+  }, [activeAttempt?.id, clearSubmitHoldTimer, getAnswerSnapshot, paper, submitMutation, submitOutcome])
 
   useEffect(() => {
     if (!attemptDeadline) {
@@ -672,8 +686,10 @@ export default function AttemptPaperScreen() {
 
   const handleSubmit = useCallback(() => setSubmitReviewOpen(true), [])
 
+  const returnsToPreviousPapers = params.returnTo === 'PreviousPapers'
+
   const leaveAttempt = useCallback(() => {
-    if (params.returnTo === 'PreviousPapers') {
+    if (returnsToPreviousPapers) {
       navigation.reset({
         index: 0,
         routes: [{ name: 'PapersList' }],
@@ -682,11 +698,28 @@ export default function AttemptPaperScreen() {
       return
     }
     navigation.goBack()
-  }, [navigation, params.returnTo])
+  }, [navigation, returnsToPreviousPapers])
 
   const handleExit = useCallback(() => {
     void flushDraft().finally(leaveAttempt)
   }, [flushDraft, leaveAttempt])
+
+  const leaveLabel = returnsToPreviousPapers
+    ? 'Back to previous papers'
+    : 'Back to papers'
+  const isSubmissionAccepted = Boolean(submitOutcome && submitOutcome.kind !== 'error')
+
+  // Checking runs on the server, so an accepted submission never has to be
+  // watched from here. Android's back gesture leaves through the sheet's door
+  // instead of popping to a papers list the learner never came from.
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !isFocused || !isSubmissionAccepted) return
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      leaveAttempt()
+      return true
+    })
+    return () => subscription.remove()
+  }, [isFocused, isSubmissionAccepted, leaveAttempt])
 
   const startSubmitHold = () => {
     if (
@@ -728,6 +761,12 @@ export default function AttemptPaperScreen() {
     }
     submittedResultOpeningRef.current = true
     setIsOpeningSubmittedResult(true)
+    if (returnsToPreviousPapers) {
+      // Results own the checking status from here. Clearing the papers stack
+      // keeps a submitted previous-year attempt from waiting behind the Papers
+      // tab for a learner whose way back is the library.
+      navigation.reset({ index: 0, routes: [{ name: 'PapersList' }] })
+    }
   }
 
   const openCheckedPapers = () => {
@@ -1073,7 +1112,11 @@ export default function AttemptPaperScreen() {
               />
             </View>
             <Text style={styles.submitSheetTitle}>{submitOutcome.title}</Text>
-            <Text style={styles.submitSheetBody}>{submitOutcome.message}</Text>
+            <Text style={styles.submitSheetBody}>
+              {submitOutcome.submittedWhileChecking && checkingResultReady
+                ? 'Checking finished while you waited. Your marks are ready below.'
+                : submitOutcome.message}
+            </Text>
             {checkedScoreText ? (
               <View style={styles.submittedScoreBox}>
                 <Text style={styles.submittedScoreLabel}>Score</Text>
@@ -1176,22 +1219,44 @@ export default function AttemptPaperScreen() {
                 </>
               )}
             </View>
-            {submitOutcome.kind !== "error" ? (
-              <Pressable
-                onPress={openCheckedPapers}
-                style={({ pressed }) => [
-                  styles.checkedPapersLink,
-                  pressed && styles.checkedPapersLinkPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Open checked papers"
-              >
-                <View style={styles.checkedPapersLinkLabel}>
-                  <Ionicons name="library-outline" size={18} color={colors.nav} />
-                  <Text style={styles.checkedPapersLinkText}>Open checked papers</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={17} color={colors.textMuted} />
-              </Pressable>
+            {isSubmissionAccepted ? (
+              <>
+                <Pressable
+                  onPress={leaveAttempt}
+                  style={({ pressed }) => [
+                    styles.checkedPapersLink,
+                    pressed && styles.checkedPapersLinkPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={leaveLabel}
+                  accessibilityHint={checkedScoreText
+                    ? 'Leaves this attempt. Your marks stay saved.'
+                    : 'Leaves this attempt. Checking continues in the background.'}
+                >
+                  <View style={styles.checkedPapersLinkLabel}>
+                    <Ionicons name="arrow-back" size={18} color={colors.nav} />
+                    <Text style={styles.checkedPapersLinkText}>{leaveLabel}</Text>
+                  </View>
+                  {checkedScoreText ? null : (
+                    <Text style={styles.leaveLinkNote}>Checking continues</Text>
+                  )}
+                </Pressable>
+                <Pressable
+                  onPress={openCheckedPapers}
+                  style={({ pressed }) => [
+                    styles.checkedPapersLink,
+                    pressed && styles.checkedPapersLinkPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open checked papers"
+                >
+                  <View style={styles.checkedPapersLinkLabel}>
+                    <Ionicons name="library-outline" size={18} color={colors.nav} />
+                    <Text style={styles.checkedPapersLinkText}>Open checked papers</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={17} color={colors.textMuted} />
+                </Pressable>
+              </>
             ) : null}
           </View>
         </View>
@@ -1796,6 +1861,11 @@ const styles = StyleSheet.create({
     color: colors.nav,
     fontFamily: typography.fonts.bodyBold,
     fontSize: 13,
+  },
+  leaveLinkNote: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 11,
   },
   submitCancelButton: {
     flex: 1,
