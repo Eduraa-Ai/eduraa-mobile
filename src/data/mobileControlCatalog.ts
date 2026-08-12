@@ -1,7 +1,7 @@
 import type { Role } from '../types'
 
 export type MobileControlTarget =
-  | { kind: 'tab'; tab: 'Home' | 'Learning' | 'Papers' | 'Results' | 'AIStudio' | 'Profile' | 'PreviousPapers'; screen?: string; params?: Record<string, unknown> }
+  | { kind: 'tab'; tab: 'Home' | 'Papers' | 'Results' | 'AIStudio' | 'Profile' | 'PreviousPapers' | 'LearningResources' | 'CheatSheets'; screen?: string; params?: Record<string, unknown> }
   | { kind: 'detail' }
 
 export interface MobileControl {
@@ -119,7 +119,7 @@ export const mobileControls: MobileControl[] = [
     icon: 'sparkles',
     section: 'learning',
     nativeStatus: 'native',
-    target: { kind: 'tab', tab: 'Learning', screen: 'AgenticLearning' },
+    target: { kind: 'tab', tab: 'Home', screen: 'AgenticLearning' },
   },
   {
     id: 'competitive-exam',
@@ -131,7 +131,7 @@ export const mobileControls: MobileControl[] = [
     section: 'learning',
     requiresCompetitiveExam: true,
     nativeStatus: 'native',
-    target: { kind: 'tab', tab: 'Learning', screen: 'CompetitiveExam' },
+    target: { kind: 'tab', tab: 'LearningResources' },
   },
   {
     id: 'previous-papers',
@@ -191,7 +191,7 @@ export const mobileControls: MobileControl[] = [
     requiresCompetitiveExam: true,
     allowAdminOverride: false,
     nativeStatus: 'native',
-    target: { kind: 'tab', tab: 'Learning', screen: 'CompetitiveExam' },
+    target: { kind: 'tab', tab: 'CheatSheets' },
   },
   {
     id: 'admin-cheat-sheets',

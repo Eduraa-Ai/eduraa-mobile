@@ -10,7 +10,6 @@ test('the B2B learner workspace keeps teacher and owned-practice contracts separ
   const examsApi = read('src/api/exams.ts')
   const screen = read('src/screens/workspace/ExamsScreen.tsx')
   const home = read('src/screens/home/HomeScreen.tsx')
-  const learning = read('src/screens/learning/LearningHomeScreen.tsx')
 
   assert.match(examsApi, /apiClient\.get<StudentExamRead\[]>\('\/exams\/student'\)/)
   assert.match(examsApi, /params:\s*\{\s*scope:\s*'mine',\s*limit:\s*200\s*\}/)
@@ -22,9 +21,7 @@ test('the B2B learner workspace keeps teacher and owned-practice contracts separ
   assert.match(screen, /Download checked PDF/)
   assert.match(screen, /Start a fresh retest/)
   assert.doesNotMatch(screen, /function ExamsPhotoHeader/)
-  assert.match(home, /screen:\s*"Exams"/)
-  assert.match(learning, /destination:\s*'Exams'/)
-  assert.match(learning, /b2bOnly:\s*true/)
+  assert.match(home, /navigate\("Exams"\)/)
 })
 
 test('download, retest, and owned-paper deletion use the website production contracts', () => {

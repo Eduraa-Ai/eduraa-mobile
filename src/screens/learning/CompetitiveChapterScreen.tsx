@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { LearningStackParamList } from '../../navigation'
+import type { HomeStackParamList } from '../../navigation'
 import { AnimatedButton, AnimatedCard, AppScreen, SelectableChip } from '../../components/ui'
 import {
   competitiveExamApi,
@@ -49,7 +49,7 @@ import {
   subjectTone,
 } from './competitiveExamUtils'
 
-type Route = RouteProp<LearningStackParamList, 'CompetitiveChapter'>
+type Route = RouteProp<HomeStackParamList, 'CompetitiveChapter'>
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
 interface ChapterLoadResult {

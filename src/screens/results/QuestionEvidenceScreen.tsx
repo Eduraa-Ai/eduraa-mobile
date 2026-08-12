@@ -428,7 +428,7 @@ export default function QuestionEvidenceScreen() {
 
   const openPaperWorkspace = () => {
     if (isStaff) navigation.getParent()?.navigate('StaffPapers')
-    else if (item.topic_id) navigation.getParent()?.navigate('Learning', {
+    else if (item.topic_id) navigation.getParent()?.navigate('Home', {
       screen: 'AgenticTopic',
       params: {
         topicId: item.topic_id,
@@ -438,7 +438,7 @@ export default function QuestionEvidenceScreen() {
         checkedPaperId: data.id,
       },
     })
-    else navigation.getParent()?.navigate('Learning', {
+    else navigation.getParent()?.navigate('Home', {
       screen: 'AgenticLearning',
       params: { origin: 'checked-paper', checkedPaperId: data.id },
     })

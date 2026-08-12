@@ -109,6 +109,10 @@ const suites = [
     env: {},
   },
   {
+    file: 'scripts/learning-tab-removal.test.cjs',
+    env: {},
+  },
+  {
     file: 'scripts/latex.test.cjs',
     env: { LATEX_MODEL_PATH: path.join(outDir, 'utils/latex.js') },
   },
