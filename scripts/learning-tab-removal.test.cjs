@@ -77,13 +77,15 @@ test('shortcuts, remediation, and AI Studio no longer target the removed route',
   assert.doesNotMatch(aiStudio, /LearningHome/)
 })
 
-test('Previous Papers, Learning Resources, and Cheat Sheets stay independently reachable', () => {
+test('Previous Papers and Cheat Sheets stay independently reachable', () => {
   const navigation = read('src/navigation/index.tsx')
   const catalog = read('src/data/mobileControlCatalog.ts')
 
   assert.match(navigation, /name="PreviousPapers"/)
-  assert.match(navigation, /name="LearningResources"/)
   assert.match(navigation, /name="CheatSheets"/)
-  assert.match(catalog, /tab:\s*'LearningResources'/)
+  // Learning Resources was removed as a mobile tab; the underlying
+  // CompetitiveExam experience lives under the Home stack.
+  assert.doesNotMatch(navigation, /name="LearningResources"/)
   assert.match(catalog, /tab:\s*'CheatSheets'/)
+  assert.match(catalog, /tab:\s*'Home',\s*screen:\s*'CompetitiveExam'/)
 })

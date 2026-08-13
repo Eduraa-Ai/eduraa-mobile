@@ -1,7 +1,7 @@
 import type { Role } from '../types'
 
 export type MobileControlTarget =
-  | { kind: 'tab'; tab: 'Home' | 'Papers' | 'Results' | 'AIStudio' | 'Profile' | 'PreviousPapers' | 'LearningResources' | 'CheatSheets'; screen?: string; params?: Record<string, unknown> }
+  | { kind: 'tab'; tab: 'Home' | 'Papers' | 'Results' | 'AIStudio' | 'Profile' | 'PreviousPapers' | 'CheatSheets'; screen?: string; params?: Record<string, unknown> }
   | { kind: 'detail' }
 
 export interface MobileControl {
@@ -130,8 +130,11 @@ export const mobileControls: MobileControl[] = [
     icon: 'library',
     section: 'learning',
     requiresCompetitiveExam: true,
+    // Mobile surfaces this feature through CompetitiveExam under the Home
+    // stack rather than a dedicated tab. The standalone Learning Resources
+    // tab was removed on mobile.
     nativeStatus: 'native',
-    target: { kind: 'tab', tab: 'LearningResources' },
+    target: { kind: 'tab', tab: 'Home', screen: 'CompetitiveExam' },
   },
   {
     id: 'previous-papers',
