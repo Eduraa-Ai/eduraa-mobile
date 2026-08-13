@@ -28,6 +28,37 @@ export function checkedPaperDownloadEndpoint(checkedPaperId: string) {
   return `/checked-papers/${encodeURIComponent(normalizedId)}/download`
 }
 
-export function safeDocumentFileStem(value: string) {
-  return value.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'checked-paper'
+export function safeDocumentFileStem(value: string, fallback = 'checked-paper') {
+  return value.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || fallback
+}
+
+/**
+ * Names the on-device copy of a protected image. The hash keeps same-named crops
+ * from different books apart, and the whole name is stable across launches so a
+ * figure is downloaded once per device rather than once per mount.
+ */
+export function protectedImageCacheFileName(url: string) {
+  const trimmed = url.trim()
+  if (!trimmed) throw new Error('A cached image needs a source URL.')
+
+  // FNV-1a: a stable 32-bit digest without pulling in a crypto dependency.
+  let hash = 0x811c9dc5
+  for (let index = 0; index < trimmed.length; index += 1) {
+    hash ^= trimmed.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+
+  const path = trimmed.split(/[?#]/, 1)[0]
+  const name = decodeUriPart(path.split('/').pop() || '')
+  const extension = name.match(/\.(png|jpe?g|webp|gif|bmp)$/i)?.[0].toLowerCase() || '.img'
+  const stem = safeDocumentFileStem(name.replace(/\.[^.]+$/, ''), 'image').slice(0, 40)
+  return `visual-${stem}-${hash.toString(36)}${extension}`
+}
+
+function decodeUriPart(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
 }

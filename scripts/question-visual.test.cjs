@@ -4,11 +4,19 @@ const test = require('node:test')
 const {
     getQuestionVisualAssetUrls,
     normalizeQuestionVisualPayload,
+    planQuestionVisualPrefetch,
     resolveQuestionVisualUrl,
     shouldShowQuestionStemText,
 } = require(process.env.QUESTION_VISUAL_MODEL_PATH)
 
 const apiBaseUrl = 'https://api.eduraa.test'
+
+const cropQuestion = (name) => ({
+    visual_payload: {
+        kind: 'question_crop',
+        asset_url: `/api/v1/documents/visuals/${name}.png`,
+    },
+})
 
 test('preserves absolute and API visual URLs', () => {
     assert.equal(
@@ -95,4 +103,63 @@ test('normalizes legacy generated-paper visual fields', () => {
             captions: [],
         },
     )
+})
+
+test('warms the visible book figure first, then the questions just ahead', () => {
+    const questions = [
+        cropQuestion('q1'),
+        { visual_payload: null },
+        cropQuestion('q3'),
+        cropQuestion('q4'),
+        cropQuestion('q5'),
+    ]
+
+    assert.deepEqual(
+        planQuestionVisualPrefetch(questions, { apiBaseUrl, ahead: 3, limit: 4 }),
+        [
+            'https://api.eduraa.test/api/v1/documents/visuals/q1.png',
+            'https://api.eduraa.test/api/v1/documents/visuals/q3.png',
+            'https://api.eduraa.test/api/v1/documents/visuals/q4.png',
+        ],
+    )
+    assert.deepEqual(
+        planQuestionVisualPrefetch(questions, { apiBaseUrl, startIndex: 2, ahead: 2, limit: 4 }),
+        [
+            'https://api.eduraa.test/api/v1/documents/visuals/q3.png',
+            'https://api.eduraa.test/api/v1/documents/visuals/q4.png',
+            'https://api.eduraa.test/api/v1/documents/visuals/q5.png',
+        ],
+    )
+    assert.deepEqual(
+        planQuestionVisualPrefetch(questions, { apiBaseUrl, startIndex: 3, ahead: 0, limit: 4 }),
+        ['https://api.eduraa.test/api/v1/documents/visuals/q4.png'],
+    )
+})
+
+test('keeps the prefetch window bounded and deduplicated', () => {
+    const shared = {
+        visual_payload: {
+            kind: 'question_crop',
+            asset_urls: [
+                '/api/v1/documents/visuals/shared.png',
+                '/api/v1/documents/visuals/extra.png',
+            ],
+        },
+    }
+    const questions = [shared, shared, cropQuestion('last')]
+
+    assert.deepEqual(
+        planQuestionVisualPrefetch(questions, { apiBaseUrl, ahead: 5, limit: 2 }),
+        [
+            'https://api.eduraa.test/api/v1/documents/visuals/shared.png',
+            'https://api.eduraa.test/api/v1/documents/visuals/extra.png',
+        ],
+    )
+    // A viewability report past the end of the paper must not skip the last figure.
+    assert.deepEqual(
+        planQuestionVisualPrefetch(questions, { apiBaseUrl, startIndex: 40, ahead: 3, limit: 4 }),
+        ['https://api.eduraa.test/api/v1/documents/visuals/last.png'],
+    )
+    assert.deepEqual(planQuestionVisualPrefetch([], { apiBaseUrl }), [])
+    assert.deepEqual(planQuestionVisualPrefetch(questions, { apiBaseUrl, limit: 0 }), [])
 })

@@ -151,6 +151,56 @@ export function getQuestionVisualAssetUrls(
   return Array.from(new Set(urls));
 }
 
+type QuestionVisualPrefetchOptions = {
+  apiBaseUrl: string;
+  startIndex?: number;
+  ahead?: number;
+  limit?: number;
+};
+
+/**
+ * Lists the figure URLs worth warming around `startIndex`, in the order a
+ * learner reaches them. Book papers hide the stem behind the crop, so a figure
+ * that only starts downloading when its cell mounts leaves the question blank.
+ */
+export function planQuestionVisualPrefetch(
+  questions:
+    | ReadonlyArray<{ visual_payload?: QuestionVisualPayload | null } | null | undefined>
+    | null
+    | undefined,
+  { apiBaseUrl, startIndex = 0, ahead = 3, limit = 6 }: QuestionVisualPrefetchOptions,
+) {
+  if (!Array.isArray(questions) || !questions.length) return [];
+  const maxUrls = Math.trunc(limit);
+  if (!(maxUrls > 0)) return [];
+
+  const first = Math.min(
+    Math.max(Math.trunc(startIndex) || 0, 0),
+    questions.length - 1,
+  );
+  const last = Math.min(
+    questions.length - 1,
+    first + Math.max(Math.trunc(ahead) || 0, 0),
+  );
+  const urls: string[] = [];
+  const seen = new Set<string>();
+
+  for (let index = first; index <= last; index += 1) {
+    const assetUrls = getQuestionVisualAssetUrls(
+      questions[index]?.visual_payload,
+    );
+    for (const assetUrl of assetUrls) {
+      const resolved = resolveQuestionVisualUrl(assetUrl, apiBaseUrl);
+      if (!resolved || seen.has(resolved)) continue;
+      seen.add(resolved);
+      urls.push(resolved);
+      if (urls.length >= maxUrls) return urls;
+    }
+  }
+
+  return urls;
+}
+
 export function isQuestionCropVisual(
   visualPayload: QuestionVisualPayload | null | undefined,
 ) {
