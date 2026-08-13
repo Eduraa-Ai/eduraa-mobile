@@ -111,8 +111,11 @@ function isResourceInChapter(resource: LearningResource, chapter: string) {
 export default function CheatSheetsScreen() {
   const insets = useSafeAreaInsets()
   const [subject, setSubject] = useState<string | null>(null)
-  const [chapter, setChapter] = useState<string | null>(null)
-  const [activeResourceId, setActiveResourceId] = useState<string | null>(null)
+  // Empty array = no chapter filter (show all sheets in the subject bucket).
+  // 2+ items = union filter; the user can also open a merged viewer that
+  // concatenates every matching sheet's pages.
+  const [selectedChapters, setSelectedChapters] = useState<string[]>([])
+  const [activeResourceIds, setActiveResourceIds] = useState<string[]>([])
   const [subjectPickerOpen, setSubjectPickerOpen] = useState(false)
   const [chapterPickerOpen, setChapterPickerOpen] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -154,24 +157,34 @@ export default function CheatSheetsScreen() {
   const sheetsForChapter = useMemo(() => {
     if (!subject) return []
     const bucketResources = resourcesByBucket.get(subject) ?? []
-    if (!chapter) return bucketResources
-    return bucketResources.filter((r) => isResourceInChapter(r, chapter))
-  }, [resourcesByBucket, subject, chapter])
+    if (selectedChapters.length === 0) return bucketResources
+    return bucketResources.filter((r) =>
+      selectedChapters.some((c) => isResourceInChapter(r, c)),
+    )
+  }, [resourcesByBucket, subject, selectedChapters])
 
   // Auto-select first subject on first load.
   useEffect(() => {
     if (!subject && subjects.length > 0) setSubject(subjects[0])
   }, [subject, subjects])
 
-  // Reset chapter when subject changes to something that doesn't include it.
+  // Prune chapters that no longer exist in the current subject.
   useEffect(() => {
-    if (chapter && !chapters.includes(chapter)) setChapter(null)
-  }, [chapter, chapters])
+    if (selectedChapters.length === 0) return
+    const kept = selectedChapters.filter((c) => chapters.includes(c))
+    if (kept.length !== selectedChapters.length) setSelectedChapters(kept)
+  }, [selectedChapters, chapters])
 
-  const activeResource =
-    activeResourceId != null
-      ? sheetsForChapter.find((r) => r.id === activeResourceId) ?? null
-      : null
+  // Resources actually rendered in the viewer, in the order the user selected.
+  const activeResources = useMemo(() => {
+    if (activeResourceIds.length === 0) return []
+    return activeResourceIds
+      .map((id) => sheetsForChapter.find((r) => r.id === id))
+      .filter((r): r is LearningResource => Boolean(r))
+  }, [activeResourceIds, sheetsForChapter])
+
+  const canMergeMultiple =
+    selectedChapters.length >= 2 && sheetsForChapter.length >= 2
 
   const handleDownload = useCallback(async (resource: LearningResource) => {
     const url = resource.download_url || resource.view_url
@@ -211,8 +224,14 @@ export default function CheatSheetsScreen() {
         />
         <PickerField
           label="Chapter"
-          value={chapter ?? undefined}
-          placeholder={subject ? 'Select chapter' : 'Choose subject first'}
+          value={
+            selectedChapters.length === 0
+              ? undefined
+              : selectedChapters.length === 1
+                ? formatLabel(selectedChapters[0])
+                : `${selectedChapters.length} chapters`
+          }
+          placeholder={subject ? 'All chapters' : 'Choose subject first'}
           onPress={() => setChapterPickerOpen(true)}
           disabled={!subject || chapters.length === 0}
         />
@@ -246,11 +265,37 @@ export default function CheatSheetsScreen() {
           <Text style={styles.listHeader}>
             Sheets · {sheetsForChapter.length}
           </Text>
+          {canMergeMultiple ? (
+            <Pressable
+              onPress={() =>
+                setActiveResourceIds(sheetsForChapter.map((r) => r.id))
+              }
+              style={({ pressed }) => [
+                styles.combinedCta,
+                pressed && styles.combinedCtaPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Open combined cheat sheet for ${selectedChapters.length} chapters`}
+            >
+              <View style={styles.combinedCtaIcon}>
+                <Ionicons name="layers-outline" size={20} color={colors.textOnBrand} />
+              </View>
+              <View style={styles.combinedCtaCopy}>
+                <Text style={styles.combinedCtaTitle}>
+                  Open combined cheat sheet
+                </Text>
+                <Text style={styles.combinedCtaBody}>
+                  {sheetsForChapter.length} sheets · {selectedChapters.length} chapters
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textOnBrand} />
+            </Pressable>
+          ) : null}
           {sheetsForChapter.map((sheet) => (
             <SheetRow
               key={sheet.id}
               sheet={sheet}
-              onPress={() => setActiveResourceId(sheet.id)}
+              onPress={() => setActiveResourceIds([sheet.id])}
               onDownload={() => void handleDownload(sheet)}
               downloading={downloadingId === sheet.id}
             />
@@ -272,32 +317,39 @@ export default function CheatSheetsScreen() {
         selectedValue={subject ?? undefined}
         onSelect={(value) => {
           setSubject(value)
-          setChapter(null)
-          setActiveResourceId(null)
+          setSelectedChapters([])
+          setActiveResourceIds([])
           setSubjectPickerOpen(false)
         }}
         onClose={() => setSubjectPickerOpen(false)}
       />
-      <OptionSheet
+      <MultiSelectSheet
         visible={chapterPickerOpen}
-        title="Chapter"
-        options={['All chapters', ...chapters]}
-        selectedValue={chapter ?? 'All chapters'}
-        formatLabel={(v) => (v === 'All chapters' ? v : formatLabel(v))}
-        onSelect={(value) => {
-          setChapter(value === 'All chapters' ? null : value)
-          setActiveResourceId(null)
+        title="Chapters"
+        subtitle="Select one or more chapters to merge their sheets."
+        options={chapters}
+        selectedValues={selectedChapters}
+        formatLabel={formatLabel}
+        onApply={(next) => {
+          setSelectedChapters(next)
+          setActiveResourceIds([])
           setChapterPickerOpen(false)
         }}
         onClose={() => setChapterPickerOpen(false)}
       />
 
       <SheetViewerModal
-        visible={activeResource !== null}
-        resource={activeResource}
-        onClose={() => setActiveResourceId(null)}
-        onDownload={() => activeResource && void handleDownload(activeResource)}
-        downloading={activeResource != null && downloadingId === activeResource.id}
+        visible={activeResources.length > 0}
+        resources={activeResources}
+        onClose={() => setActiveResourceIds([])}
+        onDownload={() =>
+          activeResources.length === 1 &&
+          void handleDownload(activeResources[0])
+        }
+        downloading={
+          activeResources.length === 1 &&
+          downloadingId === activeResources[0].id
+        }
       />
     </AppScreen>
   )
@@ -491,30 +543,198 @@ function OptionSheet({
   )
 }
 
+// Multi-select bottom sheet used for the chapter picker. Users can toggle
+// individual chapters, and hit Apply to commit the selection. The picker
+// shows a running count so the user can see whether they'll get a single
+// sheet or a merged view.
+function MultiSelectSheet({
+  visible,
+  title,
+  subtitle,
+  options,
+  selectedValues,
+  onApply,
+  onClose,
+  formatLabel: formatLabelProp,
+}: {
+  visible: boolean
+  title: string
+  subtitle?: string
+  options: string[]
+  selectedValues: string[]
+  onApply: (next: string[]) => void
+  onClose: () => void
+  formatLabel?: (value: string) => string
+}) {
+  const insets = useSafeAreaInsets()
+  const [draft, setDraft] = useState<string[]>(selectedValues)
+
+  // Sync draft when opened, so partial edits don't leak between openings.
+  useEffect(() => {
+    if (visible) setDraft(selectedValues)
+  }, [visible, selectedValues])
+
+  const toggle = useCallback((value: string) => {
+    setDraft((current) =>
+      current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value],
+    )
+  }, [])
+
+  const applyLabel =
+    draft.length === 0
+      ? 'Show all sheets'
+      : draft.length === 1
+        ? 'Apply 1 chapter'
+        : `Apply ${draft.length} chapters`
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose} accessibilityLabel="Dismiss">
+        <Pressable
+          style={[sheetStyles.card, { paddingBottom: insets.bottom + spacing[4] }]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={sheetStyles.header}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={sheetStyles.title}>{title}</Text>
+              {subtitle ? <Text style={sheetStyles.subtitle}>{subtitle}</Text> : null}
+            </View>
+            <Pressable
+              onPress={onClose}
+              hitSlop={8}
+              accessibilityLabel="Close"
+              style={({ pressed }) => [sheetStyles.close, pressed && styles.buttonPressed]}
+            >
+              <Ionicons name="close" size={20} color={colors.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={sheetStyles.body} contentContainerStyle={sheetStyles.bodyContent}>
+            {options.map((option) => {
+              const active = draft.includes(option)
+              return (
+                <Pressable
+                  key={option}
+                  onPress={() => toggle(option)}
+                  style={({ pressed }) => [
+                    sheetStyles.option,
+                    active && sheetStyles.optionActive,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: active }}
+                >
+                  <View style={[sheetStyles.checkbox, active && sheetStyles.checkboxActive]}>
+                    {active ? (
+                      <Ionicons name="checkmark" size={14} color={colors.textOnBrand} />
+                    ) : null}
+                  </View>
+                  <Text style={[sheetStyles.optionText, active && sheetStyles.optionTextActive]}>
+                    {formatLabelProp ? formatLabelProp(option) : option}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+
+          <View style={sheetStyles.footer}>
+            <Pressable
+              onPress={() => setDraft([])}
+              disabled={draft.length === 0}
+              style={({ pressed }) => [
+                sheetStyles.footerSecondary,
+                draft.length === 0 && sheetStyles.buttonDisabled,
+                pressed && draft.length > 0 && styles.buttonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Clear chapter selection"
+            >
+              <Text style={sheetStyles.footerSecondaryText}>Clear</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => onApply(draft)}
+              style={({ pressed }) => [
+                sheetStyles.footerPrimary,
+                pressed && styles.buttonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={applyLabel}
+            >
+              <Text style={sheetStyles.footerPrimaryText}>{applyLabel}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+}
+
+type ViewerPage =
+  | { kind: 'header'; sheetIndex: number; sheetTitle: string; totalSheets: number; id: string }
+  | { kind: 'page'; resourceId: string; assetId: string; pageNumber: number; resourceTitle: string; id: string }
+
+function buildViewerPages(resources: LearningResource[]): ViewerPage[] {
+  const items: ViewerPage[] = []
+  const totalSheets = resources.length
+  resources.forEach((resource, index) => {
+    const assetId = resource.original_asset_id
+    const pageCount = resource.page_count ?? 0
+    if (!assetId || pageCount <= 0) return
+    if (totalSheets > 1) {
+      items.push({
+        kind: 'header',
+        sheetIndex: index + 1,
+        sheetTitle: resource.title,
+        totalSheets,
+        id: `header-${resource.id}`,
+      })
+    }
+    for (let p = 1; p <= pageCount; p += 1) {
+      items.push({
+        kind: 'page',
+        resourceId: resource.id,
+        assetId,
+        pageNumber: p,
+        resourceTitle: resource.title,
+        id: `${resource.id}-page-${p}`,
+      })
+    }
+  })
+  return items
+}
+
 function SheetViewerModal({
   visible,
-  resource,
+  resources,
   onClose,
   onDownload,
   downloading,
 }: {
   visible: boolean
-  resource: LearningResource | null
+  resources: LearningResource[]
   onClose: () => void
   onDownload: () => void
   downloading: boolean
 }) {
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
-  const pageCount = resource?.page_count ?? 0
-  const assetId = resource?.original_asset_id ?? null
-  const pages = useMemo(
-    () => Array.from({ length: pageCount }, (_, i) => i + 1),
-    [pageCount],
-  )
+  const viewerPages = useMemo(() => buildViewerPages(resources), [resources])
+  const totalPages = viewerPages.filter((p) => p.kind === 'page').length
 
-  if (!resource) return null
-  const canRenderPages = pageCount > 0 && Boolean(assetId)
+  if (resources.length === 0) return null
+  const merged = resources.length > 1
+  const titleText = merged ? 'Combined cheat sheet' : resources[0].title
+  const metaText = merged
+    ? `${resources.length} sheets · ${totalPages} pages`
+    : [
+        resources[0].provider_label,
+        resources[0].page_count ? `${resources[0].page_count} pages` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+  const canRenderPages = viewerPages.length > 0
   const contentWidth = Math.min(width - spacing[4] * 2, 720)
   const pageHeight = Math.round(contentWidth * 1.414)
 
@@ -529,32 +749,33 @@ function SheetViewerModal({
         <View style={viewerStyles.header}>
           <View style={viewerStyles.headerCopy}>
             <Text style={viewerStyles.title} numberOfLines={1}>
-              {resource.title}
+              {titleText}
             </Text>
-            {resource.provider_label ? (
+            {metaText ? (
               <Text style={viewerStyles.meta} numberOfLines={1}>
-                {resource.provider_label}
-                {resource.page_count ? ` · ${resource.page_count} pages` : ''}
+                {metaText}
               </Text>
             ) : null}
           </View>
-          <Pressable
-            onPress={onDownload}
-            disabled={downloading}
-            hitSlop={8}
-            style={({ pressed }) => [
-              viewerStyles.iconButton,
-              pressed && !downloading && styles.buttonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Download cheat sheet PDF"
-          >
-            {downloading ? (
-              <ActivityIndicator size="small" color={colors.text} />
-            ) : (
-              <Ionicons name="download-outline" size={20} color={colors.text} />
-            )}
-          </Pressable>
+          {!merged ? (
+            <Pressable
+              onPress={onDownload}
+              disabled={downloading}
+              hitSlop={8}
+              style={({ pressed }) => [
+                viewerStyles.iconButton,
+                pressed && !downloading && styles.buttonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Download cheat sheet PDF"
+            >
+              {downloading ? (
+                <ActivityIndicator size="small" color={colors.text} />
+              ) : (
+                <Ionicons name="download-outline" size={20} color={colors.text} />
+              )}
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={onClose}
             hitSlop={8}
@@ -568,8 +789,8 @@ function SheetViewerModal({
 
         {canRenderPages ? (
           <FlatList
-            data={pages}
-            keyExtractor={(n) => `${resource.id}-page-${n}`}
+            data={viewerPages}
+            keyExtractor={(item) => item.id}
             contentContainerStyle={[
               viewerStyles.pagesContent,
               { paddingBottom: insets.bottom + spacing[6] },
@@ -577,40 +798,57 @@ function SheetViewerModal({
             initialNumToRender={2}
             windowSize={4}
             removeClippedSubviews={Platform.OS !== 'web'}
-            renderItem={({ item }) => (
-              <View style={[viewerStyles.pageWrap, { width: contentWidth }]}>
-                <Text style={viewerStyles.pageLabel}>Page {item}</Text>
-                <AuthenticatedImage
-                  uri={learningResourcePageImagePath(resource.id, assetId as string, item)}
-                  accessibilityLabel={`Page ${item} of ${resource.title}`}
-                  containerStyle={{ width: contentWidth, height: pageHeight }}
-                  imageStyle={{ width: contentWidth, height: pageHeight }}
-                />
-              </View>
-            )}
+            renderItem={({ item }) =>
+              item.kind === 'header' ? (
+                <View style={[viewerStyles.sectionHeader, { width: contentWidth }]}>
+                  <Text style={viewerStyles.sectionKicker}>
+                    Sheet {item.sheetIndex} of {item.totalSheets}
+                  </Text>
+                  <Text style={viewerStyles.sectionTitle} numberOfLines={2}>
+                    {item.sheetTitle}
+                  </Text>
+                </View>
+              ) : (
+                <View style={[viewerStyles.pageWrap, { width: contentWidth }]}>
+                  <Text style={viewerStyles.pageLabel}>Page {item.pageNumber}</Text>
+                  <AuthenticatedImage
+                    uri={learningResourcePageImagePath(item.resourceId, item.assetId, item.pageNumber)}
+                    accessibilityLabel={`Page ${item.pageNumber} of ${item.resourceTitle}`}
+                    containerStyle={{ width: contentWidth, height: pageHeight }}
+                    imageStyle={{ width: contentWidth, height: pageHeight }}
+                  />
+                </View>
+              )
+            }
           />
         ) : (
           <View style={viewerStyles.previewFallback}>
             <Ionicons name="document-outline" size={28} color={colors.textSoft} />
             <Text style={viewerStyles.fallbackTitle}>{PREVIEW_UNAVAILABLE}</Text>
-            <Text style={viewerStyles.fallbackBody}>{PREVIEW_UNAVAILABLE_BODY}</Text>
-            <Pressable
-              onPress={onDownload}
-              disabled={downloading}
-              style={({ pressed }) => [
-                viewerStyles.fallbackButton,
-                pressed && !downloading && styles.buttonPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Download cheat sheet PDF"
-            >
-              {downloading ? (
-                <ActivityIndicator size="small" color={colors.textOnBrand} />
-              ) : (
-                <Ionicons name="download-outline" size={16} color={colors.textOnBrand} />
-              )}
-              <Text style={viewerStyles.fallbackButtonText}>Download PDF</Text>
-            </Pressable>
+            <Text style={viewerStyles.fallbackBody}>
+              {merged
+                ? 'None of the selected chapter sheets have page previews. Close and download each PDF individually.'
+                : PREVIEW_UNAVAILABLE_BODY}
+            </Text>
+            {!merged ? (
+              <Pressable
+                onPress={onDownload}
+                disabled={downloading}
+                style={({ pressed }) => [
+                  viewerStyles.fallbackButton,
+                  pressed && !downloading && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Download cheat sheet PDF"
+              >
+                {downloading ? (
+                  <ActivityIndicator size="small" color={colors.textOnBrand} />
+                ) : (
+                  <Ionicons name="download-outline" size={16} color={colors.textOnBrand} />
+                )}
+                <Text style={viewerStyles.fallbackButtonText}>Download PDF</Text>
+              </Pressable>
+            ) : null}
           </View>
         )}
       </View>
@@ -781,6 +1019,37 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodySemibold,
     fontSize: 12,
   },
+  combinedCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    padding: spacing[3],
+    marginTop: spacing[1],
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+    ...shadows.xs,
+  },
+  combinedCtaPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
+  combinedCtaIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  combinedCtaCopy: { flex: 1, minWidth: 0, gap: 2 },
+  combinedCtaTitle: {
+    color: colors.textOnBrand,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  combinedCtaBody: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 11.5,
+  },
   buttonPressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
 })
 
@@ -837,10 +1106,72 @@ const sheetStyles = StyleSheet.create({
     color: colors.text,
     fontFamily: typography.fonts.bodySemibold,
     fontSize: 14,
+    flex: 1,
+    minWidth: 0,
   },
   optionTextActive: {
     color: colors.accentStrong,
   },
+  subtitle: {
+    marginTop: 2,
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing[3],
+    backgroundColor: colors.card,
+  },
+  checkboxActive: {
+    backgroundColor: colors.accentStrong,
+    borderColor: colors.accentStrong,
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: spacing[2],
+    paddingTop: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+    marginTop: spacing[2],
+  },
+  footerSecondary: {
+    height: 44,
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  footerSecondaryText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 13,
+  },
+  footerPrimary: {
+    flex: 1,
+    height: 44,
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  footerPrimaryText: {
+    color: colors.textOnBrand,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+  },
+  buttonDisabled: { opacity: 0.4 },
 })
 
 const viewerStyles = StyleSheet.create({
@@ -887,6 +1218,28 @@ const viewerStyles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing[4],
     gap: spacing[4],
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderRadius: radius.md,
+    backgroundColor: colors.accentSurface,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+    gap: 2,
+  },
+  sectionKicker: {
+    color: colors.accentStrong,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 15,
+    lineHeight: 19,
   },
   pageWrap: {
     borderRadius: radius.md,
