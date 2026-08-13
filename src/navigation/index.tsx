@@ -12,7 +12,6 @@ import { spacing } from '../theme/spacing'
 import type { AccountMinimal, AuthToken } from '../types'
 import {
   isCheatSheetsEligible,
-  isLearningResourcesEligible,
   isPreviousPapersEligible,
   resolveMobileLanding,
 } from '../auth/landing'
@@ -39,7 +38,6 @@ import AgenticLearningScreen from '../screens/learning/AgenticLearningScreen'
 import AgenticSubjectScreen from '../screens/learning/AgenticSubjectScreen'
 import AgenticTopicScreen from '../screens/learning/AgenticTopicScreen'
 import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
-import LearningResourcesScreen from '../screens/learning/LearningResourcesScreen'
 import CheatSheetsScreen from '../screens/learning/CheatSheetsScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
 import FeatureScreen from '../screens/workspace/FeatureScreen'
@@ -127,7 +125,6 @@ export type TabParamList = {
   Results: NavigatorScreenParams<ResultsStackParamList> | undefined
   Profile: undefined
   PreviousPapers: undefined
-  LearningResources: undefined
   CheatSheets: undefined
 }
 
@@ -301,11 +298,9 @@ function ProfileNavigator() {
 
 function StudentTabs({
   previousPapersEligible = false,
-  learningResourcesEligible = false,
   cheatSheetsEligible = false,
 }: {
   previousPapersEligible?: boolean
-  learningResourcesEligible?: boolean
   cheatSheetsEligible?: boolean
 }) {
   return (
@@ -325,13 +320,6 @@ function StudentTabs({
           name="PreviousPapers"
           component={PreviousPapersScreen}
           options={{ title: 'Previous', tabBarAccessibilityLabel: 'Previous-year JEE papers' }}
-        />
-      ) : null}
-      {learningResourcesEligible ? (
-        <Tab.Screen
-          name="LearningResources"
-          component={LearningResourcesScreen}
-          options={{ title: 'Resources', tabBarAccessibilityLabel: 'Learning resources' }}
         />
       ) : null}
       {cheatSheetsEligible ? (
@@ -486,7 +474,6 @@ function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
     return (
       <StudentTabs
         previousPapersEligible={isPreviousPapersEligible(user)}
-        learningResourcesEligible={isLearningResourcesEligible(user)}
         cheatSheetsEligible={isCheatSheetsEligible(user)}
       />
     )
