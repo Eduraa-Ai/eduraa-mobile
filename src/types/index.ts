@@ -360,6 +360,7 @@ export type CheckedPaperStatus =
   | string; // allow any future status values
 
 export interface GradingResultItem {
+  result_id?: string | null;
   question_id: string;
   topic_id?: string | null;
   topic_name?: string | null;
@@ -392,6 +393,20 @@ export interface GradingResultItem {
   explanation?: string | null;
   easy_example?: string | null;
   why_marks_cut?: string | null;
+  manual_review_requested?: boolean | null;
+  manual_review_note?: string | null;
+  manual_review_requested_at?: string | null;
+  manual_review_requested_by?: string | null;
+  manual_review_completed?: boolean | null;
+  manual_review_completed_at?: string | null;
+  manual_review_completed_by?: string | null;
+  question_review_thread?: Array<{
+    event_type?: string | null;
+    author_role?: string | null;
+    author_id?: string | null;
+    message?: string | null;
+    created_at?: string | null;
+  }> | null;
 }
 
 export interface CheckedPaper {
@@ -415,6 +430,10 @@ export interface CheckedPaper {
   is_teacher_override: boolean;
   teacher_reviewed_at?: string | null;
   manual_review_requested: boolean;
+  manual_review_note?: string | null;
+  manual_review_completed?: boolean | null;
+  pending_question_review_count?: number;
+  pending_question_review_labels?: string[];
   // enriched fields from backend list/detail endpoints
   student_name?: string | null;
   exam_name?: string | null;

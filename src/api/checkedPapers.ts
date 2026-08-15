@@ -10,6 +10,27 @@ import type { DownloadedPdf } from '../utils/pdfDownload'
 export interface ManualReviewRequestPayload {
   note?: string | null
   question_id?: string | null
+  result_id?: string | null
+}
+
+export interface QuestionReviewCommentPayload {
+  note?: string | null
+  question_id?: string | null
+  result_id?: string | null
+  resolve?: boolean
+}
+
+export interface TeacherReviewResultPayload {
+  result_id?: string | null
+  question_id?: string | null
+  score: number
+  feedback?: string | null
+  selected?: boolean | null
+}
+
+export interface TeacherReviewPayload {
+  grading_feedback?: string | null
+  results: TeacherReviewResultPayload[]
 }
 
 function downloadFilename(contentDisposition: unknown, fallback: string) {
@@ -49,10 +70,32 @@ export const checkedPapersApi = {
 
   requestManualReview: async (
     id: string,
-    payload: ManualReviewRequestPayload = { note: null, question_id: null },
+    payload: ManualReviewRequestPayload = { note: null, question_id: null, result_id: null },
   ): Promise<CheckedPaper> => {
     const response = await apiClient.post<CheckedPaper>(
       `/checked-papers/${id}/manual-review-request`,
+      payload,
+    )
+    return response.data
+  },
+
+  addQuestionReviewComment: async (
+    id: string,
+    payload: QuestionReviewCommentPayload,
+  ): Promise<CheckedPaper> => {
+    const response = await apiClient.post<CheckedPaper>(
+      `/checked-papers/${id}/question-review-comment`,
+      payload,
+    )
+    return response.data
+  },
+
+  updateTeacherReview: async (
+    id: string,
+    payload: TeacherReviewPayload,
+  ): Promise<CheckedPaper> => {
+    const response = await apiClient.patch<CheckedPaper>(
+      `/checked-papers/${id}/teacher-review`,
       payload,
     )
     return response.data
