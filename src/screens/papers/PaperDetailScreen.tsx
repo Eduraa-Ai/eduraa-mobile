@@ -28,7 +28,7 @@ import { presentPdf } from "../../utils/pdfDownload";
 import { useAuthStore } from "../../stores/authStore";
 import { LatexText, QuestionVisual } from "../../components/ui";
 import { colors } from "../../theme/colors";
-import { spacing, radius, shadows } from "../../theme/spacing";
+import { spacing, radius, shadows, layout } from "../../theme/spacing";
 import { shouldShowQuestionStemText } from "../../utils/questionVisual";
 import {
   isAttemptCheckDelayed,
@@ -57,13 +57,13 @@ function HeaderAction({
   busy = false,
   onPress,
 }: {
-  label: string
-  icon: keyof typeof Ionicons.glyphMap
-  danger?: boolean
-  busy?: boolean
-  onPress: () => void
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  danger?: boolean;
+  busy?: boolean;
+  onPress: () => void;
 }) {
-  const color = danger ? colors.danger : colors.text
+  const color = danger ? colors.danger : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
@@ -78,111 +78,156 @@ function HeaderAction({
         pressed && styles.headerActionPressed,
       ]}
     >
-      {busy
-        ? <ActivityIndicator size="small" color={color} />
-        : <Ionicons name={icon} size={18} color={color} />}
+      {busy ? (
+        <ActivityIndicator size="small" color={color} />
+      ) : (
+        <Ionicons name={icon} size={18} color={color} />
+      )}
     </Pressable>
-  )
+  );
 }
 
 export default function PaperDetailScreen() {
-  const navigation = useNavigation<Nav>()
-  const { params } = useRoute<Route>()
-  const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
-  const isFocused = useIsFocused()
-  const queryClient = useQueryClient()
-  const user = useAuthStore((state) => state.user)
-  const [actionMenuOpen, setActionMenuOpen] = useState(false)
-  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [isOpeningResult, setIsOpeningResult] = useState(false)
-  const resultOpeningRef = useRef(false)
+  const navigation = useNavigation<Nav>();
+  const { params } = useRoute<Route>();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isFocused = useIsFocused();
+  const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isOpeningResult, setIsOpeningResult] = useState(false);
+  const resultOpeningRef = useRef(false);
 
   const paperQuery = useQuery({
-    queryKey: ['paper', params.paperId],
+    queryKey: ["paper", params.paperId],
     queryFn: () => papersApi.getById(params.paperId),
-  })
-  const paper = paperQuery.data
+  });
+  const paper = paperQuery.data;
 
   const attemptsQuery = useQuery({
-    queryKey: ['paper-attempts-detail', params.paperId],
+    queryKey: ["paper-attempts-detail", params.paperId],
     queryFn: () => papersApi.listAttempts(params.paperId),
     enabled: !!paper,
     retry: false,
-  })
-  const attempts = attemptsQuery.data?.items ?? []
-  const submittedAttempt = selectNewestSubmittedAttempt(attempts)
-  const primaryAction = paperPrimaryAction(attempts)
-  const submittedScore = visibleScore(submittedAttempt)
-  const checking = isAttemptChecking(submittedAttempt)
-  const checkDelayed = isAttemptCheckDelayed(submittedAttempt)
+  });
+  const attempts = attemptsQuery.data?.items ?? [];
+  const submittedAttempt = selectNewestSubmittedAttempt(attempts);
+  const primaryAction = paperPrimaryAction(attempts);
+  const submittedScore = visibleScore(submittedAttempt);
+  const checking = isAttemptChecking(submittedAttempt);
+  const checkDelayed = isAttemptCheckDelayed(submittedAttempt);
   const canOpenSubmittedResult = Boolean(
-    submittedAttempt
-    && (
-      primaryAction === 'view_results'
-      || primaryAction === 'attempt_again'
-      || checking
-      || checkDelayed
-    ),
-  )
+    submittedAttempt &&
+    (primaryAction === "view_results" ||
+      primaryAction === "attempt_again" ||
+      checking ||
+      checkDelayed),
+  );
 
   const ownedPapersQuery = useQuery({
-    queryKey: ['papers', 'mine', user?.id],
-    queryFn: () => papersApi.list({ skip: 0, limit: 100, scope: 'mine' }),
-    enabled: Boolean(paper && user?.role === 'student'),
-  })
-  const canDelete = user?.role === 'b2c_student'
-    || Boolean(ownedPapersQuery.data?.items.some((item) => item.id === params.paperId))
-    || Boolean(paper?.created_by && paper.created_by === user?.id)
+    queryKey: ["papers", "mine", user?.id],
+    queryFn: () => papersApi.list({ skip: 0, limit: 100, scope: "mine" }),
+    enabled: Boolean(paper && user?.role === "student"),
+  });
+  const canDelete =
+    user?.role === "b2c_student" ||
+    Boolean(
+      ownedPapersQuery.data?.items.some((item) => item.id === params.paperId),
+    ) ||
+    Boolean(paper?.created_by && paper.created_by === user?.id);
+  // Publishing is what releases a draft to the teacher's class, so it is only
+  // offered to the teacher who created it.
+  const canPublish =
+    user?.role === "teacher" &&
+    Boolean(paper?.created_by && paper.created_by === user?.id) &&
+    paper?.status !== "published";
 
   const downloadMutation = useMutation({
     mutationFn: async () => {
-      const pdf = await papersApi.downloadPdf(params.paperId)
-      await presentPdf(pdf)
+      const pdf = await papersApi.downloadPdf(params.paperId);
+      await presentPdf(pdf);
     },
     onMutate: () => setActionError(null),
-    onError: () => setActionError('Could not download this paper. Check your connection and try again.'),
-  })
+    onError: () =>
+      setActionError(
+        "Could not download this paper. Check your connection and try again.",
+      ),
+  });
 
   const retestMutation = useMutation({
-    mutationFn: () => papersApi.createAttempt(params.paperId, { reason: 'retest' }),
+    mutationFn: () =>
+      papersApi.createAttempt(params.paperId, { reason: "retest" }),
     onMutate: () => setActionError(null),
     onSuccess: (attempt) => {
-      const launchKey = `retest-${attempt.id}-${Date.now()}`
-      queryClient.setQueryData(['paper-attempt', params.paperId, undefined], attempt)
-      void queryClient.invalidateQueries({ queryKey: ['paper-attempts-detail', params.paperId] })
-      navigation.navigate('AttemptPaper', { paperId: params.paperId, launchKey })
+      const launchKey = `retest-${attempt.id}-${Date.now()}`;
+      queryClient.setQueryData(
+        ["paper-attempt", params.paperId, undefined],
+        attempt,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["paper-attempts-detail", params.paperId],
+      });
+      navigation.navigate("AttemptPaper", {
+        paperId: params.paperId,
+        launchKey,
+      });
     },
-    onError: () => setActionError('A fresh attempt could not be started. Your previous result is unchanged.'),
-  })
+    onError: () =>
+      setActionError(
+        "A fresh attempt could not be started. Your previous result is unchanged.",
+      ),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: () => papersApi.publish(params.paperId),
+    onMutate: () => setActionError(null),
+    onSuccess: async (published) => {
+      queryClient.setQueryData(["paper", params.paperId], published);
+      await queryClient.invalidateQueries({ queryKey: ["papers"] });
+    },
+    onError: (error: any) => {
+      const detail = error?.response?.data?.detail;
+      setActionError(
+        typeof detail === "string"
+          ? detail
+          : "This paper could not be published. Make sure it has a standard and division.",
+      );
+    },
+  });
 
   const deleteMutation = useMutation({
     mutationFn: () => papersApi.delete(params.paperId),
     onMutate: () => setActionError(null),
     onSuccess: async () => {
-      setDeleteConfirmationOpen(false)
+      setDeleteConfirmationOpen(false);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['papers'] }),
-        queryClient.invalidateQueries({ queryKey: ['exams', 'practice'] }),
-      ])
-      queryClient.removeQueries({ queryKey: ['paper', params.paperId] })
-      queryClient.removeQueries({ queryKey: ['paper-attempts-detail', params.paperId] })
-      navigation.navigate('PapersList')
+        queryClient.invalidateQueries({ queryKey: ["papers"] }),
+        queryClient.invalidateQueries({ queryKey: ["exams", "practice"] }),
+      ]);
+      queryClient.removeQueries({ queryKey: ["paper", params.paperId] });
+      queryClient.removeQueries({
+        queryKey: ["paper-attempts-detail", params.paperId],
+      });
+      navigation.navigate("PapersList");
     },
     onError: () => {
-      setDeleteConfirmationOpen(false)
-      setActionError('This paper could not be deleted. Only papers you created can be removed.')
+      setDeleteConfirmationOpen(false);
+      setActionError(
+        "This paper could not be deleted. Only papers you created can be removed.",
+      );
     },
-  })
+  });
 
   useEffect(() => {
-    if (!isFocused) return
-    resultOpeningRef.current = false
-    setIsOpeningResult(false)
-    void paperQuery.refetch()
-    if (paper) void attemptsQuery.refetch()
-  }, [isFocused, params.paperId])
+    if (!isFocused) return;
+    resultOpeningRef.current = false;
+    setIsOpeningResult(false);
+    void paperQuery.refetch();
+    if (paper) void attemptsQuery.refetch();
+  }, [isFocused, params.paperId]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -190,11 +235,15 @@ export default function PaperDetailScreen() {
         <HeaderAction
           label="Paper actions"
           icon="ellipsis-horizontal"
-          busy={downloadMutation.isPending || retestMutation.isPending || deleteMutation.isPending}
+          busy={
+            downloadMutation.isPending ||
+            retestMutation.isPending ||
+            deleteMutation.isPending
+          }
           onPress={() => setActionMenuOpen(true)}
         />
       ),
-    })
+    });
   }, [
     canDelete,
     deleteMutation.isPending,
@@ -203,7 +252,7 @@ export default function PaperDetailScreen() {
     params.paperId,
     retestMutation.isPending,
     submittedAttempt?.id,
-  ])
+  ]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -233,15 +282,20 @@ export default function PaperDetailScreen() {
 
   const hPad = width < 380 ? spacing[4] : spacing[5];
   const openSubmittedResult = () => {
-    if (!submittedAttempt?.id || resultOpeningRef.current) return
-    const didNavigate = navigateToCheckedPapers(navigation, submittedAttempt.id)
+    if (!submittedAttempt?.id || resultOpeningRef.current) return;
+    const didNavigate = navigateToCheckedPapers(
+      navigation,
+      submittedAttempt.id,
+    );
     if (!didNavigate) {
-      setActionError('Checked papers could not open. Please return to Papers and try again.')
-      return
+      setActionError(
+        "Checked papers could not open. Please return to Papers and try again.",
+      );
+      return;
     }
-    resultOpeningRef.current = true
-    setIsOpeningResult(true)
-  }
+    resultOpeningRef.current = true;
+    setIsOpeningResult(true);
+  };
 
   return (
     <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
@@ -249,7 +303,10 @@ export default function PaperDetailScreen() {
         style={styles.root}
         contentContainerStyle={[
           styles.content,
-          { paddingHorizontal: hPad, paddingBottom: insets.bottom + 32 },
+          {
+            paddingHorizontal: hPad,
+            paddingBottom: layout.bottomTabHeight + insets.bottom + spacing[10],
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -342,68 +399,127 @@ export default function PaperDetailScreen() {
         ) : null}
 
         <View style={styles.actions}>
+          {canPublish ? (
+            <TouchableOpacity
+              style={[
+                styles.primaryBtn,
+                publishMutation.isPending && styles.primaryBtnDisabled,
+              ]}
+              onPress={() => publishMutation.mutate()}
+              activeOpacity={0.82}
+              disabled={publishMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Publish paper to your class"
+              accessibilityState={{
+                busy: publishMutation.isPending,
+                disabled: publishMutation.isPending,
+              }}
+            >
+              {publishMutation.isPending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Ionicons name="send" size={16} color={colors.white} />
+              )}
+              <Text style={styles.primaryBtnText}>
+                {publishMutation.isPending ? "Publishing…" : "Publish to Class"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
           {canOpenSubmittedResult && submittedAttempt ? (
             <TouchableOpacity
-              style={[styles.primaryBtn, isOpeningResult && styles.primaryBtnDisabled]}
+              style={[
+                styles.primaryBtn,
+                isOpeningResult && styles.primaryBtnDisabled,
+              ]}
               onPress={openSubmittedResult}
               disabled={isOpeningResult}
               activeOpacity={0.82}
               accessibilityRole="button"
               accessibilityLabel="View results"
-              accessibilityState={{ busy: isOpeningResult, disabled: isOpeningResult }}
+              accessibilityState={{
+                busy: isOpeningResult,
+                disabled: isOpeningResult,
+              }}
             >
               <Ionicons name="stats-chart" size={16} color={colors.white} />
-              <Text style={styles.primaryBtnText}>{isOpeningResult ? 'Opening…' : 'View Results'}</Text>
+              <Text style={styles.primaryBtnText}>
+                {isOpeningResult ? "Opening…" : "View Results"}
+              </Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[styles.primaryBtn, retestMutation.isPending && styles.primaryBtnDisabled]}
+              style={[
+                styles.primaryBtn,
+                retestMutation.isPending && styles.primaryBtnDisabled,
+              ]}
               onPress={() => {
-                if (primaryAction === 'attempt_again') {
-                  retestMutation.mutate()
-                  return
+                if (primaryAction === "attempt_again") {
+                  retestMutation.mutate();
+                  return;
                 }
-                navigation.navigate('AttemptPaper', { paperId: paper.id })
+                navigation.navigate("AttemptPaper", { paperId: paper.id });
               }}
               activeOpacity={0.82}
               disabled={retestMutation.isPending}
               accessibilityRole="button"
               accessibilityLabel={
-                primaryAction === 'attempt_again'
-                  ? 'Attempt paper again'
-                  : primaryAction === 'continue'
-                    ? 'Continue paper'
-                    : 'Attempt paper'
+                primaryAction === "attempt_again"
+                  ? "Attempt paper again"
+                  : primaryAction === "continue"
+                    ? "Continue paper"
+                    : "Attempt paper"
               }
             >
-              {retestMutation.isPending
-                ? <ActivityIndicator size="small" color={colors.white} />
-                : <Ionicons name={primaryAction === 'attempt_again' ? 'refresh' : 'pencil'} size={16} color={colors.white} />}
+              {retestMutation.isPending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Ionicons
+                  name={
+                    primaryAction === "attempt_again" ? "refresh" : "pencil"
+                  }
+                  size={16}
+                  color={colors.white}
+                />
+              )}
               <Text style={styles.primaryBtnText}>
                 {retestMutation.isPending
-                  ? 'Starting…'
-                  : primaryAction === 'attempt_again'
-                    ? 'Attempt Again'
-                    : primaryAction === 'continue'
-                      ? 'Continue Paper'
-                      : 'Attempt Paper'}
+                  ? "Starting…"
+                  : primaryAction === "attempt_again"
+                    ? "Attempt Again"
+                    : primaryAction === "continue"
+                      ? "Continue Paper"
+                      : "Attempt Paper"}
               </Text>
             </TouchableOpacity>
           )}
           {submittedAttempt ? (
             <TouchableOpacity
-              style={[styles.secondaryBtn, retestMutation.isPending && styles.primaryBtnDisabled]}
+              style={[
+                styles.secondaryBtn,
+                retestMutation.isPending && styles.primaryBtnDisabled,
+              ]}
               onPress={() => retestMutation.mutate()}
               activeOpacity={0.82}
               disabled={retestMutation.isPending}
               accessibilityRole="button"
               accessibilityLabel="Retest this paper"
-              accessibilityState={{ busy: retestMutation.isPending, disabled: retestMutation.isPending }}
+              accessibilityState={{
+                busy: retestMutation.isPending,
+                disabled: retestMutation.isPending,
+              }}
             >
-              {retestMutation.isPending
-                ? <ActivityIndicator size="small" color={colors.accent} />
-                : <Ionicons name="repeat-outline" size={16} color={colors.accent} />}
-              <Text style={styles.secondaryBtnText}>{retestMutation.isPending ? 'Starting…' : 'Retest'}</Text>
+              {retestMutation.isPending ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Ionicons
+                  name="repeat-outline"
+                  size={16}
+                  color={colors.accent}
+                />
+              )}
+              <Text style={styles.secondaryBtnText}>
+                {retestMutation.isPending ? "Starting…" : "Retest"}
+              </Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -418,7 +534,11 @@ export default function PaperDetailScreen() {
         </View>
         {actionError ? (
           <View accessibilityLiveRegion="polite" style={styles.actionError}>
-            <Ionicons name="alert-circle-outline" size={16} color={colors.danger} />
+            <Ionicons
+              name="alert-circle-outline"
+              size={16}
+              color={colors.danger}
+            />
             <Text style={styles.actionErrorText}>{actionError}</Text>
           </View>
         ) : null}
@@ -521,24 +641,38 @@ export default function PaperDetailScreen() {
             style={StyleSheet.absoluteFill}
             onPress={() => setActionMenuOpen(false)}
           />
-          <View accessibilityRole="menu" style={[styles.actionMenu, { top: insets.top + 54 }]}>
+          <View
+            accessibilityRole="menu"
+            style={[styles.actionMenu, { top: insets.top + 54 }]}
+          >
             <Text style={styles.actionMenuEyebrow}>Paper actions</Text>
             {submittedAttempt ? (
               <Pressable
                 accessibilityRole="menuitem"
                 accessibilityLabel="Start a fresh retest"
                 onPress={() => {
-                  setActionMenuOpen(false)
-                  retestMutation.mutate()
+                  setActionMenuOpen(false);
+                  retestMutation.mutate();
                 }}
-                style={({ pressed }) => [styles.actionMenuItem, pressed && styles.headerActionPressed]}
+                style={({ pressed }) => [
+                  styles.actionMenuItem,
+                  pressed && styles.headerActionPressed,
+                ]}
               >
                 <View style={styles.actionMenuIcon}>
-                  <Ionicons name="repeat-outline" size={20} color={colors.accentStrong} />
+                  <Ionicons
+                    name="repeat-outline"
+                    size={20}
+                    color={colors.accentStrong}
+                  />
                 </View>
                 <View style={styles.actionMenuCopy}>
-                  <Text style={styles.actionMenuTitle}>Start a fresh retest</Text>
-                  <Text style={styles.actionMenuBody}>Keep every previous result and open a blank attempt.</Text>
+                  <Text style={styles.actionMenuTitle}>
+                    Start a fresh retest
+                  </Text>
+                  <Text style={styles.actionMenuBody}>
+                    Keep every previous result and open a blank attempt.
+                  </Text>
                 </View>
               </Pressable>
             ) : null}
@@ -546,17 +680,26 @@ export default function PaperDetailScreen() {
               accessibilityRole="menuitem"
               accessibilityLabel="Download paper PDF"
               onPress={() => {
-                setActionMenuOpen(false)
-                downloadMutation.mutate()
+                setActionMenuOpen(false);
+                downloadMutation.mutate();
               }}
-              style={({ pressed }) => [styles.actionMenuItem, pressed && styles.headerActionPressed]}
+              style={({ pressed }) => [
+                styles.actionMenuItem,
+                pressed && styles.headerActionPressed,
+              ]}
             >
               <View style={styles.actionMenuIcon}>
-                <Ionicons name="download-outline" size={20} color={colors.accentStrong} />
+                <Ionicons
+                  name="download-outline"
+                  size={20}
+                  color={colors.accentStrong}
+                />
               </View>
               <View style={styles.actionMenuCopy}>
                 <Text style={styles.actionMenuTitle}>Download paper PDF</Text>
-                <Text style={styles.actionMenuBody}>Save the question paper without answers.</Text>
+                <Text style={styles.actionMenuBody}>
+                  Save the question paper without answers.
+                </Text>
               </View>
             </Pressable>
             {canDelete ? (
@@ -564,17 +707,36 @@ export default function PaperDetailScreen() {
                 accessibilityRole="menuitem"
                 accessibilityLabel="Delete paper"
                 onPress={() => {
-                  setActionMenuOpen(false)
-                  setDeleteConfirmationOpen(true)
+                  setActionMenuOpen(false);
+                  setDeleteConfirmationOpen(true);
                 }}
-                style={({ pressed }) => [styles.actionMenuItem, styles.actionMenuItemDanger, pressed && styles.headerActionPressed]}
+                style={({ pressed }) => [
+                  styles.actionMenuItem,
+                  styles.actionMenuItemDanger,
+                  pressed && styles.headerActionPressed,
+                ]}
               >
-                <View style={[styles.actionMenuIcon, styles.actionMenuIconDanger]}>
-                  <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                <View
+                  style={[styles.actionMenuIcon, styles.actionMenuIconDanger]}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={20}
+                    color={colors.danger}
+                  />
                 </View>
                 <View style={styles.actionMenuCopy}>
-                  <Text style={[styles.actionMenuTitle, styles.actionMenuTitleDanger]}>Delete practice paper</Text>
-                  <Text style={styles.actionMenuBody}>Permanently remove this owned paper and its attempts.</Text>
+                  <Text
+                    style={[
+                      styles.actionMenuTitle,
+                      styles.actionMenuTitleDanger,
+                    ]}
+                  >
+                    Delete practice paper
+                  </Text>
+                  <Text style={styles.actionMenuBody}>
+                    Permanently remove this owned paper and its attempts.
+                  </Text>
                 </View>
               </Pressable>
             ) : null}
@@ -587,7 +749,7 @@ export default function PaperDetailScreen() {
         animationType="fade"
         visible={deleteConfirmationOpen}
         onRequestClose={() => {
-          if (!deleteMutation.isPending) setDeleteConfirmationOpen(false)
+          if (!deleteMutation.isPending) setDeleteConfirmationOpen(false);
         }}
       >
         <View style={styles.confirmBackdrop}>
@@ -595,12 +757,15 @@ export default function PaperDetailScreen() {
             accessibilityLabel="Cancel paper deletion"
             style={StyleSheet.absoluteFill}
             onPress={() => {
-              if (!deleteMutation.isPending) setDeleteConfirmationOpen(false)
+              if (!deleteMutation.isPending) setDeleteConfirmationOpen(false);
             }}
           />
           <View
             accessibilityRole="alert"
-            style={[styles.confirmSheet, { paddingBottom: insets.bottom + spacing[5] }]}
+            style={[
+              styles.confirmSheet,
+              { paddingBottom: insets.bottom + spacing[5] },
+            ]}
           >
             <View style={styles.confirmHandle} />
             <View style={styles.confirmIcon}>
@@ -609,7 +774,8 @@ export default function PaperDetailScreen() {
             <Text style={styles.confirmEyebrow}>Remove practice paper</Text>
             <Text style={styles.confirmTitle}>Delete this paper?</Text>
             <Text style={styles.confirmBody}>
-              “{paper.title}” and its linked attempts will be permanently removed. Teacher-assigned papers cannot be deleted.
+              “{paper.title}” and its linked attempts will be permanently
+              removed. Teacher-assigned papers cannot be deleted.
             </Text>
             <View style={styles.confirmActions}>
               <TouchableOpacity
@@ -626,15 +792,24 @@ export default function PaperDetailScreen() {
                 activeOpacity={0.9}
                 disabled={deleteMutation.isPending}
                 onPress={() => deleteMutation.mutate()}
-                style={[styles.confirmDelete, deleteMutation.isPending && styles.primaryBtnDisabled]}
+                style={[
+                  styles.confirmDelete,
+                  deleteMutation.isPending && styles.primaryBtnDisabled,
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel="Confirm delete paper"
               >
-                {deleteMutation.isPending
-                  ? <ActivityIndicator size="small" color={colors.white} />
-                  : <Ionicons name="trash-outline" size={16} color={colors.white} />}
+                {deleteMutation.isPending ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Ionicons
+                    name="trash-outline"
+                    size={16}
+                    color={colors.white}
+                  />
+                )}
                 <Text style={styles.confirmDeleteText}>
-                  {deleteMutation.isPending ? 'Deleting…' : 'Delete paper'}
+                  {deleteMutation.isPending ? "Deleting…" : "Delete paper"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -659,8 +834,8 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.backgroundTint,
     borderWidth: 1,
     borderColor: colors.border,
@@ -681,7 +856,13 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderStrong,
     gap: spacing[3],
   },
-  paperTitle: { fontSize: 23, lineHeight: 29, fontWeight: '800', color: colors.ink, letterSpacing: -0.4 },
+  paperTitle: {
+    fontSize: 23,
+    lineHeight: 29,
+    fontWeight: "800",
+    color: colors.ink,
+    letterSpacing: -0.4,
+  },
   paperSub: { fontSize: 13, color: colors.muted },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing[2] },
   chip: {
@@ -754,7 +935,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing[2],
   },
-  primaryBtnText: { color: colors.white, fontWeight: '700', fontSize: 14 },
+  primaryBtnText: { color: colors.white, fontWeight: "700", fontSize: 14 },
   primaryBtnDisabled: { opacity: 0.58 },
   secondaryBtn: {
     flex: 1,
@@ -768,7 +949,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.accent,
   },
-  secondaryBtnText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
+  secondaryBtnText: { color: colors.accent, fontWeight: "700", fontSize: 14 },
   downloadBtn: {
     minHeight: 58,
     borderRadius: radius.lg,
@@ -777,8 +958,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundElevated,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[3],
   },
   downloadCopy: {
@@ -788,7 +969,7 @@ const styles = StyleSheet.create({
   downloadTitle: {
     color: colors.text,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   downloadMeta: {
     color: colors.textSoft,
@@ -807,8 +988,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSurface,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[2],
   },
   actionErrorText: {
@@ -897,18 +1078,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  optionLetterText: { fontSize: 11, fontWeight: '700', color: colors.muted },
+  optionLetterText: { fontSize: 11, fontWeight: "700", color: colors.muted },
   optionTextContainer: { flex: 1 },
-  optionText: { fontSize: 13, color: colors.muted, lineHeight: 20, paddingTop: 3 },
+  optionText: {
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 20,
+    paddingTop: 3,
+  },
   actionMenuBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(7,21,45,0.28)',
+    backgroundColor: "rgba(7,21,45,0.28)",
   },
   actionMenu: {
-    position: 'absolute',
+    position: "absolute",
     right: spacing[3],
     width: 304,
-    maxWidth: '92%',
+    maxWidth: "92%",
     borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
@@ -920,9 +1106,9 @@ const styles = StyleSheet.create({
   actionMenuEyebrow: {
     color: colors.accentStrong,
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 1.1,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     paddingHorizontal: spacing[2],
     paddingTop: spacing[1],
     paddingBottom: spacing[2],
@@ -932,8 +1118,8 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     paddingHorizontal: spacing[2],
     paddingVertical: spacing[2],
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[3],
   },
   actionMenuItemDanger: {
@@ -947,8 +1133,8 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.accentSurface,
     borderWidth: 1,
     borderColor: colors.borderBrand,
@@ -965,7 +1151,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   actionMenuTitleDanger: {
     color: colors.danger,
@@ -977,14 +1163,14 @@ const styles = StyleSheet.create({
   },
   confirmBackdrop: {
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(7,21,45,0.58)',
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(7,21,45,0.58)",
     paddingHorizontal: spacing[3],
   },
   confirmSheet: {
-    width: '100%',
+    width: "100%",
     maxWidth: 520,
-    alignSelf: 'center',
+    alignSelf: "center",
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     backgroundColor: colors.backgroundElevated,
@@ -997,7 +1183,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 4,
     borderRadius: radius.full,
-    alignSelf: 'center',
+    alignSelf: "center",
     backgroundColor: colors.borderStrong,
     marginBottom: spacing[2],
   },
@@ -1005,8 +1191,8 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.dangerSurface,
     borderWidth: 1,
     borderColor: `${colors.danger}35`,
@@ -1014,15 +1200,15 @@ const styles = StyleSheet.create({
   confirmEyebrow: {
     color: colors.accentStrong,
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 1.1,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   confirmTitle: {
     color: colors.text,
     fontSize: 24,
     lineHeight: 29,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: -0.35,
   },
   confirmBody: {
@@ -1031,7 +1217,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   confirmActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing[3],
     marginTop: spacing[2],
   },
@@ -1039,8 +1225,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 52,
     borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
@@ -1048,21 +1234,21 @@ const styles = StyleSheet.create({
   confirmCancelText: {
     color: colors.text,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   confirmDelete: {
     flex: 1,
     minHeight: 52,
     borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
     gap: spacing[2],
     backgroundColor: colors.danger,
   },
   confirmDeleteText: {
     color: colors.white,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: "800",
   },
-})
+});
