@@ -454,11 +454,18 @@ export interface PaperSubjectOption {
   name: string;
 }
 
+export interface PaperSectionOption {
+  standard: string;
+  division: string;
+  subjects: PaperSubjectOption[];
+}
+
 export interface PaperOptions {
   courses: string[];
   standards: string[];
   divisions: string[];
   subjects: PaperSubjectOption[];
+  sections: PaperSectionOption[];
   exam_types: string[];
 }
 
