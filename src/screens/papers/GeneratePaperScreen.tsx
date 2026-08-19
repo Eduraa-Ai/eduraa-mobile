@@ -38,8 +38,11 @@ import {
 } from "../../utils/bookPaperGeneration";
 import {
   buildJeeFormPaperRequest,
+  describePaperGenerationJob,
   parsePaperDuration,
+  resolvePaperScope,
 } from "./generatePaperSettingsModel";
+import { usePaperGenerationJob } from "./usePaperGenerationJob";
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "GeneratePaper">;
 type Stage = 0 | 1 | 2;
@@ -101,6 +104,7 @@ type QuestionRow = {
 type GenerateInput = {
   payload: PaperGenerateRequest;
   useAvailableBookCount?: boolean;
+  useGenerationJob?: boolean;
   ai?: {
     examType: string;
     subject: string;
@@ -747,9 +751,13 @@ export default function GeneratePaperScreen() {
     queryFn: papersApi.getOptions,
   });
 
-  const subjects = options?.subjects ?? [];
-  const selectedSubject = subjects.find((subject) => subject.id === subjectId);
   const isCompetitive = isCompetitiveCourse(board);
+  const scope = useMemo(
+    () => resolvePaperScope(options ?? {}, { standard, division, subjectId }),
+    [division, options, standard, subjectId],
+  );
+  const subjects = scope.subjects;
+  const selectedSubject = subjects.find((subject) => subject.id === subjectId);
   const aiExamType = boardToExamType(board);
   const aiCatalogSubject = subjectToCatalog(selectedSubject?.name);
   const aiSourceAvailable = Boolean(
@@ -817,10 +825,22 @@ export default function GeneratePaperScreen() {
 
   useEffect(() => {
     if (!board && options?.courses?.[0]) setBoard(options.courses[0]);
-    if (!standard && options?.standards?.[0])
-      setStandard(normalizeStandard(options.standards[0]));
-    if (!division && options?.divisions?.[0]) setDivision(options.divisions[0]);
-  }, [board, division, options, standard]);
+  }, [board, options]);
+
+  // Pull the selection back onto a combination the backend accepts whenever the
+  // options load or a narrower choice invalidates a wider one.
+  useEffect(() => {
+    if (!options) return;
+    if (scope.selection.standard !== standard) {
+      setStandard(scope.selection.standard);
+    }
+    if (scope.selection.division !== division) {
+      setDivision(scope.selection.division);
+    }
+    if (scope.selection.subjectId !== subjectId) {
+      setSubjectId(scope.selection.subjectId);
+    }
+  }, [division, options, scope, standard, subjectId]);
 
   // Smart default: prefer Books whenever this (exam, subject) pair actually has
   // indexed book chapters, and only fall back to AI when the book shelf comes
@@ -914,6 +934,11 @@ export default function GeneratePaperScreen() {
     setCounts(COMPETITIVE_PRESETS[0].counts);
   }, [isCompetitive]);
 
+  const generationJob = usePaperGenerationJob({
+    onCompleted: (paperId) => navigation.replace("PaperDetail", { paperId }),
+    onFailed: (message) => setGenerationError(message),
+  });
+
   const generateMutation = useMutation({
     mutationFn: async (input: GenerateInput) => {
       if (input.ai) {
@@ -937,6 +962,14 @@ export default function GeneratePaperScreen() {
           requestedCount: input.ai.count,
           generatedCount: paper.questions.length,
         };
+      }
+      // School papers mix long and short answers over retrieval and routinely
+      // outrun a single request, so they go through the background worker.
+      // Competitive papers are short MCQ sets and keep the direct call, which
+      // is also what the book-shortage retry below probes against.
+      if (input.useGenerationJob) {
+        await generationJob.start(input.payload);
+        return null;
       }
       if (!input.useAvailableBookCount) {
         const paper = await papersApi.generate(input.payload);
@@ -963,14 +996,17 @@ export default function GeneratePaperScreen() {
       };
     },
     onMutate: () => setGenerationError(null),
-    onSuccess: ({ paper, requestedCount, generatedCount }) =>
+    onSuccess: (result) => {
+      if (!result) return;
+      const { paper, requestedCount, generatedCount } = result;
       navigation.replace("PaperDetail", {
         paperId: paper.id,
         generationNotice:
           generatedCount < requestedCount
             ? `Created ${generatedCount} of ${requestedCount} requested questions from the approved book bank.`
             : undefined,
-      }),
+      });
+    },
     onError: (err: any) => {
       const detail = err?.response?.data?.detail;
       const message =
@@ -984,6 +1020,14 @@ export default function GeneratePaperScreen() {
       setGenerationError(message);
     },
   });
+
+  const jobView = generationJob.job
+    ? describePaperGenerationJob(generationJob.job)
+    : null;
+  const isGenerating =
+    generateMutation.isPending ||
+    generationJob.isStarting ||
+    generationJob.isRunning;
 
   const selectAllChapters = () =>
     setChapterIds(activeChapters.map((chapter) => chapter.id));
@@ -1100,6 +1144,7 @@ export default function GeneratePaperScreen() {
 
     generateMutation.mutate({
       payload,
+      useGenerationJob: !isCompetitive,
       useAvailableBookCount:
         generationMode === "available" && chapterSource === "books",
       ai:
@@ -1234,30 +1279,30 @@ export default function GeneratePaperScreen() {
               }}
             />
           ) : null}
-          {!isCompetitive && (options?.standards ?? []).length > 0 ? (
+          {!isCompetitive && scope.standards.length > 0 ? (
             <CompactSelect
               label="Standard"
               value={standard}
               placeholder="Select standard"
-              options={(options?.standards ?? []).map((item) => ({
-                value: normalizeStandard(item),
+              options={scope.standards.map((item) => ({
+                value: item,
                 label: normalizeStandard(item)
                   ? `Std ${normalizeStandard(item)}`
                   : item,
               }))}
               onChange={(value) => {
-                setStandard(normalizeStandard(value));
+                setStandard(value);
                 setSubjectId("");
                 clearChapters();
               }}
             />
           ) : null}
-          {!isCompetitive && (options?.divisions ?? []).length > 0 ? (
+          {!isCompetitive && scope.divisions.length > 0 ? (
             <CompactSelect
               label="Division"
               value={division}
               placeholder="Select division"
-              options={(options?.divisions ?? []).map((item) => ({
+              options={scope.divisions.map((item) => ({
                 value: item,
                 label: `Div ${item}`,
               }))}
@@ -1681,9 +1726,7 @@ export default function GeneratePaperScreen() {
                 returnKeyType="done"
                 accessibilityLabel="Duration in minutes"
                 accessibilityHint="Leave empty for no timer"
-                aria-invalid={
-                  durationTouched && Boolean(durationResult.error)
-                }
+                aria-invalid={durationTouched && Boolean(durationResult.error)}
                 style={[
                   styles.input,
                   durationTouched &&
@@ -1700,7 +1743,9 @@ export default function GeneratePaperScreen() {
                   {durationResult.error}
                 </Text>
               ) : (
-                <Text style={styles.fieldHelper}>Leave empty for no timer.</Text>
+                <Text style={styles.fieldHelper}>
+                  Leave empty for no timer.
+                </Text>
               )}
             </View>
             <CompactSelect
@@ -1741,7 +1786,7 @@ export default function GeneratePaperScreen() {
                   ? "Generate available"
                   : "Try again"
               }
-              pending={generateMutation.isPending}
+              pending={isGenerating}
               onRetry={() =>
                 handleGenerate(
                   chapterSource === "books" &&
@@ -1772,16 +1817,32 @@ export default function GeneratePaperScreen() {
               }
             />
           ) : null}
+          {jobView && !generationError ? (
+            <View style={styles.jobCard} accessibilityLiveRegion="polite">
+              <View style={styles.jobHeader}>
+                <ActivityIndicator size="small" color={colors.accentStrong} />
+                <Text style={styles.jobHeadline}>{jobView.headline}</Text>
+                {jobView.percent !== null ? (
+                  <Text style={styles.jobPercent}>{jobView.percent}%</Text>
+                ) : null}
+              </View>
+              {jobView.percent !== null ? (
+                <View style={styles.jobTrack}>
+                  <View
+                    style={[styles.jobFill, { width: `${jobView.percent}%` }]}
+                  />
+                </View>
+              ) : null}
+              <Text style={styles.jobDetail}>
+                {jobView.detail ??
+                  "This keeps running if you leave the screen — come back any time."}
+              </Text>
+            </View>
+          ) : null}
           <PrimaryButton
-            label={
-              generateMutation.isPending
-                ? "Generating draft..."
-                : "Generate draft"
-            }
-            loading={generateMutation.isPending}
-            disabled={
-              !topicDone || !questionsDone || generateMutation.isPending
-            }
+            label={isGenerating ? "Generating draft..." : "Generate draft"}
+            loading={isGenerating}
+            disabled={!topicDone || !questionsDone || isGenerating}
             onPress={handleGenerate}
           />
         </StageCard>
@@ -1794,6 +1855,47 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#FBF6EC",
+  },
+  jobCard: {
+    gap: spacing[3],
+    padding: spacing[4],
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+  },
+  jobHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  jobHeadline: {
+    flex: 1,
+    fontFamily: fonts.displaySemibold,
+    fontSize: 15,
+    color: colors.text,
+  },
+  jobPercent: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.accentStrong,
+  },
+  jobTrack: {
+    height: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.borderStrong,
+    overflow: "hidden",
+  },
+  jobFill: {
+    height: "100%",
+    borderRadius: radius.full,
+    backgroundColor: colors.accentStrong,
+  },
+  jobDetail: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textMuted,
   },
   screenContent: {
     paddingTop: spacing[2],
