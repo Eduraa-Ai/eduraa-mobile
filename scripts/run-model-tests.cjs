@@ -30,6 +30,7 @@ const models = [
   'src/auth/queryCacheScope.ts',
   'src/auth/roles.ts',
   'src/auth/landing.ts',
+  'src/screens/profile/b2bProfileModel.ts',
 ]
 
 const suites = [
@@ -101,11 +102,23 @@ const suites = [
     env: { QUERY_CACHE_SCOPE_PATH: path.join(outDir, 'auth/queryCacheScope.js') },
   },
   {
+    file: 'scripts/auth-session-contract.test.cjs',
+    env: {},
+  },
+  {
     file: 'scripts/previous-papers-access.test.cjs',
     env: { LANDING_MODEL_PATH: path.join(outDir, 'auth/landing.js') },
   },
   {
     file: 'scripts/previous-papers-navigation.test.cjs',
+    env: {},
+  },
+  {
+    file: 'scripts/b2b-profile-contract.test.cjs',
+    env: { B2B_PROFILE_MODEL_PATH: path.join(outDir, 'screens/profile/b2bProfileModel.js') },
+  },
+  {
+    file: 'scripts/b2b-profile-integration-contract.test.cjs',
     env: {},
   },
   {

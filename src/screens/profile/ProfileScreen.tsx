@@ -26,6 +26,7 @@ import { useAuthStore } from '../../stores/authStore'
 import type { AccountMinimal, B2CProfileRead, EducationLevel } from '../../types'
 import { SelectField } from '../../components/ui/SelectField'
 import { typography } from '../../theme'
+import B2BProfileScreen from './B2BProfileScreen'
 
 // ── Canonical row palette (main-html-whole-workflow.html · Competitive Profile) ──
 const NAVY = '#07152d'
@@ -119,13 +120,22 @@ type ProfileScreenProps = {
   mode?: 'profile' | 'onboarding'
 }
 
-export default function ProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
+export default function ProfileScreen(props: ProfileScreenProps) {
+  const role = useAuthStore((state) => state.user?.role)
+  if (props.mode !== 'onboarding' && role && role !== 'b2c_student') {
+    return <B2BProfileScreen />
+  }
+  return <B2CProfileScreen {...props} />
+}
+
+function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
   const isOnboarding = mode === 'onboarding'
   const insets = useSafeAreaInsets()
   const queryClient = useQueryClient()
   const { logout, user } = useAuthStore()
+  const accountKey = user ? `${user.role}:${user.id}` : 'signed-out'
   const { data: profile, isLoading } = useQuery({
-    queryKey: ['b2c-profile'],
+    queryKey: ['b2c-profile', accountKey],
     queryFn: b2cApi.getProfile,
   })
 
@@ -270,8 +280,8 @@ export default function ProfileScreen({ mode = 'profile' }: ProfileScreenProps) 
       return { updatedProfile, refreshedUser }
     },
     onSuccess: ({ updatedProfile, refreshedUser }) => {
-      queryClient.setQueryData(['b2c-profile'], updatedProfile)
-      queryClient.invalidateQueries({ queryKey: ['b2c-profile'] })
+      queryClient.setQueryData(['b2c-profile', accountKey], updatedProfile)
+      queryClient.invalidateQueries({ queryKey: ['b2c-profile', accountKey] })
       useAuthStore.setState({ user: refreshedUser })
       if (!isOnboarding) {
         setJustSaved(true)

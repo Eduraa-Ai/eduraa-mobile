@@ -35,6 +35,7 @@ const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   StaffPapers: 'document-text-outline',
   StaffResults: 'bar-chart-outline',
   StaffAIStudio: 'sparkles-outline',
+  StaffProfile: 'person-outline',
 }
 
 function RouteIcon({
