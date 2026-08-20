@@ -10,6 +10,7 @@ import { AppScreen, ErrorState, MathText } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { AgenticHeader, AgenticIntro, AgenticSectionHeader, AgenticSurface } from './AgenticLearningFrame'
 import { clampPercent, nextOpenTopic, topicStatusLabel } from './agenticLearningModel'
+import { useLearnerTrack } from '../../hooks/useLearnerTrack'
 
 type RouteParams = {
   topicId: string
@@ -89,6 +90,8 @@ function LessonConnectionStatus({ failed, offline, loading, onRetry }: { failed:
 function AgenticTopicContent() {
   const navigation = useNavigation<any>()
   const route = useRoute()
+  // PYQ counts are competitive-track chrome; school learners never see them.
+  const { isJee: showExamMetrics } = useLearnerTrack()
   const { topicId, topicName, subjectName, origin, checkedPaperId } = route.params as RouteParams
   const netInfo = useNetInfo()
   const queryClient = useQueryClient()
@@ -222,7 +225,7 @@ function AgenticTopicContent() {
               <View style={styles.nextPill}><Text style={styles.nextPillText}>{topicStatusLabel(nextTopic)}</Text></View>
             </View>
             <Text style={styles.nextBody}>{nextTopic.summary}</Text>
-            <Text style={styles.nextMeta}>{clampPercent(nextTopic.mastery_score)}% mastery{nextTopic.pyq_frequency != null ? ` · ${nextTopic.pyq_frequency} PYQs` : ''}</Text>
+            <Text style={styles.nextMeta}>{clampPercent(nextTopic.mastery_score)}% mastery{showExamMetrics && nextTopic.pyq_frequency != null ? ` · ${nextTopic.pyq_frequency} PYQs` : ''}</Text>
           </AgenticSurface>
         ) : (
           <AgenticSurface><Text style={styles.nextBody}>No other open concept is waiting in this subject.</Text></AgenticSurface>

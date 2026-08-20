@@ -45,12 +45,15 @@ export function nextOpenTopic(topics: AgenticLearningSubtopicCard[], currentTopi
   return topics.find((topic) => topic.topic_id !== currentTopicId && topic.status.toLowerCase() !== 'resolved') ?? null
 }
 
-export function topicAccessibilityLabel(topic: AgenticLearningSubtopicCard) {
+export function topicAccessibilityLabel(
+  topic: AgenticLearningSubtopicCard,
+  showExamMetrics = false,
+) {
   const details = [
     topic.topic_name,
     topicStatusLabel(topic),
     `${clampPercent(topic.mastery_score)} percent mastery`,
-    topic.pyq_frequency != null ? `${topic.pyq_frequency} previous-year questions` : null,
+    showExamMetrics && topic.pyq_frequency != null ? `${topic.pyq_frequency} previous-year questions` : null,
   ].filter(Boolean)
   return details.join(', ')
 }
