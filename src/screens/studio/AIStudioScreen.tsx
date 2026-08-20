@@ -2575,6 +2575,9 @@ export default function AIStudioScreen() {
                     <TouchableOpacity
                       style={styles.stopButton}
                       onPress={stopGeneration}
+                      accessibilityRole="button"
+                      accessibilityLabel="Stop generating the answer"
+                      accessibilityHint="Keeps the partial answer already received."
                     >
                       <Ionicons name="stop" size={11} color={colors.white} />
                       <Text style={styles.stopButtonText}>Stop</Text>
@@ -2601,6 +2604,9 @@ export default function AIStudioScreen() {
                       <TouchableOpacity
                         style={styles.retryButton}
                         onPress={retryFailedRequest}
+                        accessibilityRole="button"
+                        accessibilityLabel="Try again"
+                        accessibilityHint="Resends the last question without duplicating it."
                       >
                         <Ionicons
                           name="refresh"
