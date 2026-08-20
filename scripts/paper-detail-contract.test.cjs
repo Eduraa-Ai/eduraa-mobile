@@ -31,15 +31,15 @@ test('submission refreshes every paper state surface and suppresses checking pla
   assert.match(attemptSource, /resultIsReady && data\.total_score/)
   assert.match(attemptSource, /invalidateQueries\(\{ queryKey: \['papers'\] \}\)/)
   assert.match(attemptSource, /paper-attempts-detail/)
-  assert.match(listSource, /item\.is_submitted_by_me \? 'Attempted'/)
+  assert.match(listSource, /item\.is_submitted_by_me \? ["']Attempted["']/)
 })
 
 test('result and fresh-attempt actions are explicit rather than conflated', () => {
-  assert.match(detailSource, /primaryAction === 'view_results'/)
-  assert.match(detailSource, /primaryAction === 'attempt_again'/)
+  assert.match(detailSource, /primaryAction === ["']view_results["']/)
+  assert.match(detailSource, /primaryAction === ["']attempt_again["']/)
   assert.match(detailSource, /View Results/)
   assert.match(detailSource, /Retest/)
-  assert.match(detailSource, /reason: 'retest'/)
+  assert.match(detailSource, /reason: ["']retest["']/)
 })
 
 test('submitted papers can always leave for learner or staff checked papers', () => {
@@ -47,6 +47,9 @@ test('submitted papers can always leave for learner or staff checked papers', ()
   assert.match(resultsNavigationSource, /names\.includes\('StaffResults'\)/)
   assert.match(attemptSource, /Open checked papers/)
   assert.match(attemptSource, /navigateToCheckedPapers\(navigation, submitOutcome\.submissionId\)/)
-  assert.match(detailSource, /navigateToCheckedPapers\(navigation, submittedAttempt\.id\)/)
+  assert.match(
+    detailSource,
+    /navigateToCheckedPapers\(\s*navigation,\s*submittedAttempt\.id,?\s*\)/,
+  )
   assert.match(resultDetailSource, /const goBack = \(\) => navigation\.navigate\('ResultsList'\)/)
 })

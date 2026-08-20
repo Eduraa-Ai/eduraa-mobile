@@ -2,10 +2,10 @@
  * Eduraa Mobile — Papers API
  */
 
-import apiClient from './client'
-import { normalizeStandardValue } from '../data/authOptions'
-import type { DownloadedPdf } from '../utils/pdfDownload'
-import { normalizeQuestionVisualPayload } from '../utils/questionVisual'
+import apiClient from "./client";
+import { normalizeStandardValue } from "../data/authOptions";
+import type { DownloadedPdf } from "../utils/pdfDownload";
+import { normalizeQuestionVisualPayload } from "../utils/questionVisual";
 import type {
   Paper,
   PaperListItem,
@@ -16,36 +16,36 @@ import type {
   PaperOptions,
   PaginatedResponse,
   Chapter,
-} from '../types'
+} from "../types";
 
 type JeeSyllabusResponse = {
   chapters?: Array<{
-    key: string
-    title: string
-    standard?: string | null
-    subtopics?: string[]
-  }>
-}
+    key: string;
+    title: string;
+    standard?: string | null;
+    subtopics?: string[];
+  }>;
+};
 
 type JeeGenerateFormPaperResponse = {
-  paper_id: string | null
-  draft_id: string
-  job_id: string
-  status: string
-  failed_count?: number
-  error?: string | null
-}
+  paper_id: string | null;
+  draft_id: string;
+  job_id: string;
+  status: string;
+  failed_count?: number;
+  error?: string | null;
+};
 
 export type JeeGenerateFormPaperRequest = {
-  exam_type: string
-  subject: string
-  chapter_keys: string[]
-  count: number
-  question_marks: number
-  subtopic?: string
-  title: string
-  duration_minutes: number | null
-}
+  exam_type: string;
+  subject: string;
+  chapter_keys: string[];
+  count: number;
+  question_marks: number;
+  subtopic?: string;
+  title: string;
+  duration_minutes: number | null;
+};
 
 /**
  * Shape a standard for the `/chapters` query the way the web client does.
@@ -54,29 +54,29 @@ export type JeeGenerateFormPaperRequest = {
  * `standardRequestValue` in the web's BlueprintExamMode.
  */
 function standardRequestValue(value?: string | null): string | undefined {
-  const trimmed = String(value ?? '').trim()
-  if (!trimmed) return undefined
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return undefined;
   if (/^std\.?\s*/i.test(trimmed)) {
-    const withoutPrefix = trimmed.replace(/^std\.?\s*/i, '').trim()
+    const withoutPrefix = trimmed.replace(/^std\.?\s*/i, "").trim();
     return /^\d+$/.test(withoutPrefix)
       ? `Std ${withoutPrefix}`
-      : normalizeStandardValue(withoutPrefix)
+      : normalizeStandardValue(withoutPrefix);
   }
-  if (/^\d+$/.test(trimmed)) return `Std ${trimmed}`
-  return normalizeStandardValue(trimmed)
+  if (/^\d+$/.test(trimmed)) return `Std ${trimmed}`;
+  return normalizeStandardValue(trimmed);
 }
 
 function downloadFilename(contentDisposition: unknown, fallback: string) {
-  if (typeof contentDisposition !== 'string') return fallback
-  const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  if (typeof contentDisposition !== "string") return fallback;
+  const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
   if (encoded) {
     try {
-      return decodeURIComponent(encoded)
+      return decodeURIComponent(encoded);
     } catch {
-      return encoded
+      return encoded;
     }
   }
-  return contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] || fallback
+  return contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] || fallback;
 }
 
 function normalizePaperQuestionVisuals(paper: Paper): Paper {
@@ -86,13 +86,13 @@ function normalizePaperQuestionVisuals(paper: Paper): Paper {
       ...question,
       visual_payload: normalizeQuestionVisualPayload(question),
     })),
-  }
+  };
 }
 
 export const papersApi = {
   getOptions: async (): Promise<PaperOptions> => {
-    const response = await apiClient.get<PaperOptions>('/papers/options')
-    return response.data
+    const response = await apiClient.get<PaperOptions>("/papers/options");
+    return response.data;
   },
 
   /**
@@ -111,97 +111,149 @@ export const papersApi = {
     subjectId: string,
     options?: { board?: string; standard?: string; indexedOnly?: boolean },
   ): Promise<Chapter[]> => {
-    const board = options?.board?.trim() || undefined
-    const standard = standardRequestValue(options?.standard)
-    const response = await apiClient.get<Chapter[]>('/chapters', {
+    const board = options?.board?.trim() || undefined;
+    const standard = standardRequestValue(options?.standard);
+    const response = await apiClient.get<Chapter[]>("/chapters", {
       params: {
         subject_id: subjectId,
         board,
         standard,
         indexed_only: options?.indexedOnly ?? true,
       },
-    })
-    return response.data
+    });
+    return response.data;
   },
 
   generate: async (data: PaperGenerateRequest): Promise<Paper> => {
-    const response = await apiClient.post<Paper>('/papers/generate', data)
-    return normalizePaperQuestionVisuals(response.data)
+    const response = await apiClient.post<Paper>("/papers/generate", data);
+    return normalizePaperQuestionVisuals(response.data);
   },
 
-  getJeeSyllabus: async (params: { exam_type: string; subject: string }): Promise<JeeSyllabusResponse> => {
-    const response = await apiClient.get<JeeSyllabusResponse>('/ai/jee/syllabus', { params })
-    return response.data
+  getJeeSyllabus: async (params: {
+    exam_type: string;
+    subject: string;
+  }): Promise<JeeSyllabusResponse> => {
+    const response = await apiClient.get<JeeSyllabusResponse>(
+      "/ai/jee/syllabus",
+      { params },
+    );
+    return response.data;
   },
 
   generateJeeFormPaper: async (
     data: JeeGenerateFormPaperRequest,
   ): Promise<JeeGenerateFormPaperResponse> => {
-    const response = await apiClient.post<JeeGenerateFormPaperResponse>('/ai/jee/generate-form-paper', data, { timeout: 240000 })
-    return response.data
+    const response = await apiClient.post<JeeGenerateFormPaperResponse>(
+      "/ai/jee/generate-form-paper",
+      data,
+      { timeout: 240000 },
+    );
+    return response.data;
   },
 
   // Backend uses skip/limit (not page/size)
   list: async (params?: {
-    skip?: number
-    limit?: number
-    subject_id?: string
-    status?: string
-    scope?: 'mine'
+    skip?: number;
+    limit?: number;
+    subject_id?: string;
+    status?: string;
+    scope?: "mine";
   }): Promise<PaginatedResponse<PaperListItem>> => {
-    const response = await apiClient.get<PaginatedResponse<PaperListItem>>('/papers', { params })
-    return response.data
+    const response = await apiClient.get<PaginatedResponse<PaperListItem>>(
+      "/papers",
+      { params },
+    );
+    return response.data;
   },
 
   getById: async (paperId: string): Promise<Paper> => {
-    const response = await apiClient.get<Paper>(`/papers/${paperId}`)
-    return normalizePaperQuestionVisuals(response.data)
+    const response = await apiClient.get<Paper>(`/papers/${paperId}`);
+    return normalizePaperQuestionVisuals(response.data);
   },
 
-  submit: async (paperId: string, data: PaperSubmissionCreate): Promise<PaperSubmissionRead> => {
-    const response = await apiClient.post<PaperSubmissionRead>(`/papers/${paperId}/submit`, data)
-    return response.data
+  submit: async (
+    paperId: string,
+    data: PaperSubmissionCreate,
+  ): Promise<PaperSubmissionRead> => {
+    const response = await apiClient.post<PaperSubmissionRead>(
+      `/papers/${paperId}/submit`,
+      data,
+    );
+    return response.data;
   },
 
-  createAttempt: async (paperId: string, data?: { exam_id?: string; reason?: string }): Promise<PaperSubmissionRead> => {
-    const response = await apiClient.post<PaperSubmissionRead>(`/papers/${paperId}/attempts`, data)
-    return response.data
+  createAttempt: async (
+    paperId: string,
+    data?: { exam_id?: string; reason?: string },
+  ): Promise<PaperSubmissionRead> => {
+    const response = await apiClient.post<PaperSubmissionRead>(
+      `/papers/${paperId}/attempts`,
+      data,
+    );
+    return response.data;
   },
 
-  listAttempts: async (paperId: string, params?: { exam_id?: string }): Promise<PaperAttemptsResponse> => {
-    const response = await apiClient.get<PaperAttemptsResponse>(`/papers/${paperId}/attempts`, { params })
-    return response.data
+  listAttempts: async (
+    paperId: string,
+    params?: { exam_id?: string },
+  ): Promise<PaperAttemptsResponse> => {
+    const response = await apiClient.get<PaperAttemptsResponse>(
+      `/papers/${paperId}/attempts`,
+      { params },
+    );
+    return response.data;
   },
 
   getSubmission: async (
     paperId: string,
     params?: { exam_id?: string; attempt_id?: string },
   ): Promise<PaperSubmissionRead> => {
-    const response = await apiClient.get<PaperSubmissionRead>(`/papers/${paperId}/submission`, { params })
-    return response.data
+    const response = await apiClient.get<PaperSubmissionRead>(
+      `/papers/${paperId}/submission`,
+      { params },
+    );
+    return response.data;
   },
 
   downloadPdf: async (paperId: string): Promise<DownloadedPdf> => {
-    const response = await apiClient.get<ArrayBuffer>(`/papers/${paperId}/export/pdf`, {
-      params: { include_answers: false },
-      responseType: 'arraybuffer',
-      timeout: 120000,
-    })
+    const response = await apiClient.get<ArrayBuffer>(
+      `/papers/${paperId}/export/pdf`,
+      {
+        params: { include_answers: false },
+        responseType: "arraybuffer",
+        timeout: 120000,
+      },
+    );
     return {
       bytes: response.data,
-      filename: downloadFilename(response.headers['content-disposition'], `eduraa-paper-${paperId}.pdf`),
-    }
+      filename: downloadFilename(
+        response.headers["content-disposition"],
+        `eduraa-paper-${paperId}.pdf`,
+      ),
+    };
   },
 
   delete: async (paperId: string): Promise<void> => {
-    await apiClient.delete(`/papers/${paperId}`)
+    await apiClient.delete(`/papers/${paperId}`);
+  },
+
+  publish: async (paperId: string): Promise<Paper> => {
+    const response = await apiClient.post<Paper>(`/papers/${paperId}/publish`);
+    return normalizePaperQuestionVisuals(response.data);
   },
 
   getInteractiveAssist: async (
     paperId: string,
-    data: { question_id: string; mode: 'hint' | 'explain' | 'mistake'; student_answer?: string }
+    data: {
+      question_id: string;
+      mode: "hint" | "explain" | "mistake";
+      student_answer?: string;
+    },
   ): Promise<{ content: string }> => {
-    const response = await apiClient.post(`/papers/${paperId}/interactive/assist`, data)
-    return response.data
+    const response = await apiClient.post(
+      `/papers/${paperId}/interactive/assist`,
+      data,
+    );
+    return response.data;
   },
-}
+};
