@@ -27,6 +27,7 @@ import { AuthLogoMark } from "../../components/ui/AuthLogoMark";
 import { PrimaryButton } from "../../components/ui/PrimaryButton";
 import { Screen } from "../../components/ui/Screen";
 import type { PapersStackParamList } from "../../navigation";
+import { useAuthStore } from "../../stores/authStore";
 import { colors } from "../../theme/colors";
 import { fonts } from "../../theme/fonts";
 import { layout, radius, shadows, spacing } from "../../theme/spacing";
@@ -649,9 +650,11 @@ function StageCard({
 function GenerateStudioHeader({
   stage,
   onBack,
+  showsDuration,
 }: {
   stage: Stage;
   onBack: () => void;
+  showsDuration?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const stageCopy = [
@@ -668,7 +671,9 @@ function GenerateStudioHeader({
     {
       pill: "Ready",
       title: "Generate draft.",
-      body: "Duration, difficulty, and the final action.",
+      body: showsDuration
+        ? "Duration, difficulty, and the final action."
+        : "Difficulty and the final action.",
     },
   ][stage];
 
@@ -707,6 +712,8 @@ function GenerateStudioHeader({
 
 export default function GeneratePaperScreen() {
   const navigation = useNavigation<Nav>();
+  // Teacher papers are timed by the exam they are attached to, not by the paper.
+  const isTeacher = useAuthStore((state) => state.user?.role) === "teacher";
   const [stage, setStage] = useState<Stage>(0);
   const [maxStageReached, setMaxStageReached] = useState(0);
   const [chapterSource, setChapterSource] = useState<ChapterSource>("books");
@@ -1214,7 +1221,11 @@ export default function GeneratePaperScreen() {
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <GenerateStudioHeader stage={stage} onBack={() => navigation.goBack()} />
+      <GenerateStudioHeader
+        stage={stage}
+        onBack={() => navigation.goBack()}
+        showsDuration={!isTeacher}
+      />
       <Screen contentStyle={styles.screenContentAfterHeader}>
         <View style={styles.progress}>
           {[0, 1, 2].map((item) => {
@@ -1713,41 +1724,45 @@ export default function GeneratePaperScreen() {
           }}
         >
           <View style={styles.twoCol}>
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Duration (minutes)</Text>
-              <TextInput
-                value={durationInput}
-                onChangeText={setDurationInput}
-                onBlur={() => setDurationTouched(true)}
-                placeholder="Enter minutes"
-                placeholderTextColor={colors.textSubtle}
-                keyboardType="number-pad"
-                inputMode="numeric"
-                returnKeyType="done"
-                accessibilityLabel="Duration in minutes"
-                accessibilityHint="Leave empty for no timer"
-                aria-invalid={durationTouched && Boolean(durationResult.error)}
-                style={[
-                  styles.input,
-                  durationTouched &&
-                    durationResult.error &&
-                    styles.inputInvalid,
-                ]}
-              />
-              {durationTouched && durationResult.error ? (
-                <Text
-                  accessibilityRole="alert"
-                  accessibilityLiveRegion="polite"
-                  style={styles.fieldError}
-                >
-                  {durationResult.error}
-                </Text>
-              ) : (
-                <Text style={styles.fieldHelper}>
-                  Leave empty for no timer.
-                </Text>
-              )}
-            </View>
+            {isTeacher ? null : (
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Duration (minutes)</Text>
+                <TextInput
+                  value={durationInput}
+                  onChangeText={setDurationInput}
+                  onBlur={() => setDurationTouched(true)}
+                  placeholder="Enter minutes"
+                  placeholderTextColor={colors.textSubtle}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  returnKeyType="done"
+                  accessibilityLabel="Duration in minutes"
+                  accessibilityHint="Leave empty for no timer"
+                  aria-invalid={
+                    durationTouched && Boolean(durationResult.error)
+                  }
+                  style={[
+                    styles.input,
+                    durationTouched &&
+                      durationResult.error &&
+                      styles.inputInvalid,
+                  ]}
+                />
+                {durationTouched && durationResult.error ? (
+                  <Text
+                    accessibilityRole="alert"
+                    accessibilityLiveRegion="polite"
+                    style={styles.fieldError}
+                  >
+                    {durationResult.error}
+                  </Text>
+                ) : (
+                  <Text style={styles.fieldHelper}>
+                    Leave empty for no timer.
+                  </Text>
+                )}
+              </View>
+            )}
             <CompactSelect
               label="Difficulty"
               value={difficulty}
