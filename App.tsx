@@ -15,7 +15,11 @@ import RootNavigator from './src/navigation'
 import { useAuthStore } from './src/stores/authStore'
 import { authApi } from './src/api/auth'
 import { isDefinitiveAuthFailure, queryRetryDelay, shouldRetryQuery } from './src/api/queryReliability'
-import { shouldClearQueryCache } from './src/auth/queryCacheScope'
+import {
+  accountCacheScope,
+  registerPrivateQueryCacheClearer,
+  shouldClearQueryCache,
+} from './src/auth/queryCacheScope'
 
 onlineManager.setEventListener((setOnline) => NetInfo.addEventListener((state) => {
   setOnline(state.isConnected !== false && state.isInternetReachable !== false)
@@ -38,10 +42,12 @@ const queryClient = new QueryClient({
   },
 })
 
+registerPrivateQueryCacheClearer(() => queryClient.clear())
+
 function AppContent() {
   const { setAuth, logout, finishSessionRestore } = useAuthStore()
-  const userId = useAuthStore((state) => state.user?.id ?? null)
-  const previousUserId = useRef<string | null | undefined>(undefined)
+  const activeAccountScope = useAuthStore((state) => accountCacheScope(state.user))
+  const previousAccountScope = useRef<string | null | undefined>(undefined)
 
   useEffect(() => {
     if (Platform.OS === 'web') return
@@ -52,11 +58,11 @@ function AppContent() {
   }, [])
 
   useEffect(() => {
-    if (shouldClearQueryCache(previousUserId.current, userId)) {
+    if (shouldClearQueryCache(previousAccountScope.current, activeAccountScope)) {
       queryClient.clear()
     }
-    previousUserId.current = userId
-  }, [userId])
+    previousAccountScope.current = activeAccountScope
+  }, [activeAccountScope])
 
   const restoreSession = useCallback(async () => {
     const store = useAuthStore.getState()
