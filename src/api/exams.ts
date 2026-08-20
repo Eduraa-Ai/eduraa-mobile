@@ -97,7 +97,4 @@ export const examsApi = {
     return response.data
   },
 
-  async deleteExam(examId: string) {
-    await apiClient.delete(`/exams/${examId}`)
-  },
 }

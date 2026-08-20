@@ -986,20 +986,17 @@ function formFromExam(exam: Exam): ExamFormState {
 function StaffCardActionButton({
   label,
   icon,
-  tone,
   disabled,
   loading,
   onPress,
 }: {
   label: string
   icon: keyof typeof Ionicons.glyphMap
-  tone: 'share' | 'delete'
   disabled?: boolean
   loading?: boolean
   onPress: () => void
 }) {
-  const isDelete = tone === 'delete'
-  const tintColor = isDelete ? colors.danger : colors.accent
+  const tintColor = colors.accent
 
   return (
     <Pressable
@@ -1010,7 +1007,7 @@ function StaffCardActionButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.staffCardActionButton,
-        isDelete ? styles.staffCardActionButtonDelete : styles.staffCardActionButtonShare,
+        styles.staffCardActionButtonShare,
         disabled && styles.staffCardActionButtonDisabled,
         pressed && !disabled && styles.pressed,
       ]}
@@ -1032,20 +1029,16 @@ function StaffExamCard({
   linkedPapers,
   selected,
   syllabus,
-  deleting,
   sharingSyllabus,
   onPress,
-  onDelete,
   onShareSyllabus,
 }: {
   exam: Exam
   linkedPapers: PaperListItem[]
   selected: boolean
   syllabus?: CheatSheetSyllabus
-  deleting?: boolean
   sharingSyllabus?: boolean
   onPress: () => void
-  onDelete: () => void
   onShareSyllabus: () => void
 }) {
   return (
@@ -1087,18 +1080,8 @@ function StaffExamCard({
         <StaffCardActionButton
           label={syllabus ? 'Update syllabus' : 'Share syllabus'}
           icon="share-social-outline"
-          tone="share"
           loading={sharingSyllabus}
-          disabled={deleting}
           onPress={onShareSyllabus}
-        />
-        <StaffCardActionButton
-          label="Delete"
-          icon="trash-outline"
-          tone="delete"
-          loading={deleting}
-          disabled={sharingSyllabus}
-          onPress={onDelete}
         />
       </View>
     </AnimatedCard>
@@ -1204,25 +1187,6 @@ function StaffExamsView({ role }: { role?: Role }) {
     },
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: async (exam: Exam) => {
-      await examsApi.deleteExam(exam.id)
-      return exam
-    },
-    onSuccess: async (exam) => {
-      await queryClient.invalidateQueries({ queryKey: ['exams', 'staff'] })
-      queryClient.setQueryData(['exams', 'syllabi'], (current: CheatSheetSyllabusList | undefined) => {
-        if (!current) return current
-        return { ...current, items: current.items.filter((syllabus) => syllabus.exam_id !== exam.id) }
-      })
-      if (selectedExam?.id === exam.id) resetForm()
-      notify('Exam deleted', `"${exam.name}" has been removed.`)
-    },
-    onError: (error) => {
-      notify('Delete failed', extractDetail(error, 'Unable to delete this exam.'))
-    },
-  })
-
   const shareSyllabusMutation = useMutation({
     mutationFn: (exam: Exam) => cheatSheetsApi.shareSyllabus(exam.id),
     onSuccess: (syllabus) => {
@@ -1236,15 +1200,6 @@ function StaffExamsView({ role }: { role?: Role }) {
       notify('Share failed', extractDetail(error, 'Unable to share this exam syllabus.'))
     },
   })
-
-  const confirmDeleteExam = (exam: Exam) => {
-    confirmDestructive(
-      'Delete exam?',
-      `"${exam.name}" will be permanently deleted. Linked papers will only be unlinked, not deleted.`,
-      'Delete',
-      () => deleteMutation.mutate(exam),
-    )
-  }
 
   const isLoading = examsQuery.isLoading || subjectsQuery.isLoading || papersQuery.isLoading || teachersQuery.isLoading
   const isError = examsQuery.isError || subjectsQuery.isError || papersQuery.isError
@@ -1449,13 +1404,11 @@ function StaffExamsView({ role }: { role?: Role }) {
               linkedPapers={papersByExamId.get(exam.id) ?? []}
               selected={selectedExam?.id === exam.id}
               syllabus={syllabiByExamId.get(exam.id)}
-              deleting={deleteMutation.isPending && deleteMutation.variables?.id === exam.id}
               sharingSyllabus={shareSyllabusMutation.isPending && shareSyllabusMutation.variables?.id === exam.id}
               onPress={() => {
                 setSelectedExam(exam)
                 setForm(formFromExam(exam))
               }}
-              onDelete={() => confirmDeleteExam(exam)}
               onShareSyllabus={() => shareSyllabusMutation.mutate(exam)}
             />
           ))
