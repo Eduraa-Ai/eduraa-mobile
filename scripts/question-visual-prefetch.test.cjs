@@ -28,7 +28,7 @@ test('protected figures resolve from one shared copy per URL', () => {
   // In-flight dedupe plus a bounded queue: N components asking for the same crop
   // share one download, and prefetching never floods the visible request.
   assert.match(cache, /const inFlight = new Map<string, Promise<string>>\(\)/)
-  assert.match(cache, /const pending = inFlight\.get\(url\)\n\s*if \(pending\) return pending/)
+  assert.match(cache, /const pending = inFlight\.get\(url\)\r?\n\s*if \(pending\) return pending/)
   assert.match(cache, /activePrefetches < MAX_PREFETCH_CONCURRENCY/)
   assert.match(cache, /while \(cached\.size > MAX_ENTRIES\)/)
   // Native reuses the file already on disk instead of downloading it again.

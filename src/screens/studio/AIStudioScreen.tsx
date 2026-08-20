@@ -48,6 +48,7 @@ import type {
 import { AuthLogoMark } from "../../components/ui";
 import { AIResponseRenderer } from "../../components/ai/AIResponseRenderer";
 import { useAuth } from "../../hooks/useAuth";
+import { useLearnerTrack } from '../../hooks/useLearnerTrack';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -93,14 +94,17 @@ const WELCOME_MESSAGE: LocalMessage = {
   timestamp: new Date(),
 };
 
+// Kept subject-agnostic on purpose. These named a Physics concept and a "mock
+// test", neither of which exists for a B2B school learner - a Std 5 student
+// taking English, History and Maths was being offered a Physics prompt.
 const STARTERS = [
   {
-    prompt: "Explain my weakest Physics concept",
+    prompt: "Explain my weakest concept",
     intent: "Understand",
     icon: "bulb-outline" as const,
   },
   {
-    prompt: "Analyze my latest mock test",
+    prompt: "Analyze my latest result",
     intent: "Reflect",
     icon: "analytics-outline" as const,
   },
@@ -1999,6 +2003,7 @@ export default function AIStudioScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { curriculum: learnerCurriculum } = useLearnerTrack();
 
   const [messages, setMessages] = useState<LocalMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
@@ -2039,7 +2044,14 @@ export default function AIStudioScreen() {
   const subjectContext = user?.b2c_subjects?.length
     ? user.b2c_subjects
     : user?.subjects_taught || [];
-  const examContext = user?.b2c_target_exam || user?.exam_track;
+  // exam_track is an internal slug and can disagree with the school record:
+  // a State Board student is seeded as "cbse", which then surfaced verbatim as
+  // "Learning goal: cbse". Prefer the learner's real curriculum for B2B school
+  // accounts, and never render a raw slug (issue #62 role context).
+  const examContext =
+    user?.role === "student"
+      ? learnerCurriculum.label ?? null
+      : user?.b2c_target_exam || null;
   const contextLabels = [
     examContext,
     subjectContext[0],
@@ -2563,6 +2575,9 @@ export default function AIStudioScreen() {
                     <TouchableOpacity
                       style={styles.stopButton}
                       onPress={stopGeneration}
+                      accessibilityRole="button"
+                      accessibilityLabel="Stop generating the answer"
+                      accessibilityHint="Keeps the partial answer already received."
                     >
                       <Ionicons name="stop" size={11} color={colors.white} />
                       <Text style={styles.stopButtonText}>Stop</Text>
@@ -2589,6 +2604,9 @@ export default function AIStudioScreen() {
                       <TouchableOpacity
                         style={styles.retryButton}
                         onPress={retryFailedRequest}
+                        accessibilityRole="button"
+                        accessibilityLabel="Try again"
+                        accessibilityHint="Resends the last question without duplicating it."
                       >
                         <Ionicons
                           name="refresh"

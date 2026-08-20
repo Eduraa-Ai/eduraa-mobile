@@ -184,7 +184,7 @@ function PaperTile({
     : "Practice";
   const subject = resolvePaperSubject(item);
   const meta = `${subject.label} - ${item.total_marks} marks - ${duration}`;
-  const attemptLabel = item.is_submitted_by_me ? "Attempted" : item.status;
+  const attemptLabel = item.is_submitted_by_me ? 'Attempted' : item.status;
 
   return (
     <TouchableOpacity

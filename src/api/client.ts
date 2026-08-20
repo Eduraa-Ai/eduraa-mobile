@@ -5,7 +5,13 @@
 
 import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 import { Platform } from 'react-native'
-import { clearStoredAccessToken, readStoredAccessToken, writeStoredAccessToken } from '../auth/authStorage'
+import {
+  clearStoredAccessToken,
+  readStoredAccessToken,
+  readStoredRefreshToken,
+  writeStoredAccessToken,
+  writeStoredRefreshToken,
+} from '../auth/authStorage'
 import { resolveApiConfig } from './apiConfig'
 
 const resolvedApiConfig = resolveApiConfig({
@@ -22,13 +28,17 @@ const API_TARGET = resolvedApiConfig.target
 export const API_BASE_URL = resolvedApiConfig.baseUrl
 
 var inMemoryAccessToken: string | null = null
+let accessTokenInitialized = false
+let accessTokenRevision = 0
 
 export function setAccessToken(token: string | null) {
+  accessTokenInitialized = true
+  accessTokenRevision += 1
   inMemoryAccessToken = token
 }
 
 export async function getAccessToken() {
-  if (inMemoryAccessToken) return inMemoryAccessToken
+  if (accessTokenInitialized) return inMemoryAccessToken
   return readStoredAccessToken()
 }
 
@@ -51,7 +61,7 @@ if (__DEV__) {
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     try {
-      const token = inMemoryAccessToken ?? (await readStoredAccessToken())
+      const token = accessTokenInitialized ? inMemoryAccessToken : await readStoredAccessToken()
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`
       }
@@ -67,10 +77,11 @@ apiClient.interceptors.request.use(
 
 let logoutCallback: (() => void) | null = null
 let refreshTokenCallback: ((token: string) => void) | null = null
-let refreshPromise: Promise<string> | null = null
+let refreshState: { revision: number; promise: Promise<string> } | null = null
 
 type AuthRefreshPayload = {
   access_token: string
+  refresh_token?: string | null
 }
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
@@ -89,10 +100,13 @@ function isAuthEndpoint(url?: string) {
   return Boolean(url?.includes('/auth/login') || url?.includes('/auth/refresh') || url?.includes('/auth/logout'))
 }
 
-async function persistRefreshedAccessToken(token: string) {
+async function persistRefreshedAccessToken(token: string, refreshToken?: string | null) {
   setAccessToken(token)
   try {
-    await writeStoredAccessToken(token)
+    await Promise.all([
+      writeStoredAccessToken(token),
+      refreshToken ? writeStoredRefreshToken(refreshToken) : Promise.resolve(),
+    ])
   } catch {
     // The live session remains valid if device storage is temporarily unavailable.
   }
@@ -105,21 +119,30 @@ async function clearExpiredAccessToken() {
 }
 
 async function refreshAccessToken() {
-  if (!refreshPromise) {
-    refreshPromise = refreshClient
-      .post<AuthRefreshPayload>('/auth/refresh')
+  const activeToken = await getAccessToken()
+  if (!activeToken) throw new Error('The signed-out session cannot be refreshed.')
+
+  const revision = accessTokenRevision
+  if (!refreshState || refreshState.revision !== revision) {
+    const refreshToken = await readStoredRefreshToken()
+    const promise = refreshClient
+      .post<AuthRefreshPayload>('/auth/refresh', refreshToken ? { refresh_token: refreshToken } : undefined)
       .then(async (response) => {
+        if (revision !== accessTokenRevision) {
+          throw new Error('The account changed while the session was refreshing.')
+        }
         const token = response.data.access_token
         if (!token) throw new Error('Refresh response did not include an access token.')
-        await persistRefreshedAccessToken(token)
+        await persistRefreshedAccessToken(token, response.data.refresh_token)
         return token
       })
       .finally(() => {
-        refreshPromise = null
+        if (refreshState?.revision === revision) refreshState = null
       })
+    refreshState = { revision, promise }
   }
 
-  return refreshPromise
+  return refreshState.promise
 }
 
 apiClient.interceptors.response.use(
@@ -134,11 +157,13 @@ apiClient.interceptors.response.use(
       !isAuthEndpoint(originalRequest.url)
     ) {
       originalRequest._retry = true
+      const requestRevision = accessTokenRevision
       try {
         const token = await refreshAccessToken()
         originalRequest.headers.Authorization = `Bearer ${token}`
         return apiClient.request(originalRequest as AxiosRequestConfig)
       } catch {
+        if (requestRevision !== accessTokenRevision) return Promise.reject(error)
         await clearExpiredAccessToken()
         logoutCallback?.()
       }

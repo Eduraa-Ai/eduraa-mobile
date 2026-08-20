@@ -7,6 +7,7 @@ import { AppScreen, ErrorState, MathText } from '../../components/ui'
 import { colors, radius, spacing, typography } from '../../theme'
 import { AgenticHeader, AgenticIntro, AgenticSurface } from './AgenticLearningFrame'
 import { clampPercent, topicAccessibilityLabel, topicStatusLabel, topicTone } from './agenticLearningModel'
+import { useLearnerTrack } from '../../hooks/useLearnerTrack'
 
 type RouteParams = { subjectId: string }
 
@@ -17,12 +18,20 @@ const toneColors = {
   resolved: { text: colors.success, surface: colors.successSurface },
 }
 
-function TopicCard({ topic, onPress }: { topic: AgenticLearningSubtopicCard; onPress: () => void }) {
+function TopicCard({
+  topic,
+  onPress,
+  showExamMetrics,
+}: {
+  topic: AgenticLearningSubtopicCard
+  onPress: () => void
+  showExamMetrics: boolean
+}) {
   const tone = toneColors[topicTone(topic)]
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={topicAccessibilityLabel(topic)}
+      accessibilityLabel={topicAccessibilityLabel(topic, showExamMetrics)}
       accessibilityHint="Opens the concept repair lesson."
       onPress={onPress}
       style={({ pressed }) => [styles.topicCard, pressed && styles.pressed]}
@@ -39,7 +48,9 @@ function TopicCard({ topic, onPress }: { topic: AgenticLearningSubtopicCard; onP
       <MathText style={styles.topicSummary} value={topic.summary} />
       <View style={styles.topicFooter}>
         <Text style={styles.topicMetric}>{clampPercent(topic.mastery_score)}% mastery</Text>
-        {topic.pyq_frequency != null ? <Text style={styles.topicMetric}>· {topic.pyq_frequency} PYQs</Text> : null}
+        {showExamMetrics && topic.pyq_frequency != null ? (
+          <Text style={styles.topicMetric}>· {topic.pyq_frequency} PYQs</Text>
+        ) : null}
         {topic.read_time_minutes ? <Text style={styles.topicMetric}>· {topic.read_time_minutes} min read</Text> : null}
       </View>
     </Pressable>
@@ -48,6 +59,10 @@ function TopicCard({ topic, onPress }: { topic: AgenticLearningSubtopicCard; onP
 
 export default function AgenticSubjectScreen() {
   const navigation = useNavigation<any>()
+  // Exam metrics such as PYQ counts belong to competitive tracks only; a B2B
+  // school learner must never see them (issue #63).
+  const { isJee } = useLearnerTrack()
+  const showExamMetrics = isJee
   const route = useRoute()
   const { subjectId } = route.params as RouteParams
   const subjectsQuery = useQuery({ queryKey: ['agentic-subjects'], queryFn: agenticLearningApi.getSubjects, retry: 1 })
@@ -106,6 +121,7 @@ export default function AgenticSubjectScreen() {
             <TopicCard
               key={topic.topic_id}
               topic={topic}
+              showExamMetrics={showExamMetrics}
               onPress={() => navigation.navigate('AgenticTopic', {
                 topicId: topic.topic_id,
                 topicName: topic.topic_name,

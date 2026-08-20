@@ -4,8 +4,15 @@
  */
 
 import { create } from 'zustand'
+import { authApi } from '../api/auth'
 import { registerLogoutCallback, registerRefreshTokenCallback, setAccessToken } from '../api/client'
-import { clearPersistedAuth, readPersistedAuth, writePersistedAuth } from '../auth/authStorage'
+import {
+  clearPersistedAuth,
+  readPersistedAuth,
+  readStoredRefreshToken,
+  writePersistedAuth,
+} from '../auth/authStorage'
+import { accountCacheScope, clearRegisteredPrivateQueryCache } from '../auth/queryCacheScope'
 import type { AccountMinimal, AuthToken } from '../types'
 
 interface AuthState {
@@ -22,6 +29,8 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => {
+  let pendingServerLogout: Promise<void> | null = null
+
   registerLogoutCallback(() => {
     void get().logout()
   })
@@ -40,12 +49,20 @@ export const useAuthStore = create<AuthState>((set, get) => {
     sessionRestoreError: null,
 
     setAuth: async (authToken: AuthToken) => {
+      if (pendingServerLogout) await pendingServerLogout
       try {
-        await writePersistedAuth(authToken.access_token, authToken.user)
+        await writePersistedAuth(
+          authToken.access_token,
+          authToken.user,
+          authToken.refresh_token,
+        )
       } catch {
         // Keep the live session usable even if device storage is unavailable.
       }
 
+      if (accountCacheScope(get().user) !== accountCacheScope(authToken.user)) {
+        clearRegisteredPrivateQueryCache()
+      }
       setAccessToken(authToken.access_token)
       set({
         user: authToken.user,
@@ -57,8 +74,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     logout: async () => {
-      await clearPersistedAuth()
-
+      const refreshToken = await readStoredRefreshToken()
+      const serverLogout = authApi.logout(refreshToken).catch(() => undefined)
+      pendingServerLogout = serverLogout
+      const storageCleanup = clearPersistedAuth()
+      clearRegisteredPrivateQueryCache()
       setAccessToken(null)
       set({
         user: null,
@@ -67,6 +87,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         isLoading: false,
         sessionRestoreError: null,
       })
+      await Promise.all([storageCleanup, serverLogout])
+      if (pendingServerLogout === serverLogout) pendingServerLogout = null
     },
 
     loadFromStorage: async () => {
