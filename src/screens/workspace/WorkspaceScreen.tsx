@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
@@ -67,6 +67,8 @@ function WorkflowRow({ control, index, first, last, onPress }: { control: Mobile
 export default function WorkspaceScreen() {
   const navigation = useNavigation<any>()
   const user = useAuthStore((state) => state.user)
+  const logout = useAuthStore((state) => state.logout)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
 
   const b2cQuery = useQuery({
     queryKey: ['workspace-b2c-profile', user?.id],
@@ -152,9 +154,33 @@ export default function WorkspaceScreen() {
           <Text style={styles.identityName}>EDURAA</Text>
           <Text style={styles.identityRole}>{roleLabel(user?.role)}</Text>
         </View>
-        <View style={styles.livePill}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveText}>Live</Text>
+        <View style={styles.accountMenuWrap}>
+          <Pressable
+            onPress={() => setAccountMenuOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityLabel="Open account menu"
+            style={({ pressed }) => [styles.livePill, pressed && styles.pressed]}
+          >
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>Live</Text>
+            <Ionicons name={accountMenuOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.success} />
+          </Pressable>
+          {accountMenuOpen ? (
+            <View style={styles.accountDropdown}>
+              <Pressable
+                onPress={() => {
+                  setAccountMenuOpen(false)
+                  void logout()
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Logout"
+                style={({ pressed }) => [styles.logoutRow, pressed && styles.pressed]}
+              >
+                <Ionicons name="log-out-outline" size={17} color={colors.danger} />
+                <Text style={styles.logoutText}>Logout</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -197,14 +223,18 @@ export default function WorkspaceScreen() {
 
 const styles = StyleSheet.create({
   screen: { paddingBottom: spacing[20] + 48, gap: spacing[5] },
-  identityRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  identityRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[3], zIndex: 2 },
   logo: { width: 44, height: 44, borderRadius: 17 },
   identityCopy: { flex: 1 },
   identityName: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12, letterSpacing: 2.8 },
   identityRole: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, textTransform: 'capitalize' },
+  accountMenuWrap: { position: 'relative', alignItems: 'flex-end', zIndex: 3 },
   livePill: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing[3], borderRadius: radius.full, backgroundColor: colors.successSurface },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
   liveText: { color: colors.success, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  accountDropdown: { position: 'absolute', top: 40, right: 0, minWidth: 132, borderRadius: 12, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.white, paddingVertical: spacing[1] },
+  logoutRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3] },
+  logoutText: { color: colors.danger, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   intro: { gap: spacing[2], marginTop: -spacing[1] },
   eyebrow: { color: colors.accent, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.3 },
   title: { maxWidth: 350, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 28, lineHeight: 34, letterSpacing: -0.6 },
