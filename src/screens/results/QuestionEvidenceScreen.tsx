@@ -328,10 +328,14 @@ export default function QuestionEvidenceScreen() {
   const { width } = useWindowDimensions()
   const user = useAuthStore((state) => state.user)
   const isStaff = Boolean(user && !isLearnerRole(user.role))
+  const isB2BStudent = user?.role === 'student'
   const compact = width < 380
   const scrollRef = useRef<ScrollView>(null)
   const [activeTab, setActiveTab] = useState<QuestionEvidenceTab>('feedback')
   const [reviewNote, setReviewNote] = useState('')
+  const [teacherReply, setTeacherReply] = useState('')
+  const [teacherScore, setTeacherScore] = useState('')
+  const [teacherFeedback, setTeacherFeedback] = useState('')
   const [scanError, setScanError] = useState<string | null>(null)
   const [isOpeningScan, setIsOpeningScan] = useState(false)
   const { data, isLoading, isError, refetch } = useQuery({
@@ -347,11 +351,48 @@ export default function QuestionEvidenceScreen() {
 
   const reviewMutation = useMutation({
     mutationFn: () => {
-      if (isStaff) throw new Error('Issue reports are available to learners only.')
-      const questionNumber = evidence?.item.question_number ?? (evidence ? evidence.index + 1 : null)
-      const context = questionNumber ? `Question ${questionNumber}: ` : ''
+      if (!isB2BStudent) throw new Error('Question reviews are available to institutional students only.')
       return checkedPapersApi.requestManualReview(params.checkedPaperId, {
-        note: `${context}${reviewNote.trim()}`,
+        note: reviewNote.trim(),
+        question_id: evidence?.item.question_id || null,
+        result_id: evidence?.item.result_id || null,
+      })
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['checked-paper', params.checkedPaperId] }),
+        queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
+      ])
+    },
+  })
+  const teacherCommentMutation = useMutation({
+    mutationFn: (resolve: boolean) => checkedPapersApi.addQuestionReviewComment(params.checkedPaperId, {
+      note: teacherReply.trim() || null,
+      question_id: evidence?.item.question_id || null,
+      result_id: evidence?.item.result_id || null,
+      resolve,
+    }),
+    onSuccess: async () => {
+      setTeacherReply('')
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['checked-paper', params.checkedPaperId] }),
+        queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
+      ])
+    },
+  })
+  const teacherRegradeMutation = useMutation({
+    mutationFn: () => {
+      const parsedScore = Number(teacherScore)
+      if (!Number.isFinite(parsedScore)) throw new Error('Enter a valid score.')
+      return checkedPapersApi.updateTeacherReview(params.checkedPaperId, {
+        grading_feedback: data?.grading_feedback || null,
+        results: [{
+          question_id: evidence?.item.question_id || null,
+          result_id: evidence?.item.result_id || null,
+          score: parsedScore,
+          feedback: teacherFeedback.trim() || evidence?.item.feedback || null,
+          selected: true,
+        }],
       })
     },
     onSuccess: async () => {
@@ -365,8 +406,13 @@ export default function QuestionEvidenceScreen() {
   useEffect(() => {
     setActiveTab('feedback')
     setReviewNote('')
+    setTeacherReply('')
+    setTeacherScore('')
+    setTeacherFeedback('')
     setScanError(null)
     reviewMutation.reset()
+    teacherCommentMutation.reset()
+    teacherRegradeMutation.reset()
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }))
   }, [params.questionId, params.questionIndex])
 
@@ -413,10 +459,19 @@ export default function QuestionEvidenceScreen() {
   const expected = review.expectedAnswer
   const feedback = item.feedback || ''
   const recommendation = item.recommendation || ''
-  const reviewSent = Boolean(data.manual_review_requested || reviewMutation.isSuccess)
+  const reviewThread = item.question_review_thread ?? []
+  const reviewSent = Boolean(item.manual_review_requested || reviewMutation.isSuccess)
+  const reviewResolved = Boolean(item.manual_review_completed && !item.manual_review_requested)
+  const hasReviewHistory = reviewSent || reviewResolved || reviewThread.length > 0
   const canSubmitReview = reviewNote.trim().length >= 10 && !reviewMutation.isPending && !reviewSent
-  const tabs = isStaff ? TAB_CONFIG.filter((tab) => tab.key !== 'review') : TAB_CONFIG
+  const tabs = (isStaff || isB2BStudent) ? TAB_CONFIG : TAB_CONFIG.filter((tab) => tab.key !== 'review')
   const hasScan = Boolean(String(data.scanned_pdf_url || '').trim())
+  const maxScore = typeof item.max_score === 'number' ? item.max_score : null
+  const parsedTeacherScore = Number(teacherScore)
+  const teacherScoreValid = Number.isFinite(parsedTeacherScore) && parsedTeacherScore >= 0 && (maxScore == null || parsedTeacherScore <= maxScore)
+  const canSaveTeacherScore = teacherScore.trim().length > 0 && teacherScoreValid && !teacherRegradeMutation.isPending
+  const canSendTeacherReply = teacherReply.trim().length > 0 && !teacherCommentMutation.isPending
+  const canResolveReview = hasReviewHistory && !teacherCommentMutation.isPending
 
   const goToEvidence = (target: NonNullable<typeof nextEvidence>) => {
     navigation.setParams({
@@ -697,20 +752,35 @@ export default function QuestionEvidenceScreen() {
               </View>
             ) : null}
 
-            {activeTab === 'review' && !isStaff ? (
+            {activeTab === 'review' && isB2BStudent ? (
               <View style={styles.panel}>
                 <View style={styles.reviewState}>
-                  <Ionicons name={reviewSent ? 'checkmark-circle' : 'shield-checkmark-outline'} size={25} color={reviewSent ? colors.success : colors.accentStrong} />
+                  <Ionicons name={reviewResolved ? 'checkmark-circle' : reviewSent ? 'time-outline' : 'shield-checkmark-outline'} size={25} color={reviewResolved ? colors.success : reviewSent ? colors.accentStrong : colors.accentStrong} />
                   <View style={styles.reviewCopy}>
-                    <Text style={styles.reviewTitle}>{reviewSent ? 'Issue reported' : 'Report an issue'}</Text>
-                    <Text style={styles.reviewText}>{reviewSent ? 'This checked paper is now in the review queue for admin follow-up.' : 'Question context, answer evidence, and AI feedback stay attached to your report.'}</Text>
+                    <Text style={styles.reviewTitle}>{reviewResolved ? 'Review resolved' : reviewSent ? 'Review requested' : 'Request review'}</Text>
+                    <Text style={styles.reviewText}>{reviewResolved ? 'Your teacher response and any updated marks are saved on this question.' : reviewSent ? 'This question is in your teacher review queue.' : 'Question context, answer evidence, and feedback stay attached to your request.'}</Text>
                   </View>
                 </View>
+                {hasReviewHistory ? (
+                  <View style={styles.threadBox}>
+                    {reviewThread.length ? reviewThread.map((entry, index) => (
+                      <View key={`${entry.created_at || index}-${entry.event_type || 'review'}`} style={styles.threadItem}>
+                        <Text style={styles.threadMeta}>{entry.author_role === 'teacher' ? 'Teacher' : 'Student'}{entry.event_type === 'resolved' ? ' resolved' : ''}</Text>
+                        {entry.message ? <Text style={styles.threadText}>{entry.message}</Text> : null}
+                      </View>
+                    )) : item.manual_review_note ? (
+                      <View style={styles.threadItem}>
+                        <Text style={styles.threadMeta}>Student</Text>
+                        <Text style={styles.threadText}>{item.manual_review_note}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
                 {!reviewSent ? (
                   <>
-                    <Text style={styles.reviewLabel}>What should the admin review?</Text>
+                    <Text style={styles.reviewLabel}>What should the teacher review?</Text>
                     <TextInput
-                      accessibilityLabel="Issue report reason"
+                      accessibilityLabel="Question review reason"
                       accessibilityHint="Enter at least 10 characters"
                       value={reviewNote}
                       onChangeText={setReviewNote}
@@ -722,20 +792,114 @@ export default function QuestionEvidenceScreen() {
                     />
                     <Text style={styles.helperText}>Enter at least 10 characters. Your score remains visible while the report is reviewed.</Text>
                     {reviewNote.length > 0 && reviewNote.trim().length < 10 ? <Text accessibilityRole="alert" style={styles.errorText}>Add a little more detail before sending.</Text> : null}
-                    {reviewMutation.isError ? <Text accessibilityRole="alert" style={styles.errorText}>The report could not be sent. Your text is saved here—check the connection and try again.</Text> : null}
+                    {reviewMutation.isError ? <Text accessibilityRole="alert" style={styles.errorText}>The review could not be sent. Your text is saved here—check the connection and try again.</Text> : null}
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Send issue report"
+                      accessibilityLabel="Send review request"
                       accessibilityState={{ disabled: !canSubmitReview }}
                       disabled={!canSubmitReview}
                       onPress={() => reviewMutation.mutate()}
                       style={[styles.primaryAction, !canSubmitReview && styles.disabled]}
                     >
                       {reviewMutation.isPending ? <ActivityIndicator color={colors.white} /> : <Ionicons name="send-outline" size={16} color={colors.white} />}
-                      <Text style={styles.primaryActionText}>{reviewMutation.isPending ? 'Sending report' : 'Send issue report'}</Text>
+                      <Text style={styles.primaryActionText}>{reviewMutation.isPending ? 'Sending review' : 'Send review request'}</Text>
                     </Pressable>
                   </>
                 ) : null}
+              </View>
+            ) : null}
+
+            {activeTab === 'review' && isStaff ? (
+              <View style={styles.panel}>
+                <View style={styles.reviewState}>
+                  <Ionicons name={reviewResolved ? 'checkmark-circle' : reviewSent ? 'chatbox-ellipses-outline' : 'reader-outline'} size={25} color={reviewResolved ? colors.success : colors.accentStrong} />
+                  <View style={styles.reviewCopy}>
+                    <Text style={styles.reviewTitle}>{reviewResolved ? 'Resolved' : reviewSent ? 'Student review request' : 'No open review'}</Text>
+                    <Text style={styles.reviewText}>{reviewSent ? 'Reply, adjust marks if needed, then resolve this question.' : 'This question has no pending student review request.'}</Text>
+                  </View>
+                </View>
+                {hasReviewHistory ? (
+                  <View style={styles.threadBox}>
+                    {reviewThread.map((entry, index) => (
+                      <View key={`${entry.created_at || index}-${entry.event_type || 'review'}`} style={styles.threadItem}>
+                        <Text style={styles.threadMeta}>{entry.author_role === 'teacher' ? 'Teacher' : 'Student'}{entry.event_type === 'resolved' ? ' resolved' : ''}</Text>
+                        {entry.message ? <Text style={styles.threadText}>{entry.message}</Text> : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                <Text style={styles.reviewLabel}>Teacher response</Text>
+                <TextInput
+                  accessibilityLabel="Teacher response"
+                  value={teacherReply}
+                  onChangeText={setTeacherReply}
+                  placeholder="Add a short response for the student"
+                  placeholderTextColor={colors.textSoft}
+                  multiline
+                  maxLength={2000}
+                  style={styles.reviewInput}
+                />
+                {teacherCommentMutation.isError ? <Text accessibilityRole="alert" style={styles.errorText}>The response could not be saved. Check the connection and try again.</Text> : null}
+                <View style={styles.teacherActionRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Reply to student"
+                    accessibilityState={{ disabled: !canSendTeacherReply }}
+                    disabled={!canSendTeacherReply}
+                    onPress={() => teacherCommentMutation.mutate(false)}
+                    style={[styles.secondaryAction, styles.teacherAction, !canSendTeacherReply && styles.disabled]}
+                  >
+                    {teacherCommentMutation.isPending ? <ActivityIndicator color={colors.nav} /> : <Ionicons name="chatbubble-outline" size={16} color={colors.nav} />}
+                    <Text style={styles.secondaryActionText}>Reply</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Resolve review"
+                    accessibilityState={{ disabled: !canResolveReview }}
+                    disabled={!canResolveReview}
+                    onPress={() => teacherCommentMutation.mutate(true)}
+                    style={[styles.primaryAction, styles.teacherAction, !canResolveReview && styles.disabled]}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={16} color={colors.white} />
+                    <Text style={styles.primaryActionText}>Resolve</Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.reviewLabel}>Adjust marks</Text>
+                <View style={styles.regradeRow}>
+                  <TextInput
+                    accessibilityLabel="Updated score"
+                    value={teacherScore}
+                    onChangeText={setTeacherScore}
+                    placeholder={`${item.score ?? 0}`}
+                    placeholderTextColor={colors.textSoft}
+                    keyboardType="decimal-pad"
+                    style={styles.scoreInput}
+                  />
+                  <Text style={styles.maxScoreText}>/ {item.max_score ?? '-'}</Text>
+                </View>
+                <TextInput
+                  accessibilityLabel="Updated feedback"
+                  value={teacherFeedback}
+                  onChangeText={setTeacherFeedback}
+                  placeholder={item.feedback || 'Feedback shown to the student'}
+                  placeholderTextColor={colors.textSoft}
+                  multiline
+                  maxLength={2000}
+                  style={[styles.reviewInput, styles.feedbackInput]}
+                />
+                {!teacherScoreValid && teacherScore.trim().length > 0 ? <Text accessibilityRole="alert" style={styles.errorText}>Score must be between 0 and {item.max_score ?? 'the maximum marks'}.</Text> : null}
+                {teacherRegradeMutation.isError ? <Text accessibilityRole="alert" style={styles.errorText}>The updated marks could not be saved.</Text> : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Save updated marks"
+                  accessibilityState={{ disabled: !canSaveTeacherScore }}
+                  disabled={!canSaveTeacherScore}
+                  onPress={() => teacherRegradeMutation.mutate()}
+                  style={[styles.primaryAction, !canSaveTeacherScore && styles.disabled]}
+                >
+                  {teacherRegradeMutation.isPending ? <ActivityIndicator color={colors.white} /> : <Ionicons name="save-outline" size={16} color={colors.white} />}
+                  <Text style={styles.primaryActionText}>{teacherRegradeMutation.isPending ? 'Saving marks' : 'Save updated marks'}</Text>
+                </Pressable>
               </View>
             ) : null}
           </ScrollView>
@@ -860,6 +1024,16 @@ const styles = StyleSheet.create({
   reviewText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15, marginTop: 3 },
   reviewLabel: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   reviewInput: { width: '100%', minHeight: 120, maxHeight: 260, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18, padding: spacing[3], textAlignVertical: 'top' },
+  feedbackInput: { minHeight: 86 },
+  threadBox: { width: '100%', borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundMuted, overflow: 'hidden' },
+  threadItem: { paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderBottomWidth: 1, borderBottomColor: colors.border },
+  threadMeta: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 1, textTransform: 'uppercase' },
+  threadText: { color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17, marginTop: 3 },
+  teacherActionRow: { width: '100%', flexDirection: 'row', gap: spacing[2] },
+  teacherAction: { flex: 1 },
+  regradeRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  scoreInput: { width: 96, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 15, paddingHorizontal: spacing[3] },
+  maxScoreText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   helperText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 14 },
   errorText: { color: colors.danger, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 15 },
   disabled: { opacity: 0.58 },

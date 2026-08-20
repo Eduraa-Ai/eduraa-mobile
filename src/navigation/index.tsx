@@ -48,6 +48,11 @@ import ScanUploadScreen from '../screens/workspace/ScanUploadScreen'
 import ExamsScreen from '../screens/workspace/ExamsScreen'
 import AnnouncementsScreen from '../screens/workspace/AnnouncementsScreen'
 import DoubtsScreen from '../screens/workspace/DoubtsScreen'
+import ClassTeacherOverviewScreen from '../screens/classTeacher/ClassTeacherOverviewScreen';
+import ClassRosterScreen from '../screens/classTeacher/ClassRosterScreen';
+import ClassSubjectsScreen from '../screens/classTeacher/ClassSubjectsScreen';
+import SubjectEnrollmentScreen from '../screens/classTeacher/SubjectEnrollmentScreen';
+import ClassValidationScreen from '../screens/classTeacher/ClassValidationScreen';
 import AIStudioScreen from '../screens/studio/AIStudioScreen'
 import ProfileScreen from '../screens/profile/ProfileScreen'
 import { canAccessApprovalActions } from '../screens/workspace/approvalsModel'
@@ -109,6 +114,11 @@ export type HomeStackParamList = {
 
 export type StaffWorkspaceStackParamList = {
   StaffWorkspace: undefined;
+  ClassTeacherOverview: undefined;
+  ClassRoster: undefined;
+  ClassSubjects: undefined;
+  SubjectEnrollment: { subjectId: string; subjectName: string };
+  ClassValidation: undefined;
   Feature: { featureId: string };
   Approvals: undefined;
   Attendance: undefined;
@@ -373,6 +383,31 @@ function StaffWorkspaceNavigator() {
         name="StaffWorkspace"
         component={WorkspaceScreen}
         options={{ title: "Workspace" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="ClassTeacherOverview"
+        component={ClassTeacherOverviewScreen}
+        options={{ title: "My class" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="ClassRoster"
+        component={ClassRosterScreen}
+        options={{ title: "Roster and divisions" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="ClassSubjects"
+        component={ClassSubjectsScreen}
+        options={{ title: "Subjects and enrollment" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="SubjectEnrollment"
+        component={SubjectEnrollmentScreen}
+        options={{ title: "Subject enrollment" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="ClassValidation"
+        component={ClassValidationScreen}
+        options={{ title: "Validation report" }}
       />
       <StaffWorkspaceStack.Screen
         name="Feature"

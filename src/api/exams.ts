@@ -96,4 +96,5 @@ export const examsApi = {
     const response = await apiClient.patch<Exam>(`/exams/${examId}`, payload)
     return response.data
   },
+
 }
