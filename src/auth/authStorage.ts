@@ -5,9 +5,11 @@ import type { AccountMinimal } from '../types'
 
 export const TOKEN_KEY = 'eduraa_access_token'
 export const USER_KEY = 'eduraa_auth_user'
+export const REFRESH_TOKEN_KEY = 'eduraa_refresh_token'
 
 type PersistedAuth = {
   token: string | null
+  refreshToken: string | null
   user: AccountMinimal | null
 }
 
@@ -56,6 +58,18 @@ export async function writeStoredAccessToken(token: string) {
   await storage.setItem(TOKEN_KEY, token)
 }
 
+export async function readStoredRefreshToken() {
+  try {
+    return await storage.getItem(REFRESH_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export async function writeStoredRefreshToken(token: string) {
+  await storage.setItem(REFRESH_TOKEN_KEY, token)
+}
+
 export async function clearStoredAccessToken() {
   try {
     await storage.removeItem(TOKEN_KEY)
@@ -66,26 +80,40 @@ export async function clearStoredAccessToken() {
 
 export async function readPersistedAuth(): Promise<PersistedAuth> {
   try {
-    const [token, rawUser] = await Promise.all([
+    const [token, refreshToken, rawUser] = await Promise.all([
       storage.getItem(TOKEN_KEY),
+      storage.getItem(REFRESH_TOKEN_KEY),
       storage.getItem(USER_KEY),
     ])
-    return { token, user: parseStoredUser(rawUser) }
+    return { token, refreshToken, user: parseStoredUser(rawUser) }
   } catch {
-    return { token: null, user: null }
+    return { token: null, refreshToken: null, user: null }
   }
 }
 
-export async function writePersistedAuth(token: string, user: AccountMinimal) {
-  await Promise.all([
+export async function writePersistedAuth(
+  token: string,
+  user: AccountMinimal,
+  refreshToken?: string | null,
+) {
+  const writes: Promise<void>[] = [
     storage.setItem(TOKEN_KEY, token),
     storage.setItem(USER_KEY, JSON.stringify(user)),
-  ])
+  ]
+  if (refreshToken !== undefined) {
+    writes.push(
+      refreshToken
+        ? storage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+        : storage.removeItem(REFRESH_TOKEN_KEY),
+    )
+  }
+  await Promise.all(writes)
 }
 
 export async function clearPersistedAuth() {
   await Promise.allSettled([
     storage.removeItem(TOKEN_KEY),
+    storage.removeItem(REFRESH_TOKEN_KEY),
     storage.removeItem(USER_KEY),
   ])
 }

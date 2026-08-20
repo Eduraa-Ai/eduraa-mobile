@@ -123,6 +123,7 @@ export default function WorkspaceScreen() {
         else if (control.target.tab === 'Papers' && control.target.screen === 'GeneratePaper') navigation.navigate('StaffGeneratePaper')
         else if (control.target.tab === 'Papers') navigation.navigate('StaffPapers')
         else if (control.target.tab === 'Results') navigation.navigate('StaffResults')
+        else if (control.target.tab === 'Profile' && parentRoutes.includes('StaffProfile')) parent.navigate('StaffProfile')
         else if (control.target.tab === 'Home' && !control.target.screen) parent.navigate('StaffHome')
         else navigation.navigate('Feature', { featureId: control.id })
         return

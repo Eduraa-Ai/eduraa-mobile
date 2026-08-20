@@ -137,6 +137,7 @@ export type StaffTabParamList = {
   StaffPapers: undefined;
   StaffResults: undefined;
   StaffAIStudio: undefined;
+  StaffProfile: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -400,7 +401,7 @@ function StaffWorkspaceNavigator() {
   );
 }
 
-function StaffTabs() {
+function StaffTabs({ user }: { user: AccountMinimal }) {
   return (
     <StaffTab.Navigator
       tabBar={(props) => <BottomTabBar {...props} />}
@@ -448,6 +449,13 @@ function StaffTabs() {
         component={AIStudioScreen}
         options={{ title: "AI Studio" }}
       />
+      {user.role === 'teacher' || user.role === 'principal' ? (
+        <StaffTab.Screen
+          name="StaffProfile"
+          component={ProfileNavigator}
+          options={{ title: "Profile" }}
+        />
+      ) : null}
     </StaffTab.Navigator>
   );
 }
@@ -479,9 +487,9 @@ function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
     )
   }
   if (landing === 'school_learner') return <StudentTabs />
-  if (landing === 'admin_workspace') return <StaffTabs />
-  if (landing === 'developer_workspace') return <StaffTabs />
-  return <StaffTabs />
+  if (landing === 'admin_workspace') return <StaffTabs user={user} />
+  if (landing === 'developer_workspace') return <StaffTabs user={user} />
+  return <StaffTabs user={user} />
 }
 
 export default function RootNavigator({

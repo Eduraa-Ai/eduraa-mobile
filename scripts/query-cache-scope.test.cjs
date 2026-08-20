@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { shouldClearQueryCache } = require(process.env.QUERY_CACHE_SCOPE_PATH)
+const { accountCacheScope, shouldClearQueryCache } = require(process.env.QUERY_CACHE_SCOPE_PATH)
 
 test('keeps the first authenticated dashboard request alive after login', () => {
   assert.equal(shouldClearQueryCache(null, 'student-1'), false)
@@ -18,4 +18,16 @@ test('clears private query data when the active account changes', () => {
 test('does not clear for initial or unchanged identity state', () => {
   assert.equal(shouldClearQueryCache(undefined, null), false)
   assert.equal(shouldClearQueryCache('student-1', 'student-1'), false)
+})
+
+test('account scope includes role so separate account planes cannot share a cache identity', () => {
+  assert.equal(accountCacheScope({ id: 'same-id', role: 'student' }), 'student:same-id')
+  assert.equal(accountCacheScope({ id: 'same-id', role: 'teacher' }), 'teacher:same-id')
+  assert.equal(
+    shouldClearQueryCache(
+      accountCacheScope({ id: 'same-id', role: 'student' }),
+      accountCacheScope({ id: 'same-id', role: 'teacher' }),
+    ),
+    true,
+  )
 })

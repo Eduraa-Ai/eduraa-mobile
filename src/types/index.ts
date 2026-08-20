@@ -40,6 +40,7 @@ export interface AuthToken {
   access_token: string;
   token_type: string;
   user: AccountMinimal;
+  refresh_token?: string | null;
 }
 
 export interface Account extends AccountMinimal {
