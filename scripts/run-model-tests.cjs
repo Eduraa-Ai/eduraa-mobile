@@ -15,10 +15,14 @@ const models = [
   'src/screens/results/checkedPaperDetailModel.ts',
   'src/screens/learning/agenticLearningModel.ts',
   'src/screens/learning/previousPapersModel.ts',
+  'src/screens/learning/schoolPreviousPapersModel.ts',
   'src/screens/papers/generatePaperSettingsModel.ts',
   'src/screens/papers/paperAttemptModel.ts',
   'src/screens/papers/paperDetailModel.ts',
   'src/screens/workspace/examWorkspaceModel.ts',
+  'src/screens/workspace/approvalsModel.ts',
+  'src/screens/workspace/announcementModel.ts',
+  'src/screens/workspace/attendanceModel.ts',
   'src/navigation/paperResultsNavigation.ts',
   'src/utils/mathText.ts',
   'src/utils/mathContent.ts',
@@ -51,6 +55,10 @@ const suites = [
     env: { PREVIOUS_PAPERS_MODEL_PATH: path.join(outDir, 'screens/learning/previousPapersModel.js') },
   },
   {
+    file: 'scripts/school-previous-papers-model.test.cjs',
+    env: { SCHOOL_PREVIOUS_PAPERS_MODEL_PATH: path.join(outDir, 'screens/learning/schoolPreviousPapersModel.js') },
+  },
+  {
     file: 'scripts/generate-paper-settings.test.cjs',
     env: { GENERATE_PAPER_SETTINGS_MODEL_PATH: path.join(outDir, 'screens/papers/generatePaperSettingsModel.js') },
   },
@@ -77,6 +85,26 @@ const suites = [
   {
     file: 'scripts/exam-workspace-contract.test.cjs',
     env: {},
+  },
+  {
+    file: 'scripts/approvals-model.test.cjs',
+    env: { APPROVALS_MODEL_PATH: path.join(outDir, 'screens/workspace/approvalsModel.js') },
+  },
+  {
+    file: 'scripts/b2b-approvals-contract.test.cjs',
+    env: {},
+  },
+  {
+    file: 'scripts/announcement-model.test.cjs',
+    env: { ANNOUNCEMENT_MODEL_PATH: path.join(outDir, 'screens/workspace/announcementModel.js') },
+  },
+  {
+    file: 'scripts/announcement-contract.test.cjs',
+    env: {},
+  },
+  {
+    file: 'scripts/attendance-model.test.cjs',
+    env: { ATTENDANCE_MODEL_PATH: path.join(outDir, 'screens/workspace/attendanceModel.js') },
   },
   {
     file: 'scripts/paper-detail-contract.test.cjs',
@@ -111,6 +139,10 @@ const suites = [
   },
   {
     file: 'scripts/previous-papers-navigation.test.cjs',
+    env: {},
+  },
+  {
+    file: 'scripts/b2b-previous-papers-contract.test.cjs',
     env: {},
   },
   {

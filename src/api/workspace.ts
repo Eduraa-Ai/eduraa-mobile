@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { Role } from '../types'
+import { getVisibleApprovalQueues, type ApprovalQueueKey } from '../screens/workspace/approvalsModel'
 
 export interface WorkspaceSnapshotBlock {
   label: string
@@ -32,13 +33,16 @@ export const workspaceApi = {
   async getFeatureSnapshot(featureId: string, role?: Role | null): Promise<WorkspaceSnapshotBlock[]> {
     switch (featureId) {
       case 'approvals':
-        return Promise.all([
-          read('Pending principals', '/approvals/principals/pending'),
-          read('Pending teachers', '/approvals/teachers/pending'),
-          read('Pending students', '/approvals/students/pending'),
-          read('Class teacher requests', '/approvals/class-teacher-requests/pending'),
-          read('Teacher profile updates', '/approvals/teacher-profile-updates/pending'),
-        ])
+        const approvalQueues: Record<ApprovalQueueKey, [string, string]> = {
+          principals: ['Pending principals', '/approvals/principals/pending'],
+          teachers: ['Pending teachers', '/approvals/teachers/pending'],
+          students: ['Pending students', '/approvals/students/pending'],
+          classTeacherRequests: ['Class teacher requests', '/approvals/class-teacher-requests/pending'],
+          teacherProfileUpdates: ['Teacher profile updates', '/approvals/teacher-profile-updates/pending'],
+        }
+        return Promise.all(
+          getVisibleApprovalQueues(role).map((queue) => read(...approvalQueues[queue])),
+        )
       case 'attendance':
         if (role === 'student' || role === 'b2c_student') {
           return Promise.all([read('My attendance summary', '/attendance/students/me/summary'), read('Correction requests', '/attendance/corrections')])

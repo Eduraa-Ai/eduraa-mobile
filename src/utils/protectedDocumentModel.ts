@@ -22,6 +22,19 @@ export function requiresApiAuthorization(url: string, apiBaseUrl: string) {
   }
 }
 
+export function resolveSchoolQuestionPaperFileUrl(value: string, apiBaseUrl: string) {
+  const trimmed = value.trim()
+  if (!trimmed) throw new Error('This school paper does not include a file URL.')
+
+  const resolved = new URL(trimmed, `${apiBaseUrl.replace(/\/$/, '')}/`)
+  const apiOrigin = new URL(apiBaseUrl).origin
+  const isQuestionPaperFile = /^\/api\/v1\/question-papers\/[^/]+\/(view|download)$/.test(resolved.pathname)
+  if (resolved.origin !== apiOrigin || !isQuestionPaperFile) {
+    throw new Error('This school paper file URL is not trusted.')
+  }
+  return resolved.toString()
+}
+
 export function checkedPaperDownloadEndpoint(checkedPaperId: string) {
   const normalizedId = checkedPaperId.trim()
   if (!normalizedId) throw new Error('Choose a checked paper before downloading.')

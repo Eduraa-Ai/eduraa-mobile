@@ -1072,6 +1072,7 @@ export default function HomeScreen() {
     ? resolveMobileLanding(user) === "competitive_learner"
     : false;
   const previousPapersEligible = isPreviousPapersEligible(user);
+  const schoolStudent = user?.role === "student";
 
   const {
     data: analytics,
@@ -1105,6 +1106,22 @@ export default function HomeScreen() {
     ...(user?.role === "student"
       ? [
           {
+            label: "School announcements",
+            body: "Read clear updates published for your class.",
+            meta: "Your inbox",
+            icon: "megaphone-outline" as keyof typeof Ionicons.glyphMap,
+            tone: colors.accent,
+            onPress: () => navigation.navigate("Announcements"),
+          },
+          {
+            label: "Ask your teacher",
+            body: "Send one private academic doubt and track the answer.",
+            meta: "Academic doubts",
+            icon: "chatbubble-ellipses-outline" as keyof typeof Ionicons.glyphMap,
+            tone: colors.info,
+            onPress: () => navigation.navigate("Doubts"),
+          },
+          {
             label: "Teacher & practice exams",
             body: "Open assigned exams or continue your own papers.",
             meta: "Exam workspace",
@@ -1133,9 +1150,11 @@ export default function HomeScreen() {
     ...(previousPapersEligible
       ? [
           {
-            label: "JEE previous papers",
-            body: "Browse PYQs and start paper practice.",
-            meta: "Previous years",
+            label: schoolStudent ? "School previous papers" : "JEE previous papers",
+            body: schoolStudent
+              ? "Practice published papers from your school."
+              : "Browse PYQs and start paper practice.",
+            meta: schoolStudent ? "School library" : "Previous years",
             icon: "documents-outline" as keyof typeof Ionicons.glyphMap,
             tone: colors.paperStudio.jee,
             onPress: () => navigation.navigate("PreviousPapers"),

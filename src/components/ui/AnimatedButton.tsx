@@ -5,6 +5,7 @@ import { colors, gradients, motion, radius, shadows, spacing, typography } from 
 
 interface AnimatedButtonProps {
   label: string
+  accessibilityLabel?: string
   onPress: () => void
   icon?: ReactNode
   loading?: boolean
@@ -13,7 +14,7 @@ interface AnimatedButtonProps {
   style?: ViewStyle
 }
 
-export function AnimatedButton({ label, onPress, icon, loading = false, disabled = false, variant = 'primary', style }: AnimatedButtonProps) {
+export function AnimatedButton({ label, accessibilityLabel, onPress, icon, loading = false, disabled = false, variant = 'primary', style }: AnimatedButtonProps) {
   const scale = useRef(new Animated.Value(1)).current
 
   const animateTo = (value: number) => {
@@ -34,7 +35,7 @@ export function AnimatedButton({ label, onPress, icon, loading = false, disabled
       <Pressable
         disabled={disabled || loading}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label}
         accessibilityState={{ disabled: disabled || loading, busy: loading }}
         onPress={onPress}
         onPressIn={() => animateTo(motion.press.scale)}

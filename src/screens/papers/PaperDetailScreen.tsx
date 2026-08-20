@@ -105,10 +105,12 @@ export default function PaperDetailScreen() {
   })
   const paper = paperQuery.data
 
+  const isTeacherReference = params.presentation === 'teacher_reference'
+
   const attemptsQuery = useQuery({
     queryKey: ['paper-attempts-detail', params.paperId],
     queryFn: () => papersApi.listAttempts(params.paperId),
-    enabled: !!paper,
+    enabled: Boolean(paper && !isTeacherReference),
     retry: false,
   })
   const attempts = attemptsQuery.data?.items ?? []
@@ -132,9 +134,11 @@ export default function PaperDetailScreen() {
     queryFn: () => papersApi.list({ skip: 0, limit: 100, scope: 'mine' }),
     enabled: Boolean(paper && user?.role === 'student'),
   })
-  const canDelete = user?.role === 'b2c_student'
+  const canDelete = !isTeacherReference && (
+    user?.role === 'b2c_student'
     || Boolean(ownedPapersQuery.data?.items.some((item) => item.id === params.paperId))
     || Boolean(paper?.created_by && paper.created_by === user?.id)
+  )
 
   const downloadMutation = useMutation({
     mutationFn: async () => {
@@ -181,17 +185,17 @@ export default function PaperDetailScreen() {
     resultOpeningRef.current = false
     setIsOpeningResult(false)
     void paperQuery.refetch()
-    if (paper) void attemptsQuery.refetch()
+    if (paper && !isTeacherReference) void attemptsQuery.refetch()
   }, [isFocused, params.paperId])
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <HeaderAction
-          label="Paper actions"
-          icon="ellipsis-horizontal"
+          label={isTeacherReference ? 'Download paper PDF' : 'Paper actions'}
+          icon={isTeacherReference ? 'download-outline' : 'ellipsis-horizontal'}
           busy={downloadMutation.isPending || retestMutation.isPending || deleteMutation.isPending}
-          onPress={() => setActionMenuOpen(true)}
+          onPress={isTeacherReference ? () => downloadMutation.mutate() : () => setActionMenuOpen(true)}
         />
       ),
     })
@@ -342,7 +346,26 @@ export default function PaperDetailScreen() {
         ) : null}
 
         <View style={styles.actions}>
-          {canOpenSubmittedResult && submittedAttempt ? (
+          {isTeacherReference ? (
+            <TouchableOpacity
+              style={[styles.downloadBtn, downloadMutation.isPending && styles.primaryBtnDisabled]}
+              onPress={() => downloadMutation.mutate()}
+              activeOpacity={0.82}
+              disabled={downloadMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Download teacher reference PDF"
+            >
+              {downloadMutation.isPending ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Ionicons name="download-outline" size={24} color={colors.accent} />
+              )}
+              <View style={styles.downloadCopy}>
+                <Text style={styles.downloadTitle}>Download teacher reference PDF</Text>
+                <Text style={styles.downloadMeta}>Save the question paper without answers.</Text>
+              </View>
+            </TouchableOpacity>
+          ) : canOpenSubmittedResult && submittedAttempt ? (
             <TouchableOpacity
               style={[styles.primaryBtn, isOpeningResult && styles.primaryBtnDisabled]}
               onPress={openSubmittedResult}

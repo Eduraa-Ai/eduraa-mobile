@@ -41,6 +41,14 @@ export interface OfferingsEntry {
   divisions: string[]
 }
 
+export interface SchoolApprovalStatus {
+  role: 'student' | 'teacher' | 'principal'
+  display_name: string
+  state: 'pending' | 'approved' | 'rejected'
+  submitted_at: string
+  reviewed_at?: string | null
+}
+
 export interface RegisterStudentRequest {
   first_name: string
   last_name: string
@@ -138,6 +146,11 @@ export const authApi = {
 
   me: async (): Promise<AuthToken['user']> => {
     const response = await apiClient.get('/auth/me')
+    return response.data
+  },
+
+  getSchoolApprovalStatus: async (identifier: string, password: string): Promise<SchoolApprovalStatus> => {
+    const response = await apiClient.post<SchoolApprovalStatus>('/auth/approval-status', { identifier, password })
     return response.data
   },
 
