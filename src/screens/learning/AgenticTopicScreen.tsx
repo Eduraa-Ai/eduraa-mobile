@@ -9,7 +9,7 @@ import { getHttpStatus } from '../../api/queryReliability'
 import { AppScreen, ErrorState, MathText } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { AgenticHeader, AgenticIntro, AgenticSectionHeader, AgenticSurface } from './AgenticLearningFrame'
-import { clampPercent, nextOpenTopic, topicStatusLabel } from './agenticLearningModel'
+import { clampPercent, nextOpenTopic, topicStatusLabel, ratioToPercent } from './agenticLearningModel'
 import { useLearnerTrack } from '../../hooks/useLearnerTrack'
 
 type RouteParams = {
@@ -179,7 +179,7 @@ function AgenticTopicContent() {
 
   const isResolved = topic.status.toLowerCase() === 'resolved'
   const mastery = clampPercent(topic.mastery_score)
-  const confidence = clampPercent(topic.confidence)
+  const confidence = ratioToPercent(topic.confidence)
   const nextTopic = nextOpenTopic(subtopicsQuery.data ?? [], topic.topic_id)
   const curriculumMeta = [topic.curriculum_label, topic.chapter_title].filter(Boolean).join(' · ')
   const updateError = resolveMutation.isError ? 'The update did not reach Eduraa. Your current status is unchanged; try again.' : null

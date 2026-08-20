@@ -11,6 +11,18 @@ export function clampPercent(value: number | null | undefined) {
   return Math.max(0, Math.min(100, Math.round(value ?? 0)))
 }
 
+/**
+ * Percent for a 0-1 ratio field.
+ *
+ * The backend emits mastery_score on a 0-100 scale but clamps confidence and
+ * evidence_strength to min(1.0, ...). Passing a ratio through clampPercent
+ * rounds 0.61 to "1%", which understates the signal to the student.
+ */
+export function ratioToPercent(value: number | null | undefined) {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(100, Math.round((value ?? 0) * 100)))
+}
+
 export function totalOpenConcepts(subjects: AgenticLearningSubjectBucket[]) {
   return subjects.reduce((sum, subject) => sum + Math.max(0, subject.unresolved_count || 0), 0)
 }
