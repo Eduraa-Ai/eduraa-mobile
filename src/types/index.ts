@@ -408,6 +408,8 @@ export interface GradingResultItem {
     author_id?: string | null;
     message?: string | null;
     created_at?: string | null;
+    student_notification_pending?: boolean | null;
+    student_seen_at?: string | null;
   }> | null;
 }
 
@@ -436,6 +438,8 @@ export interface CheckedPaper {
   manual_review_completed?: boolean | null;
   pending_question_review_count?: number;
   pending_question_review_labels?: string[];
+  unread_question_review_response_count?: number;
+  unread_question_review_response_labels?: string[];
   // enriched fields from backend list/detail endpoints
   student_name?: string | null;
   exam_name?: string | null;
