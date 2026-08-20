@@ -8,6 +8,7 @@ import { agenticLearningApi, AgenticLearningSubjectBucket } from '../../api/agen
 import { AppScreen, ErrorState } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { AgenticHeader, AgenticIntro, AgenticSectionHeader, AgenticSurface } from './AgenticLearningFrame'
+import { useLearnerTrack } from '../../hooks/useLearnerTrack'
 import { clampPercent, priorityAction, totalOpenConcepts, weakestSubject } from './agenticLearningModel'
 
 function masteryTone(value: number) {
@@ -92,6 +93,14 @@ function HubSkeleton() {
 export default function AgenticLearningScreen() {
   const navigation = useNavigation<any>()
   const route = useRoute()
+  // The header used to be the literal string "JEE Mains + Advanced" for every
+  // learner, which told B2B school students they were on a JEE track. Show the
+  // learner's own curriculum instead, and fall back to neutral wording rather
+  // than naming a board the account does not claim (issue #63).
+  const { isJee, curriculum } = useLearnerTrack()
+  const headerMeta = isJee
+    ? 'JEE Mains + Advanced'
+    : curriculum.label ?? 'Your learning path'
   const params = route.params as { origin?: 'checked-paper'; checkedPaperId?: string } | undefined
   const subjectsQuery = useQuery({
     queryKey: ['agentic-subjects'],
@@ -143,7 +152,7 @@ export default function AgenticLearningScreen() {
 
   return (
     <AppScreen protectedChrome contentStyle={styles.screen} refreshControl={undefined}>
-      <AgenticHeader meta="JEE Mains + Advanced" pill="Learn" onBack={goBack} />
+      <AgenticHeader meta={headerMeta} pill="Learn" onBack={goBack} />
       <AgenticIntro
         kicker="Agentic learning"
         title={subjectsQuery.isLoading ? 'Building your learning map' : openCount > 0 ? `${openCount} concepts need work` : 'Your concept map is steady'}
