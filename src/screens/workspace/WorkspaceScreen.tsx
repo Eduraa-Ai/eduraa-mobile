@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AppScreen } from '../../components/ui'
 import { b2cApi } from '../../api/b2c'
 import { mobileControls, MobileControl, roleCanSeeControl } from '../../data/mobileControlCatalog'
+import { useClassTeacherAccess } from '../../hooks/useClassTeacherAccess'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, spacing, typography } from '../../theme'
 
@@ -76,6 +77,8 @@ export default function WorkspaceScreen() {
     enabled: user?.role === 'b2c_student',
   })
 
+  const classTeacherAccess = useClassTeacherAccess({ enabled: user?.role === 'teacher' })
+
   const controls = useMemo(() => {
     if (!user?.role) return []
     const competitive = isCompetitiveProfile(user, b2cQuery.data)
@@ -84,19 +87,24 @@ export default function WorkspaceScreen() {
     return mobileControls.filter((control) => {
       if (control.hiddenOnWeb || !roleCanSeeControl(user.role, control)) return false
       if (control.requiresClassTeacher) {
-        const isClassTeacher = Boolean(user.class_teacher_opt_in && user.class_teacher_standard && user.class_teacher_division)
-        if (!isClassTeacher) return false
+        // The JWT claim can be stale in both directions, so the server's
+        // answer is the gate. Issue #61 forbids a client flag deciding this.
+        if (!classTeacherAccess.isAuthorized) return false
       }
       if (control.requiresCompetitiveExam && !competitive) return false
       if (control.requiresJee && !jee) return false
       return true
     })
-  }, [b2cQuery.data, user])
+  }, [b2cQuery.data, classTeacherAccess.isAuthorized, user])
 
   const openControl = (control: MobileControl) => {
     const parent = navigation.getParent?.()
     const parentRoutes: string[] = parent?.getState?.().routeNames ?? []
 
+    if (control.id === 'class-teacher') {
+      navigation.navigate('ClassTeacherOverview')
+      return
+    }
     if (control.id === 'approvals') {
       if (parentRoutes.includes('StaffApprovals')) parent.navigate('StaffApprovals')
       else navigation.navigate('Approvals')

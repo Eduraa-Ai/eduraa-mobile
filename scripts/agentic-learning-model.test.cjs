@@ -61,5 +61,14 @@ test('accessibility label carries non-color learning state', () => {
   const label = model.topicAccessibilityLabel(topic())
   assert.match(label, /Repair now/)
   assert.match(label, /32 percent mastery/)
-  assert.match(label, /12 previous-year questions/)
+})
+
+test('previous-year question counts are announced only to exam-track learners', () => {
+  // A B2B school learner must not be told about previous-year questions: the
+  // metric is competitive-exam framing and does not apply to their curriculum.
+  const schoolLabel = model.topicAccessibilityLabel(topic(), false)
+  assert.doesNotMatch(schoolLabel, /previous-year questions/)
+
+  const examLabel = model.topicAccessibilityLabel(topic(), true)
+  assert.match(examLabel, /12 previous-year questions/)
 })
