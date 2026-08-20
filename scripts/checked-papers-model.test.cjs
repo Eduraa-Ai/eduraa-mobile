@@ -97,3 +97,34 @@ test('score accessibility label includes non-color score, status, and missing me
   assert.match(label, /Question count unavailable/)
   assert.match(label, /Opens the checked paper report/)
 })
+
+test('student review notifications count only explicitly unread teacher responses', () => {
+  const fixture = paper({
+    unread_question_review_response_count: 1,
+    unread_question_review_response_labels: ['Q2'],
+    grading_results: [
+      {
+        question_id: 'question-1',
+        question_number: 1,
+        question_review_thread: [
+          { author_role: 'student', event_type: 'requested' },
+          { author_role: 'teacher', event_type: 'resolved', student_notification_pending: false },
+        ],
+      },
+      {
+        question_id: 'question-2',
+        question_number: 2,
+        question_review_thread: [
+          { author_role: 'student', event_type: 'requested' },
+          { author_role: 'teacher', student_notification_pending: true },
+        ],
+      },
+    ],
+  })
+
+  assert.equal(model.getUnreadReviewResponseCount(fixture), 1)
+  assert.deepEqual(model.getUnreadReviewResponseLabels(fixture), ['Question 2'])
+  assert.equal(model.getUnreadReviewResponseCount(paper({
+    grading_results: fixture.grading_results.slice(0, 1),
+  })), 0)
+})

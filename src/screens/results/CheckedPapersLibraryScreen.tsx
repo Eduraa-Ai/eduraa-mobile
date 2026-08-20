@@ -15,7 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import Svg, { Circle } from 'react-native-svg'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { isLearnerRole } from '../../auth/roles'
@@ -33,6 +33,10 @@ import {
   getPaperSubject,
   getPaperTitle,
   getQuestionCount,
+  getQuestionReviewCount,
+  getQuestionReviewLabels,
+  getUnreadReviewResponseCount,
+  getUnreadReviewResponseLabels,
   matchesSearch,
   matchesTab,
   normalize,
@@ -43,6 +47,7 @@ import {
   sortByRecency,
 } from './checkedPapersLibraryModel'
 import type { CheckedPaperTab } from './checkedPapersLibraryModel'
+import { loadSeenReviewResponseKeys } from './reviewNotificationState'
 
 const TAB_CONFIG: Array<{ key: CheckedPaperTab; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { key: 'all', label: 'All papers', icon: 'layers-outline' },
@@ -124,6 +129,8 @@ function CheckedPaperRow({
   downloading,
   downloadBlocked,
   featured,
+  isStaff,
+  seenReviewResponseKeys,
 }: {
   paper: CheckedPaper
   onPress: () => void
@@ -132,6 +139,8 @@ function CheckedPaperRow({
   downloading: boolean
   downloadBlocked: boolean
   featured: boolean
+  isStaff: boolean
+  seenReviewResponseKeys: ReadonlySet<string>
 }) {
   const percent = scorePercent(paper)
   const icon = getPaperIcon(paper)
@@ -139,6 +148,19 @@ function CheckedPaperRow({
   const subject = getPaperSubject(paper)
   const questions = getQuestionCount(paper)
   const questionLabel = questions == null ? 'Question count unavailable' : `${questions} question${questions === 1 ? '' : 's'}`
+  const reviewCount = getQuestionReviewCount(paper)
+  const reviewLabels = getQuestionReviewLabels(paper)
+  const reviewLabel = reviewLabels.slice(0, 2).join(', ')
+  const reviewTitle = `${reviewCount} question review${reviewCount === 1 ? '' : 's'} pending`
+  const unreadResponseCount = isStaff ? 0 : getUnreadReviewResponseCount(paper, seenReviewResponseKeys)
+  const unreadResponseLabels = isStaff ? [] : getUnreadReviewResponseLabels(paper, seenReviewResponseKeys)
+  const unreadResponseLabel = unreadResponseLabels.slice(0, 2).join(', ')
+  const noticeTitle = unreadResponseCount > 0
+    ? `${unreadResponseCount} teacher response${unreadResponseCount === 1 ? '' : 's'}`
+    : reviewTitle
+  const noticeLabel = unreadResponseCount > 0
+    ? `Teacher replied: ${unreadResponseLabel || 'review question'}${reviewCount > 0 ? ` · ${reviewCount} still pending` : ''}`
+    : reviewLabel
 
   return (
     <Pressable
@@ -207,6 +229,17 @@ function CheckedPaperRow({
           </View>
         </View>
       </View>
+      {unreadResponseCount > 0 || reviewCount > 0 ? (
+        <View style={styles.reviewNotice}>
+          <Ionicons name={unreadResponseCount > 0 ? 'notifications-outline' : 'chatbox-ellipses-outline'} size={16} color={colors.accentStrong} />
+          <View style={styles.reviewNoticeCopy}>
+            <Text style={styles.reviewNoticeTitle}>
+              {noticeTitle}
+            </Text>
+            {noticeLabel ? <Text style={styles.reviewNoticeText} numberOfLines={1}>{noticeLabel}</Text> : null}
+          </View>
+        </View>
+      ) : null}
     </Pressable>
   )
 }
@@ -395,6 +428,8 @@ export default function CheckedPapersLibraryScreen() {
   const [openingPaperId, setOpeningPaperId] = useState<string | null>(null)
   const [downloadingPaperId, setDownloadingPaperId] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [seenReviewResponseKeys, setSeenReviewResponseKeys] = useState<Set<string>>(new Set())
+  const [seenReviewResponseKeysLoaded, setSeenReviewResponseKeysLoaded] = useState(false)
   const openingPaperRef = useRef<string | null>(null)
   const downloadingPaperRef = useRef<string | null>(null)
   const focusOnceRef = useRef(false)
@@ -419,12 +454,89 @@ export default function CheckedPapersLibraryScreen() {
       focusOnceRef.current = true
       openingPaperRef.current = null
       setOpeningPaperId(null)
-    }, [refetch]),
+      if (!isStaff && user?.id) {
+        setSeenReviewResponseKeysLoaded(false)
+        void loadSeenReviewResponseKeys(user.id).then((keys) => {
+          setSeenReviewResponseKeys(keys)
+          setSeenReviewResponseKeysLoaded(true)
+        })
+      } else {
+        setSeenReviewResponseKeysLoaded(true)
+      }
+    }, [isStaff, refetch, user?.id]),
   )
 
   const papers = useMemo(() => sortByRecency(data ?? []), [data])
+  const reviewDetailCandidates = useMemo(
+    () => isStaff ? [] : papers.filter((paper) => (
+      paper.manual_review_requested
+      || paper.manual_review_completed
+      || (paper.pending_question_review_count ?? 0) > 0
+      || (paper.unread_question_review_response_count ?? 0) > 0
+    )),
+    [isStaff, papers],
+  )
+  const reviewDetailQueries = useQueries({
+    queries: reviewDetailCandidates.map((paper) => ({
+      queryKey: ['checked-paper', paper.id],
+      queryFn: () => checkedPapersApi.getById(paper.id),
+      staleTime: 15_000,
+    })),
+  })
+  const notificationPaperById = useMemo(() => {
+    const details = new Map<string, CheckedPaper>()
+    reviewDetailCandidates.forEach((paper, index) => {
+      const detail = reviewDetailQueries[index]?.data
+      details.set(paper.id, detail ? { ...paper, ...detail } : paper)
+    })
+    return details
+  }, [reviewDetailCandidates, reviewDetailQueries])
+  const notificationPapersSource = useMemo(
+    () => papers.map((paper) => notificationPaperById.get(paper.id) ?? paper),
+    [notificationPaperById, papers],
+  )
   const subjectOptions = useMemo(() => buildSubjectOptions(papers), [papers])
   const assessment = useMemo(() => buildAssessmentModel(papers), [papers])
+  const questionReviewPapers = useMemo(
+    () => notificationPapersSource.filter((paper) => getQuestionReviewCount(paper) > 0),
+    [notificationPapersSource],
+  )
+  const questionReviewTotal = useMemo(
+    () => questionReviewPapers.reduce((sum, paper) => sum + getQuestionReviewCount(paper), 0),
+    [questionReviewPapers],
+  )
+  const questionReviewPreview = useMemo(() => {
+    const first = questionReviewPapers[0]
+    if (!first) return ''
+    const labels = getQuestionReviewLabels(first).slice(0, 2).join(', ')
+    const paperTitle = getPaperTitle(first)
+    return labels ? `${paperTitle}: ${labels}` : paperTitle
+  }, [questionReviewPapers])
+  const questionReviewBannerTitle = `${questionReviewTotal} question review${questionReviewTotal === 1 ? '' : 's'} pending`
+  const unreadResponsePapers = useMemo(
+    () => isStaff || !seenReviewResponseKeysLoaded ? [] : notificationPapersSource.filter((paper) => getUnreadReviewResponseCount(paper, seenReviewResponseKeys) > 0),
+    [isStaff, notificationPapersSource, seenReviewResponseKeys, seenReviewResponseKeysLoaded],
+  )
+  const unreadResponseTotal = useMemo(
+    () => unreadResponsePapers.reduce((sum, paper) => sum + getUnreadReviewResponseCount(paper, seenReviewResponseKeys), 0),
+    [seenReviewResponseKeys, unreadResponsePapers],
+  )
+  const unreadResponsePreview = useMemo(() => {
+    const first = unreadResponsePapers[0]
+    if (!first) return ''
+    const labels = getUnreadReviewResponseLabels(first, seenReviewResponseKeys).slice(0, 2).join(', ')
+    return `${getPaperTitle(first)}${labels ? `: ${labels}` : ''}`
+  }, [seenReviewResponseKeys, unreadResponsePapers])
+  const studentNotificationTitle = `${unreadResponseTotal} teacher response${unreadResponseTotal === 1 ? '' : 's'}`
+  const notificationPapers = unreadResponseTotal > 0 ? unreadResponsePapers : questionReviewPapers
+  const notificationTitle = unreadResponseTotal > 0 ? studentNotificationTitle : questionReviewBannerTitle
+  const notificationPreview = unreadResponseTotal > 0
+    ? `${unreadResponsePreview}${questionReviewTotal > 0 ? ` · ${questionReviewTotal} review${questionReviewTotal === 1 ? '' : 's'} still pending` : ''}`
+    : questionReviewPreview
+  const notificationTotal = unreadResponseTotal + questionReviewTotal
+  const displayedReviewCount = isStaff
+    ? assessment.reviewCount
+    : notificationPapersSource.filter((paper) => getQuestionReviewCount(paper) > 0 || getUnreadReviewResponseCount(paper, seenReviewResponseKeys) > 0).length
 
   const visiblePapers = useMemo(() => {
     const term = normalize(query)
@@ -436,6 +548,10 @@ export default function CheckedPapersLibraryScreen() {
   const scorePercentValue = assessment.latest ? scorePercent(assessment.latest) : assessment.average
   const isSearchEmpty = totalCount > 0 && visibleCount === 0
   const hasCacheAndError = isError && totalCount > 0
+  const listExtraData = useMemo(
+    () => ({ downloadingPaperId, notificationPaperById, seenReviewResponseKeys }),
+    [downloadingPaperId, notificationPaperById, seenReviewResponseKeys],
+  )
 
   const openPaper = useCallback(
     (paper: CheckedPaper) => {
@@ -524,7 +640,7 @@ export default function CheckedPapersLibraryScreen() {
         <View style={styles.metricGrid}>
           <SummaryMetric label="Checked" value={String(totalCount).padStart(2, '0')} />
           <SummaryMetric label="Growth" value={assessment.delta == null ? '—' : `${assessment.delta > 0 ? '+' : ''}${assessment.delta}%`} divider />
-          <SummaryMetric label="In review" value={String(assessment.reviewCount).padStart(2, '0')} divider />
+          <SummaryMetric label="In review" value={String(displayedReviewCount).padStart(2, '0')} divider />
         </View>
       </LinearGradient>
 
@@ -579,6 +695,31 @@ export default function CheckedPapersLibraryScreen() {
           )
         })}
       </View>
+
+      {notificationTotal > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${notificationTitle}. ${notificationPreview}`}
+          accessibilityHint="Opens the related checked paper."
+          onPress={() => {
+            const first = notificationPapers[0]
+            if (first) openPaper(first)
+          }}
+          style={({ pressed }) => [styles.questionReviewBanner, pressed && styles.questionReviewBannerPressed]}
+        >
+          <View style={styles.questionReviewIcon}>
+            <Ionicons name="notifications-outline" size={17} color={colors.accentStrong} />
+          </View>
+          <View style={styles.questionReviewCopy}>
+            <Text style={styles.questionReviewTitle}>
+              {notificationTitle}
+            </Text>
+            <Text style={styles.questionReviewText} numberOfLines={2}>
+              {notificationPreview || 'Open the related checked paper.'}
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Recent papers</Text>
@@ -678,7 +819,7 @@ export default function CheckedPapersLibraryScreen() {
         <FlatList
           style={styles.list}
           data={visiblePapers}
-          extraData={downloadingPaperId}
+          extraData={listExtraData}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={header}
           ListEmptyComponent={listEmpty}
@@ -688,8 +829,10 @@ export default function CheckedPapersLibraryScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item, index }) => (
             <CheckedPaperRow
-              paper={item}
+              paper={notificationPaperById.get(item.id) ?? item}
               featured={index === 0}
+              isStaff={isStaff}
+              seenReviewResponseKeys={seenReviewResponseKeys}
               opening={openingPaperId === item.id}
               downloading={downloadingPaperId === item.id}
               downloadBlocked={Boolean(downloadingPaperId && downloadingPaperId !== item.id)}
@@ -1007,6 +1150,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing[1],
   },
+  questionReviewBanner: {
+    minHeight: 58,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f8c979',
+    backgroundColor: '#fff8e7',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  questionReviewBannerPressed: {
+    opacity: 0.82,
+  },
+  questionReviewIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff0cf',
+  },
+  questionReviewCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  questionReviewTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  questionReviewText: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 9,
+    lineHeight: 13,
+    marginTop: 2,
+  },
   tabPill: {
     minHeight: 32,
     flexDirection: 'row',
@@ -1208,6 +1391,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing[1],
     paddingLeft: 55,
+  },
+  reviewNotice: {
+    marginTop: spacing[2],
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#f8c979',
+    backgroundColor: '#fff8e7',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  reviewNoticeCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reviewNoticeTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  reviewNoticeText: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 9,
+    lineHeight: 12,
   },
   paperActions: {
     flexDirection: 'row',
