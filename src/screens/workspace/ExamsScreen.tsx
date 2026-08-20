@@ -1,10 +1,11 @@
 import React, { ReactNode, useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectField, SelectableChip, SkeletonCard, TextInputField } from '../../components/ui'
 import { examsApi, ExamPayload } from '../../api/exams'
+import { cheatSheetsApi, CheatSheetSyllabus, CheatSheetSyllabusList } from '../../api/cheatSheets'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { papersApi } from '../../api/papers'
 import { useAuthStore } from '../../stores/authStore'
@@ -65,6 +66,27 @@ function formatDate(value?: string | null) {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function notify(title: string, message?: string) {
+  if (Platform.OS === 'web') {
+    // react-native-web's Alert.alert() is a no-op, so fall back to the browser dialog.
+    window.alert(message ? `${title}\n\n${message}` : title)
+    return
+  }
+  Alert.alert(title, message)
+}
+
+function confirmDestructive(title: string, message: string, confirmLabel: string, onConfirm: () => void) {
+  if (Platform.OS === 'web') {
+    // react-native-web's Alert.alert() is a no-op, so a button inside it never fires.
+    if (window.confirm(`${title}\n\n${message}`)) onConfirm()
+    return
+  }
+  Alert.alert(title, message, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: confirmLabel, style: 'destructive', onPress: onConfirm },
+  ])
 }
 
 function extractDetail(error: unknown, fallback: string) {
@@ -961,10 +983,72 @@ function formFromExam(exam: Exam): ExamFormState {
   }
 }
 
-function StaffExamCard({ exam, selected, onPress }: { exam: Exam; selected: boolean; onPress: () => void }) {
+function StaffCardActionButton({
+  label,
+  icon,
+  disabled,
+  loading,
+  onPress,
+}: {
+  label: string
+  icon: keyof typeof Ionicons.glyphMap
+  disabled?: boolean
+  loading?: boolean
+  onPress: () => void
+}) {
+  const tintColor = colors.accent
+
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.examCardPress, pressed && styles.pressed]}>
-      <AnimatedCard style={selected ? styles.cardSelected : styles.card}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled), busy: Boolean(loading) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.staffCardActionButton,
+        styles.staffCardActionButtonShare,
+        disabled && styles.staffCardActionButtonDisabled,
+        pressed && !disabled && styles.pressed,
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={tintColor} />
+      ) : (
+        <Ionicons name={icon} size={16} color={tintColor} />
+      )}
+      <Text style={[styles.staffCardActionText, { color: tintColor }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
+function StaffExamCard({
+  exam,
+  linkedPapers,
+  selected,
+  syllabus,
+  sharingSyllabus,
+  onPress,
+  onShareSyllabus,
+}: {
+  exam: Exam
+  linkedPapers: PaperListItem[]
+  selected: boolean
+  syllabus?: CheatSheetSyllabus
+  sharingSyllabus?: boolean
+  onPress: () => void
+  onShareSyllabus: () => void
+}) {
+  return (
+    <AnimatedCard style={selected ? styles.cardSelected : styles.card}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${exam.name}`}
+        onPress={onPress}
+        style={({ pressed }) => pressed && styles.pressed}
+      >
         <View style={styles.cardTop}>
           <View style={styles.iconBubble}>
             <Ionicons name="calendar-number" size={18} color={colors.accent} />
@@ -979,8 +1063,28 @@ function StaffExamCard({ exam, selected, onPress }: { exam: Exam; selected: bool
           <MetricTile value={exam.paper_ids?.length ?? 0} label="Papers" />
           <MetricTile value={exam.duration_minutes || '-'} label="Minutes" />
         </View>
-      </AnimatedCard>
-    </Pressable>
+      </Pressable>
+
+      {linkedPapers.length > 0 ? (
+        <View style={styles.examPapersList}>
+          {linkedPapers.map((paper) => (
+            <View key={paper.id} style={styles.examPaperChip}>
+              <Ionicons name="document-text-outline" size={13} color={colors.textMuted} />
+              <Text style={styles.examPaperChipText} numberOfLines={1}>{paper.title}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.staffCardActions}>
+        <StaffCardActionButton
+          label={syllabus ? 'Update syllabus' : 'Share syllabus'}
+          icon="share-social-outline"
+          loading={sharingSyllabus}
+          onPress={onShareSyllabus}
+        />
+      </View>
+    </AnimatedCard>
   )
 }
 
@@ -994,11 +1098,27 @@ function StaffExamsView({ role }: { role?: Role }) {
   const papersQuery = useQuery({ queryKey: ['exams', 'papers'], queryFn: examsApi.listPublishedPapers })
   const optionsQuery = useQuery({ queryKey: ['exams', 'paper-options'], queryFn: examsApi.getPaperOptions, enabled: role === 'teacher' })
   const teachersQuery = useQuery({ queryKey: ['exams', 'teachers'], queryFn: examsApi.listTeachers, enabled: isAdminLike(role) })
+  const syllabiQuery = useQuery({ queryKey: ['exams', 'syllabi'], queryFn: cheatSheetsApi.listSharedSyllabi })
 
   const subjects = subjectsQuery.data ?? []
   const papers = papersQuery.data ?? []
   const exams = examsQuery.data ?? []
   const teachers = teachersQuery.data ?? []
+  const syllabiByExamId = useMemo(() => {
+    const map = new Map<string, CheatSheetSyllabus>()
+    for (const syllabus of syllabiQuery.data?.items ?? []) {
+      map.set(syllabus.exam_id, syllabus)
+    }
+    return map
+  }, [syllabiQuery.data])
+  const papersByExamId = useMemo(() => {
+    const byId = new Map(papers.map((paper) => [paper.id, paper]))
+    const map = new Map<string, PaperListItem[]>()
+    for (const exam of exams) {
+      map.set(exam.id, (exam.paper_ids ?? []).map((id) => byId.get(id)).filter((paper): paper is PaperListItem => Boolean(paper)))
+    }
+    return map
+  }, [exams, papers])
   const standardOptions = useMemo(() => {
     const fromPapers = papers.map((paper) => paper.standard).filter(Boolean) as string[]
     return Array.from(new Set([...(optionsQuery.data?.standards ?? []), ...fromPapers]))
@@ -1059,17 +1179,31 @@ function StaffExamsView({ role }: { role?: Role }) {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['exams', 'staff'] })
-      Alert.alert(selectedExam ? 'Exam updated' : 'Exam created', 'The exam list has been refreshed.')
+      notify(selectedExam ? 'Exam updated' : 'Exam created', 'The exam list has been refreshed.')
       resetForm()
     },
     onError: (error) => {
-      Alert.alert('Save failed', error instanceof Error ? error.message : extractDetail(error, 'Unable to save exam.'))
+      notify('Save failed', error instanceof Error ? error.message : extractDetail(error, 'Unable to save exam.'))
+    },
+  })
+
+  const shareSyllabusMutation = useMutation({
+    mutationFn: (exam: Exam) => cheatSheetsApi.shareSyllabus(exam.id),
+    onSuccess: (syllabus) => {
+      queryClient.setQueryData(['exams', 'syllabi'], (current: CheatSheetSyllabusList | undefined) => {
+        const items = (current?.items ?? []).filter((existing) => existing.exam_id !== syllabus.exam_id)
+        return { items: [...items, syllabus], total: items.length + 1 }
+      })
+      notify('Syllabus shared', `The syllabus for "${syllabus.exam_name ?? ''}" is now available to students.`)
+    },
+    onError: (error) => {
+      notify('Share failed', extractDetail(error, 'Unable to share this exam syllabus.'))
     },
   })
 
   const isLoading = examsQuery.isLoading || subjectsQuery.isLoading || papersQuery.isLoading || teachersQuery.isLoading
   const isError = examsQuery.isError || subjectsQuery.isError || papersQuery.isError
-  const refreshing = examsQuery.isRefetching || subjectsQuery.isRefetching || papersQuery.isRefetching || teachersQuery.isRefetching
+  const refreshing = examsQuery.isRefetching || subjectsQuery.isRefetching || papersQuery.isRefetching || teachersQuery.isRefetching || syllabiQuery.isRefetching
 
   if (isLoading) {
     return (
@@ -1109,6 +1243,7 @@ function StaffExamsView({ role }: { role?: Role }) {
         void subjectsQuery.refetch()
         void papersQuery.refetch()
         void teachersQuery.refetch()
+        void syllabiQuery.refetch()
       }} tintColor={colors.accent} colors={[colors.accent]} />}
     >
       <GradientHeroCard
@@ -1266,11 +1401,15 @@ function StaffExamsView({ role }: { role?: Role }) {
             <StaffExamCard
               key={exam.id}
               exam={exam}
+              linkedPapers={papersByExamId.get(exam.id) ?? []}
               selected={selectedExam?.id === exam.id}
+              syllabus={syllabiByExamId.get(exam.id)}
+              sharingSyllabus={shareSyllabusMutation.isPending && shareSyllabusMutation.variables?.id === exam.id}
               onPress={() => {
                 setSelectedExam(exam)
                 setForm(formFromExam(exam))
               }}
+              onShareSyllabus={() => shareSyllabusMutation.mutate(exam)}
             />
           ))
         )}
@@ -1689,9 +1828,6 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     borderColor: colors.accent,
   },
-  examCardPress: {
-    borderRadius: radius.card,
-  },
   cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1722,6 +1858,61 @@ const styles = StyleSheet.create({
   miniGrid: {
     flexDirection: 'row',
     gap: spacing[3],
+  },
+  examPapersList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  examPaperChip: {
+    maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.backgroundMuted,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 5,
+  },
+  examPaperChipText: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 11,
+  },
+  staffCardActions: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    paddingTop: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  staffCardActionButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[2],
+  },
+  staffCardActionButtonShare: {
+    borderColor: colors.borderBrand,
+    backgroundColor: colors.accentSurface,
+  },
+  staffCardActionButtonDelete: {
+    borderColor: `${colors.danger}35`,
+    backgroundColor: colors.dangerSurface,
+  },
+  staffCardActionButtonDisabled: {
+    opacity: 0.5,
+  },
+  staffCardActionText: {
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
   },
   paperList: {
     gap: spacing[2],
