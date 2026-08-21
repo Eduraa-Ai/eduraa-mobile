@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -8,6 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AuthLogoMark } from '../../components/ui'
 import type { AuthStackParamList } from '../../navigation'
 import { typography } from '../../theme'
+import { useReducedMotion } from '../../hooks/useReducedMotion'
+import { getAuthHandoffDelay, shouldStackRegistrationChoices } from '../../components/auth/authMotionModel'
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Register'>
 
@@ -59,14 +61,15 @@ type OrbitChoiceProps = {
   titleLines: [string, string]
   descriptionLines: [string, string]
   scale: number
-  positionStyle: { left?: number; top?: number; right?: number; bottom?: number }
+  positionStyle?: { left?: number; top?: number; right?: number; bottom?: number }
+  stacked?: boolean
   selected: boolean
   disabled: boolean
   onPressIn: () => void
   onPress: () => void
 }
 
-function OrbitChoice({ tone, titleLines, descriptionLines, scale, positionStyle, selected, disabled, onPressIn, onPress }: OrbitChoiceProps) {
+function OrbitChoice({ tone, titleLines, descriptionLines, scale, positionStyle, stacked = false, selected, disabled, onPressIn, onPress }: OrbitChoiceProps) {
   const dark = tone === 'planet'
   const diameter = PLANET_D * scale
 
@@ -80,22 +83,21 @@ function OrbitChoice({ tone, titleLines, descriptionLines, scale, positionStyle,
       accessibilityState={{ selected, disabled }}
       style={({ pressed }) => [
         styles.planet,
+        stacked && styles.planetStacked,
         dark ? styles.planetDark : styles.planetCream,
-        { width: diameter, height: diameter, borderRadius: diameter / 2, ...positionStyle },
+        stacked
+          ? styles.planetStackedSize
+          : { width: diameter, height: diameter, borderRadius: diameter / 2, ...positionStyle },
         (pressed || selected) && (dark ? styles.planetDarkActive : styles.planetCreamActive),
         (pressed || selected) && styles.planetSelected,
         disabled && !selected && styles.planetDisabled,
       ]}
     >
-      <Text style={[styles.planetTitle, { color: dark ? '#ffffff' : NAVY, fontSize: Math.round(17 * scale), lineHeight: Math.round(19 * scale) }]}>
-        {titleLines[0]}
-        {'\n'}
-        {titleLines[1]}
+      <Text style={[styles.planetTitle, stacked && styles.planetTextStacked, { color: dark ? '#ffffff' : NAVY, fontSize: Math.round(17 * scale), lineHeight: Math.round(19 * scale) }]}>
+        {stacked ? titleLines.join(' ') : <>{titleLines[0]}{`\n`}{titleLines[1]}</>}
       </Text>
-      <Text style={[styles.planetDescription, { color: dark ? MUTED_LIGHT : MUTED_ON_LIGHT, fontSize: Math.round(9 * scale), lineHeight: Math.round(13 * scale) }]}>
-        {descriptionLines[0]}
-        {'\n'}
-        {descriptionLines[1]}
+      <Text style={[styles.planetDescription, stacked && styles.planetTextStacked, { color: dark ? '#c5ceda' : '#526071', fontSize: Math.round(11 * scale), lineHeight: Math.round(15 * scale) }]}>
+        {stacked ? descriptionLines.join(' ') : <>{descriptionLines[0]}{`\n`}{descriptionLines[1]}</>}
       </Text>
       <Ionicons name="arrow-forward" size={14} color={ORANGE} style={styles.planetArrow} />
     </Pressable>
@@ -105,16 +107,21 @@ function OrbitChoice({ tone, titleLines, descriptionLines, scale, positionStyle,
 export default function RegisterScreen() {
   const navigation = useNavigation<Nav>()
   const insets = useSafeAreaInsets()
+  const { fontScale } = useWindowDimensions()
+  const reducedMotion = useReducedMotion()
+  const useAccessibleChoices = shouldStackRegistrationChoices(fontScale)
   const [selectedPath, setSelectedPath] = useState<'individual' | 'institution' | null>(null)
   const [isNavigating, setIsNavigating] = useState(false)
   const [mapWidth, setMapWidth] = useState(0)
   const navigateTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navigationPending = React.useRef(false)
 
   const clearPendingNavigation = React.useCallback(() => {
     if (navigateTimeout.current) {
       clearTimeout(navigateTimeout.current)
       navigateTimeout.current = null
     }
+    navigationPending.current = false
   }, [])
 
   useFocusEffect(
@@ -126,13 +133,20 @@ export default function RegisterScreen() {
   )
 
   const selectAndNavigate = (path: 'individual' | 'institution') => {
-    if (navigateTimeout.current) return
+    if (navigationPending.current) return
+    navigationPending.current = true
     setSelectedPath(path)
     setIsNavigating(true)
+    const destination = path === 'individual' ? 'RegisterIndividual' : 'RegisterSchool'
+    const handoffDelay = getAuthHandoffDelay(reducedMotion, 'registration')
+    if (!handoffDelay) {
+      navigation.navigate(destination)
+      return
+    }
     navigateTimeout.current = setTimeout(() => {
       navigateTimeout.current = null
-      navigation.navigate(path === 'individual' ? 'RegisterIndividual' : 'RegisterSchool')
-    }, 420)
+      navigation.navigate(destination)
+    }, handoffDelay)
   }
 
   const onMapLayout = (event: LayoutChangeEvent) => {
@@ -168,7 +182,7 @@ export default function RegisterScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 22, paddingBottom: insets.bottom + 26 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, useAccessibleChoices && styles.headerAccessible]}>
           <Pressable
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
@@ -185,7 +199,7 @@ export default function RegisterScreen() {
               <Text style={styles.brandContext}>Create your account</Text>
             </View>
           </View>
-          <View style={styles.stepPill}>
+          <View style={[styles.stepPill, useAccessibleChoices && styles.stepPillAccessible]}>
             <Text style={styles.stepPillText}>01 · Choose</Text>
           </View>
         </View>
@@ -196,7 +210,33 @@ export default function RegisterScreen() {
           <Text style={styles.subtitle}>Every learning path starts with who shapes the journey.</Text>
         </View>
 
-        <View style={[styles.map, mapWidth ? { height: mapHeight } : null]} onLayout={onMapLayout}>
+        {useAccessibleChoices ? (
+          <View style={styles.choiceStack}>
+            <OrbitChoice
+              tone="planet"
+              titleLines={['Individual', 'learner']}
+              descriptionLines={['My goals. My pace.', 'My space.']}
+              scale={1}
+              stacked
+              selected={selectedPath === 'individual'}
+              disabled={isNavigating}
+              onPressIn={() => setSelectedPath('individual')}
+              onPress={() => selectAndNavigate('individual')}
+            />
+            <OrbitChoice
+              tone="cream"
+              titleLines={['Institution', 'workspace']}
+              descriptionLines={['My school. My role.', 'Connected learning.']}
+              scale={1}
+              stacked
+              selected={selectedPath === 'institution'}
+              disabled={isNavigating}
+              onPressIn={() => setSelectedPath('institution')}
+              onPress={() => selectAndNavigate('institution')}
+            />
+          </View>
+        ) : (
+          <View style={[styles.map, mapWidth ? { height: mapHeight } : null]} onLayout={onMapLayout}>
           {mapWidth ? (
             <>
               <Svg width={mapWidth} height={mapHeight} viewBox={`0 0 ${MAP_W} ${MAP_H}`} style={StyleSheet.absoluteFill}>
@@ -236,7 +276,8 @@ export default function RegisterScreen() {
               />
             </>
           ) : null}
-        </View>
+          </View>
+        )}
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already learning with Eduraa? </Text>
@@ -257,6 +298,7 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingHorizontal: 20 },
 
   header: { minHeight: 45, flexDirection: 'row', alignItems: 'center', gap: 9, zIndex: 2 },
+  headerAccessible: { flexWrap: 'wrap' },
   backButton: {
     width: 44,
     height: 44,
@@ -269,7 +311,7 @@ const styles = StyleSheet.create({
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   brandName: { color: '#ffffff', fontFamily: typography.fonts.bodyBold, fontSize: 15 },
-  brandContext: { marginTop: 1, color: MUTED_LIGHT, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  brandContext: { marginTop: 1, color: '#c5ceda', fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   stepPill: {
     marginLeft: 'auto',
     paddingHorizontal: 10,
@@ -282,9 +324,10 @@ const styles = StyleSheet.create({
   intro: { paddingTop: 22, zIndex: 2 },
   eyebrow: { color: ORANGE, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1.7, textTransform: 'uppercase' },
   title: { marginTop: 7, color: '#ffffff', fontFamily: serif, fontSize: 30, lineHeight: 33, letterSpacing: -0.5 },
-  subtitle: { marginTop: 5, color: '#d4dbe6', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
+  subtitle: { marginTop: 5, color: '#d4dbe6', fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
 
   map: { marginTop: 4, position: 'relative', zIndex: 2, width: '100%' },
+  choiceStack: { marginTop: 28, gap: 16, zIndex: 2 },
 
   planet: {
     position: 'absolute',
@@ -297,6 +340,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 20 },
     elevation: 10,
   },
+  stepPillAccessible: { marginLeft: 52, marginRight: 'auto', marginTop: 8 },
+  planetStacked: { position: 'relative', alignItems: 'flex-start', paddingHorizontal: 22, paddingRight: 52 },
+  planetStackedSize: { width: '100%', minHeight: 124, borderRadius: 24 },
+  planetTextStacked: { textAlign: 'left' },
   planetDark: { backgroundColor: NAVY_PLANET, borderWidth: 1, borderColor: 'rgba(125,155,199,0.45)' },
   planetCream: { backgroundColor: CREAM, borderWidth: 1, borderColor: CREAM },
   planetDarkActive: { borderColor: ORANGE, backgroundColor: '#152c4d' },
@@ -308,8 +355,8 @@ const styles = StyleSheet.create({
   planetArrow: { position: 'absolute', right: 12, bottom: 14 },
 
   footer: { marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', paddingBottom: 4, zIndex: 2 },
-  footerText: { color: MUTED_LIGHT, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
-  footerLink: { color: RUST_LIGHT, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  footerText: { color: '#c5ceda', fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
+  footerLink: { color: RUST_LIGHT, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
 
   pressedSoft: { opacity: 0.85 },
 })
