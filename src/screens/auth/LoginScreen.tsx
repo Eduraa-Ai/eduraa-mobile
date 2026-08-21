@@ -40,7 +40,7 @@ export default function LoginScreen() {
   const heroHeight = keyboardVisible ? 152 : compact ? 270 : Math.min(390, Math.max(348, Math.round(height * 0.44)))
 
   useEffect(() => {
-    const timer = setTimeout(() => setMotionState((current) => current === 'intro' ? 'idle' : current), 1500)
+    const timer = setTimeout(() => setMotionState((current) => current === 'intro' ? 'idle' : current), 1480)
     return () => clearTimeout(timer)
   }, [])
 
