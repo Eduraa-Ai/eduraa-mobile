@@ -2,6 +2,7 @@ import React, { ReactNode, useRef } from 'react'
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { colors, gradients, motion, radius, shadows, spacing, typography } from '../../theme'
+import { useReducedMotion } from '../../hooks/useReducedMotion'
 
 interface AnimatedButtonProps {
   label: string
@@ -15,8 +16,13 @@ interface AnimatedButtonProps {
 
 export function AnimatedButton({ label, onPress, icon, loading = false, disabled = false, variant = 'primary', style }: AnimatedButtonProps) {
   const scale = useRef(new Animated.Value(1)).current
+  const reducedMotion = useReducedMotion()
 
   const animateTo = (value: number) => {
+    if (reducedMotion) {
+      scale.setValue(1)
+      return
+    }
     Animated.timing(scale, {
       toValue: value,
       duration: motion.press.duration,

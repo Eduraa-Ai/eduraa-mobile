@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { AccessibilityInfo, AppState, StyleSheet, Text, View } from 'react-native'
+import { AppState, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   cancelAnimation,
   Easing,
@@ -14,8 +14,10 @@ import Animated, {
 import Svg, { Circle, Path } from 'react-native-svg'
 import { AuthLogoMark } from '../ui/AuthLogoMark'
 import { typography } from '../../theme'
+import { useReducedMotion } from '../../hooks/useReducedMotion'
+import { getStaticAuthMotionTargets, routeTarget, type AuthMotionState, type CircuitGroup } from './authMotionModel'
 
-export type AuthMotionState = 'intro' | 'idle' | 'identity' | 'password' | 'submitting' | 'error' | 'offline' | 'success'
+export type { AuthMotionState } from './authMotionModel'
 
 type Props = {
   state: AuthMotionState
@@ -23,7 +25,6 @@ type Props = {
   height?: number
 }
 
-type CircuitGroup = 'center' | 'identity' | 'password'
 type CircuitRoute = { d: string; group: CircuitGroup }
 
 const AnimatedPath = Animated.createAnimatedComponent(Path)
@@ -53,16 +54,6 @@ const NODES = [
   { cx: 273, cy: 103, group: 'password' as const },
 ]
 
-function routeTarget(state: AuthMotionState, group: CircuitGroup) {
-  if (state === 'success') return 1
-  if (state === 'offline') return 0.12
-  if (state === 'error') return group === 'center' ? 0.38 : 0.2
-  if (state === 'submitting') return group === 'center' ? 0.92 : 0.62
-  if (state === 'identity') return group === 'identity' ? 0.78 : group === 'center' ? 0.5 : 0.2
-  if (state === 'password') return group === 'password' ? 0.78 : group === 'center' ? 0.5 : 0.2
-  return group === 'center' ? 0.28 : 0.2
-}
-
 export default function AuthIntelligenceHero({ state, compact = false, height }: Props) {
   const entrance = useSharedValue(0)
   const lockupEntrance = useSharedValue(0)
@@ -72,15 +63,12 @@ export default function AuthIntelligenceHero({ state, compact = false, height }:
   const passwordEnergy = useSharedValue(0.14)
   const seamOffset = useSharedValue(250)
   const nodeBloom = useSharedValue(0.18)
-  const [reducedMotion, setReducedMotion] = useState(false)
+  const reducedMotion = useReducedMotion()
   const [active, setActive] = useState(true)
 
   useEffect(() => {
-    const motionSubscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReducedMotion)
     const appSubscription = AppState.addEventListener('change', (next) => setActive(next === 'active'))
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion)
     return () => {
-      motionSubscription.remove()
       appSubscription.remove()
     }
   }, [])
@@ -96,21 +84,22 @@ export default function AuthIntelligenceHero({ state, compact = false, height }:
     cancelAnimation(nodeBloom)
 
     if (!active || reducedMotion) {
-      entrance.value = 1
-      lockupEntrance.value = 1
-      signalProgress.value = 1
-      centerEnergy.value = state === 'success' ? 0.8 : 0.28
-      identityEnergy.value = routeTarget(state, 'identity')
-      passwordEnergy.value = routeTarget(state, 'password')
-      seamOffset.value = 0
-      nodeBloom.value = state === 'success' ? 0.86 : 0.24
+      const targets = getStaticAuthMotionTargets(state)
+      entrance.value = targets.entrance
+      lockupEntrance.value = targets.lockupEntrance
+      signalProgress.value = targets.signalProgress
+      centerEnergy.value = targets.centerEnergy
+      identityEnergy.value = targets.identityEnergy
+      passwordEnergy.value = targets.passwordEnergy
+      seamOffset.value = targets.seamOffset
+      nodeBloom.value = targets.nodeBloom
       return
     }
 
     const standard = { duration: 240, easing: Easing.inOut(Easing.cubic) }
-    entrance.value = state === 'intro' ? withDelay(120, withTiming(1, { duration: 460, easing: Easing.out(Easing.cubic) })) : 1
+    entrance.value = state === 'intro' ? withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }) : 1
     lockupEntrance.value = state === 'intro'
-      ? withTiming(1, { duration: 440, easing: Easing.out(Easing.cubic) })
+      ? withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) })
       : 1
     centerEnergy.value = withTiming(routeTarget(state, 'center'), standard)
     identityEnergy.value = withTiming(routeTarget(state, 'identity'), standard)
@@ -119,12 +108,12 @@ export default function AuthIntelligenceHero({ state, compact = false, height }:
     if (state === 'intro') {
       signalProgress.value = 0
       seamOffset.value = 250
-      seamOffset.value = withDelay(120, withTiming(-70, { duration: 680, easing: Easing.inOut(Easing.cubic) }))
-      signalProgress.value = withDelay(360, withTiming(1, { duration: 430, easing: Easing.inOut(Easing.cubic) }))
-      centerEnergy.value = withDelay(600, withSequence(withTiming(0.94, { duration: 190 }), withTiming(0.28, { duration: 390 })))
-      identityEnergy.value = withDelay(710, withSequence(withTiming(0.84, { duration: 230 }), withTiming(0.2, { duration: 360 })))
-      passwordEnergy.value = withDelay(820, withSequence(withTiming(0.84, { duration: 230 }), withTiming(0.2, { duration: 340 })))
-      nodeBloom.value = withDelay(900, withSequence(withTiming(1, { duration: 140 }), withTiming(0.24, { duration: 300 })))
+      seamOffset.value = withDelay(80, withTiming(-70, { duration: 600, easing: Easing.inOut(Easing.cubic) }))
+      signalProgress.value = withDelay(220, withTiming(1, { duration: 360, easing: Easing.inOut(Easing.cubic) }))
+      centerEnergy.value = withDelay(480, withSequence(withTiming(0.94, { duration: 170 }), withTiming(0.28, { duration: 320 })))
+      identityEnergy.value = withDelay(570, withSequence(withTiming(0.84, { duration: 210 }), withTiming(0.2, { duration: 300 })))
+      passwordEnergy.value = withDelay(660, withSequence(withTiming(0.84, { duration: 210 }), withTiming(0.2, { duration: 300 })))
+      nodeBloom.value = withDelay(740, withSequence(withTiming(1, { duration: 130 }), withTiming(0.24, { duration: 260 })))
     } else if (state === 'submitting') {
       seamOffset.value = withRepeat(withTiming(-80, { duration: 1200, easing: Easing.inOut(Easing.cubic) }), -1, false)
       centerEnergy.value = withRepeat(withSequence(withTiming(0.95, { duration: 520 }), withTiming(0.58, { duration: 520 })), -1, true)
@@ -168,7 +157,7 @@ export default function AuthIntelligenceHero({ state, compact = false, height }:
 
   const pathProps = { center: centerProps, identity: identityProps, password: passwordProps }
   const nodeProps = { center: nodeCenterProps, identity: nodeIdentityProps, password: nodePasswordProps }
-  const stroke = state === 'error' ? '#ff817b' : state === 'offline' ? '#8b96a8' : state === 'success' ? '#ffbf33' : '#c8b8a5'
+  const stroke = state === 'error' ? '#ff817b' : state === 'offline' ? '#8b96a8' : state === 'success' ? '#ffbf33' : '#bcae9b'
 
   return (
     <View style={[styles.root, compact && styles.compact, height ? { height } : null]}>
@@ -204,7 +193,7 @@ const styles = StyleSheet.create({
   logo: { borderWidth: 0, shadowOpacity: 0, backgroundColor: 'transparent' },
   wordmark: { marginTop: 8, color: '#101828', fontFamily: typography.fonts.heading, fontSize: 23, letterSpacing: 7 },
   wordmarkCompact: { marginTop: 4, fontSize: 17, letterSpacing: 5 },
-  tagline: { marginTop: 3, color: '#c2410c', fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 1.2 },
+  tagline: { marginTop: 3, color: '#c2410c', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.2 },
   canvas: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 255 },
   canvasCompact: { height: 200 },
 })
