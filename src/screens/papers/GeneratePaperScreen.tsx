@@ -48,6 +48,14 @@ import { usePaperGenerationJob } from "./usePaperGenerationJob";
 type Nav = NativeStackNavigationProp<PapersStackParamList, "GeneratePaper">;
 type Stage = 0 | 1 | 2;
 type ChapterSource = "books" | "ai";
+
+// Question types the backend will attach an indexed figure to.
+const PAPER_VISUAL_QUESTION_TYPES = [
+  "mcq",
+  "short_answer",
+  "long_answer",
+  "match_columns",
+];
 type QuestionKey =
   | "mcq"
   | "short_answer"
@@ -735,6 +743,9 @@ export default function GeneratePaperScreen() {
   const [durationInput, setDurationInput] = useState("");
   const [durationTouched, setDurationTouched] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
+  // Figures are pulled from indexed textbook pages, so only the book source can
+  // supply them.
+  const [includeVisuals, setIncludeVisuals] = useState(true);
   const [generationError, setGenerationError] = useState<string | null>(null);
   // Latches once the student picks a source themselves, so the smart default
   // below never overrides a deliberate choice. Reset on subject/exam pivot.
@@ -1031,6 +1042,8 @@ export default function GeneratePaperScreen() {
   const jobView = generationJob.job
     ? describePaperGenerationJob(generationJob.job)
     : null;
+  const visualsSupported = chapterSource === "books";
+  const visualsEnabled = includeVisuals && visualsSupported;
   const isGenerating =
     generateMutation.isPending ||
     generationJob.isStarting ||
@@ -1127,6 +1140,10 @@ export default function GeneratePaperScreen() {
       timer_value: durationResult.minutes,
       timer_unit: "minutes",
       duration_minutes: durationResult.minutes,
+      include_reference_visuals: visualsEnabled,
+      visual_question_types: visualsEnabled
+        ? PAPER_VISUAL_QUESTION_TYPES
+        : undefined,
       only_fill_blanks:
         counts.fill_blank_count > 0 &&
         counts.mcq_count === 0 &&
@@ -1773,6 +1790,46 @@ export default function GeneratePaperScreen() {
               }))}
               onChange={(value) => setDifficulty(value as Difficulty)}
             />
+            <TouchableOpacity
+              accessibilityRole="switch"
+              accessibilityState={{
+                checked: visualsEnabled,
+                disabled: !visualsSupported,
+              }}
+              accessibilityLabel="Use textbook visuals"
+              activeOpacity={0.88}
+              disabled={!visualsSupported}
+              onPress={() => setIncludeVisuals((current) => !current)}
+              style={[
+                styles.visualToggle,
+                visualsEnabled && styles.visualToggleOn,
+                !visualsSupported && styles.visualToggleDisabled,
+              ]}
+            >
+              <View style={styles.visualToggleCopy}>
+                <Text style={styles.visualToggleTitle}>
+                  Use textbook visuals
+                </Text>
+                <Text style={styles.visualToggleBody}>
+                  {visualsSupported
+                    ? "Adds relevant indexed figures only where the image is needed to answer."
+                    : "Available for book chapters. The AI syllabus source has no indexed figures."}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.visualTrack,
+                  visualsEnabled && styles.visualTrackOn,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.visualKnob,
+                    visualsEnabled && styles.visualKnobOn,
+                  ]}
+                />
+              </View>
+            </TouchableOpacity>
           </View>
           <View style={styles.generateSummary}>
             <Text style={styles.generateTitle}>{effectivePaperName}</Text>
@@ -1878,6 +1935,57 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
+  },
+  visualToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    padding: spacing[4],
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+  },
+  visualToggleOn: {
+    borderColor: colors.accentStrong,
+  },
+  visualToggleDisabled: {
+    opacity: 0.55,
+  },
+  visualToggleCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  visualToggleTitle: {
+    fontFamily: fonts.displaySemibold,
+    fontSize: 14,
+    color: colors.text,
+  },
+  visualToggleBody: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textMuted,
+  },
+  visualTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: radius.full,
+    padding: 3,
+    justifyContent: "center",
+    backgroundColor: colors.borderStrong,
+  },
+  visualTrackOn: {
+    backgroundColor: colors.accentStrong,
+  },
+  visualKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: radius.full,
+    backgroundColor: colors.white,
+  },
+  visualKnobOn: {
+    alignSelf: "flex-end",
   },
   jobHeader: {
     flexDirection: "row",
