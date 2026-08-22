@@ -250,7 +250,7 @@ export default function PaperDetailScreen() {
     setIsOpeningResult(false)
     void paperQuery.refetch()
     if (paper && !isTeacherReference) void attemptsQuery.refetch()
-  }, [isFocused, params.paperId])
+  }, [isFocused, isTeacherReference, params.paperId])
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -267,6 +267,7 @@ export default function PaperDetailScreen() {
     canDelete,
     deleteMutation.isPending,
     downloadMutation.isPending,
+    isTeacherReference,
     navigation,
     params.paperId,
     retestMutation.isPending,

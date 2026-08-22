@@ -23,6 +23,7 @@ const models = [
   'src/screens/workspace/approvalsModel.ts',
   'src/screens/workspace/announcementModel.ts',
   'src/screens/workspace/attendanceModel.ts',
+  'src/screens/workspace/doubtWorkspaceModel.ts',
   'src/navigation/paperResultsNavigation.ts',
   'src/utils/mathText.ts',
   'src/utils/mathContent.ts',
@@ -100,6 +101,14 @@ const suites = [
   },
   {
     file: 'scripts/announcement-contract.test.cjs',
+    env: {},
+  },
+  {
+    file: 'scripts/doubt-workspace-model.test.cjs',
+    env: { DOUBT_WORKSPACE_MODEL_PATH: path.join(outDir, 'screens/workspace/doubtWorkspaceModel.js') },
+  },
+  {
+    file: 'scripts/doubt-workspace-contract.test.cjs',
     env: {},
   },
   {

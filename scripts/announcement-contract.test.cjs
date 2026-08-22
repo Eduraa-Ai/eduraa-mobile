@@ -11,7 +11,7 @@ test('registers role-safe announcement navigation for teacher workspace and stud
   const navigation = read('src/navigation/index.tsx')
   const workspace = read('src/screens/workspace/WorkspaceScreen.tsx')
   const home = read('src/screens/home/HomeScreen.tsx')
-  assert.match(catalog, /id: 'announcements'[\s\S]*roles: \['student', 'teacher'\][\s\S]*nativeStatus: 'native'/)
+  assert.match(catalog, /id: 'announcements'[\s\S]*roles: \['student', 'teacher', 'principal'\][\s\S]*nativeStatus: 'native'/)
   assert.match(navigation, /Announcements: 'announcements\/:announcementId\?'/)
   assert.match(workspace, /control\.id === 'announcements'/)
   assert.match(home, /label: "School announcements"/)

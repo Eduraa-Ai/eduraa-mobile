@@ -494,15 +494,35 @@ export default function SchoolPreviousPapersScreen() {
   const sharedQuery = useQuery({
     queryKey: ['school-previous-papers', accountKey, 'shared', role],
     enabled: allowed && Boolean(accountKey),
-    queryFn: async () => teacher
-      ? previousPapersApi.getTeacherSchoolPapers()
-      : previousPapersApi.getStudentSchoolPapers({ page: 1, page_size: 100 }),
+    queryFn: async () => {
+      if (teacher) return previousPapersApi.getTeacherSchoolPapers()
+      const PAGE_SIZE = 100
+      const first = await previousPapersApi.getStudentSchoolPapers({ page: 1, page_size: PAGE_SIZE })
+      const allItems = [...first.items]
+      const totalPages = Math.ceil(first.total / PAGE_SIZE)
+      for (let p = 2; p <= totalPages; p++) {
+        const next = await previousPapersApi.getStudentSchoolPapers({ page: p, page_size: PAGE_SIZE })
+        allItems.push(...next.items)
+      }
+      return { ...first, items: allItems }
+    },
   })
 
   const practiceQuery = useQuery({
     queryKey: ['papers', accountKey, 'school-previous', 'published'],
     enabled: allowed && Boolean(accountKey),
-    queryFn: () => papersApi.list({ status: 'published', limit: 100 }),
+    queryFn: async () => {
+      const LIMIT = 100
+      const first = await papersApi.list({ status: 'published', limit: LIMIT })
+      const allItems = [...first.items]
+      let skip = LIMIT
+      while (skip < first.total) {
+        const next = await papersApi.list({ status: 'published', skip, limit: LIMIT })
+        allItems.push(...next.items)
+        skip += LIMIT
+      }
+      return { ...first, items: allItems }
+    },
     refetchOnWindowFocus: 'always',
   })
 

@@ -196,7 +196,7 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   const availableTabWidth = shellWidth - SHELL_EDGE_PADDING * 2
   // Six labels become unreadable on 320 px devices. Keep the full labels and
   // center the active route in the existing horizontal rail instead.
-  const fitsWithoutScrolling = state.routes.length <= 6
+  const fitsWithoutScrolling = state.routes.length < 6
   const itemWidth = fitsWithoutScrolling
     ? availableTabWidth / Math.max(1, state.routes.length)
     : SCROLLING_ITEM_WIDTH

@@ -597,7 +597,7 @@ function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
       <StudentTabs
         previousPapersEligible={isPreviousPapersEligible(user)}
         previousPapersAccessibilityLabel="School previous question papers"
-        attendanceEligible
+        attendanceEligible={user?.role === 'student'}
       />
     )
   }
