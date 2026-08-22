@@ -67,6 +67,17 @@ export const mobileControls: MobileControl[] = [
     target: { kind: 'tab', tab: 'Papers', screen: 'GeneratePaper' },
   },
   {
+    id: 'generate-custom',
+    label: 'Custom paper',
+    webPath: '/generate-paper/custom',
+    roles: ['teacher'],
+    description: 'Upload a school question paper and answer key, then confirm the extracted question map.',
+    icon: 'document-attach',
+    section: 'core',
+    nativeStatus: 'native',
+    target: { kind: 'tab', tab: 'Papers', screen: 'CustomPaper' },
+  },
+  {
     id: 'exams',
     label: 'Exams',
     webPath: '/exams',

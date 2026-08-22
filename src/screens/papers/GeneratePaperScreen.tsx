@@ -659,10 +659,12 @@ function GenerateStudioHeader({
   stage,
   onBack,
   showsDuration,
+  onCustomPaper,
 }: {
   stage: Stage;
   onBack: () => void;
   showsDuration?: boolean;
+  onCustomPaper?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const stageCopy = [
@@ -713,6 +715,22 @@ function GenerateStudioHeader({
         <Text style={styles.studioKicker}>PAPER STUDIO</Text>
         <Text style={styles.studioTitle}>{stageCopy.title}</Text>
         <Text style={styles.studioBody}>{stageCopy.body}</Text>
+        {onCustomPaper ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Upload a custom school paper"
+            activeOpacity={0.88}
+            onPress={onCustomPaper}
+            style={styles.customPaperButton}
+          >
+            <Ionicons
+              name="document-attach-outline"
+              size={15}
+              color={colors.nav}
+            />
+            <Text style={styles.customPaperButtonText}>Custom paper</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -1242,6 +1260,9 @@ export default function GeneratePaperScreen() {
         stage={stage}
         onBack={() => navigation.goBack()}
         showsDuration={!isTeacher}
+        onCustomPaper={
+          isTeacher ? () => navigation.navigate("CustomPaper") : undefined
+        }
       />
       <Screen contentStyle={styles.screenContentAfterHeader}>
         <View style={styles.progress}>
@@ -1945,6 +1966,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
+  },
+  customPaperButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    marginTop: spacing[3],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.28)",
+  },
+  customPaperButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.nav,
   },
   visualToggleOn: {
     borderColor: colors.accentStrong,
