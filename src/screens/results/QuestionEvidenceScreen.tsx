@@ -750,6 +750,11 @@ export default function QuestionEvidenceScreen() {
                     <Ionicons name="remove-circle-outline" size={18} color={colors.danger} />
                     <Text style={styles.unansweredText}>You did not answer this question.</Text>
                   </View>
+                ) : review.answerEvaluatedFromScan ? (
+                  <View accessible accessibilityLabel="Written answer evaluated from scan" style={styles.answerCompare}>
+                    <Text style={styles.compareTitle}>Your written answer</Text>
+                    <Text style={styles.compareText}>Evaluated from the scan. Open the scan evidence to view the original writing.</Text>
+                  </View>
                 ) : (
                   <View style={[styles.answerCompare, styles.responseBlock]}>
                     <Text style={styles.compareTitle}>Your answer</Text>

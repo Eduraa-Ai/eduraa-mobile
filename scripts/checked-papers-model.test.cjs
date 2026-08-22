@@ -93,9 +93,17 @@ test('score accessibility label includes non-color score, status, and missing me
     'Jul 17, 2026',
   )
   assert.match(label, /72\/100/)
-  assert.match(label, /Strong/)
+  assert.match(label, /Ready for review/)
   assert.match(label, /Question count unavailable/)
   assert.match(label, /Opens the checked paper report/)
+})
+
+test('library exposes only the four teacher-facing states and labels partial scores', () => {
+  assert.equal(model.paperStatusLabel(paper({ status: 'rubric_grading', total_score: null, max_score: null })), 'Checking')
+  assert.equal(model.paperStatusLabel(paper({ status: 'grading_failed' })), 'Needs your input')
+  assert.equal(model.paperStatusLabel(paper({ status: 'pending_question_review', needs_review: true })), 'Needs your input')
+  assert.equal(model.paperStatusLabel(paper({ release_status: 'published', results_published: true })), 'Published')
+  assert.equal(model.scoreLabel(paper({ status: 'pending_question_review', needs_review: true, total_score: 7 })), 'Provisional 7/100')
 })
 
 test('student review notifications count only explicitly unread teacher responses', () => {

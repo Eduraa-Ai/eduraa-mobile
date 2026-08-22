@@ -12,9 +12,10 @@ import * as DocumentPicker from 'expo-document-picker'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { papersApi } from '../../api/papers'
+import { SCAN_UPLOAD_OPTIONS_QUERY_KEY } from '../../api/scanUpload'
 import {
   paperManifestsApi,
   type CustomPaperFile,
@@ -86,6 +87,7 @@ function FilePicker({
 
 export default function CustomPaperScreen() {
   const navigation = useNavigation<Nav>()
+  const queryClient = useQueryClient()
   const insets = useSafeAreaInsets()
 
   const [titleLine1, setTitleLine1] = useState('')
@@ -215,6 +217,7 @@ export default function CustomPaperScreen() {
         createIdempotencyKey(),
       )
       setManifest(confirmed)
+      await queryClient.invalidateQueries({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY })
       Alert.alert(
         'Paper ready',
         'The question map is confirmed. You can now publish it or attach student work.',

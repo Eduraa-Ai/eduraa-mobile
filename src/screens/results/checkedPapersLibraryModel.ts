@@ -1,5 +1,6 @@
 import type { CheckedPaper } from '../../types'
 import { hasUnreadTeacherReviewResponse } from './checkedPaperDetailModel'
+import { CHECKED_PAPER_EXPERIENCE_LABELS, checkedPaperExperienceStatus } from '../workspace/checkedPaperPipelineModel'
 
 export type CheckedPaperTab = 'all' | 'needs_attention' | 'strong'
 
@@ -90,7 +91,10 @@ export function scorePercent(paper: CheckedPaper) {
 }
 
 export function scoreLabel(paper: CheckedPaper) {
-  if (paper.total_score != null && paper.max_score != null) return `${paper.total_score}/${paper.max_score}`
+  if (paper.total_score != null && paper.max_score != null) {
+    const provisional = Boolean(paper.needs_review || paper.processing_blockers?.length || paper.status === 'pending_question_review')
+    return `${provisional ? 'Provisional ' : ''}${paper.total_score}/${paper.max_score}`
+  }
   return 'Score pending'
 }
 
@@ -134,16 +138,7 @@ export function isStrong(paper: CheckedPaper) {
 }
 
 export function paperStatusLabel(paper: CheckedPaper) {
-  const status = normalize(paper.status).replace(/[\s-]+/g, '_')
-  const questionReviewCount = getQuestionReviewCount(paper)
-  if (questionReviewCount > 0) return `${questionReviewCount} question review${questionReviewCount === 1 ? '' : 's'}`
-  if (paper.manual_review_requested) return 'Manual review requested'
-  if (paper.needs_review || paper.status === 'pending_manual_review') return 'Needs review'
-  if (isBlockedStatus(status)) return 'Checking failed'
-  if (checkingStatuses.has(status)) return 'Checking in progress'
-  if (isStrong(paper)) return 'Strong'
-  if (scorePercent(paper) != null) return 'Needs attention'
-  return 'Score pending'
+  return CHECKED_PAPER_EXPERIENCE_LABELS[checkedPaperExperienceStatus(paper)]
 }
 
 export function paperInsight(paper: CheckedPaper) {
@@ -156,7 +151,7 @@ export function paperInsight(paper: CheckedPaper) {
   }
   if (paper.manual_review_requested) return 'Awaiting a manual review.'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'The reviewer needs to look at this paper.'
-  if (isBlockedStatus(status)) return 'Checking did not finish. Open this paper for a safe recovery path.'
+  if (isBlockedStatus(status)) return 'Open the paper to review the specific item that needs you.'
   if (checkingStatuses.has(status)) return 'Eduraa is still checking this result.'
   if (percent == null) return 'Score will appear after checking completes.'
   if (percent >= STRONG_PERCENT) return 'Strong performance with a clear next step.'

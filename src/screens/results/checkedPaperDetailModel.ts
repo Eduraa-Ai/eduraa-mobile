@@ -241,7 +241,7 @@ export function isCheckedPaperChecking(paper: CheckedPaper) {
 
 export function isCheckedPaperCheckFailed(paper: CheckedPaper) {
   const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
-  return isBlockedStatus(status)
+  return status.includes('failed') && !(paper.grading_results?.length)
 }
 
 export function buildCheckingEstimate(createdAt?: string | null, now = Date.now()) {
@@ -267,8 +267,16 @@ export function questionStatus(item: GradingResultItem): CheckedPaperQuestionSta
   if (score == null || max == null || max <= 0) return 'pending' as const
   if (score >= max) return 'correct' as const
   const response = item.response ?? item.student_answer ?? item.selected_answer
-  if (!hasMeaningfulAnswer(response)) return 'missed' as const
+  if (!hasMeaningfulAnswer(response) && !hasEvaluatedScanEvidence(item)) return 'missed' as const
   return 'wrong' as const
+}
+
+function hasEvaluatedScanEvidence(item: GradingResultItem) {
+  return Boolean(
+    normalizedToken(item.policy_status) === 'evaluated'
+    && ((Array.isArray(item.attempt_ids) && item.attempt_ids.length > 0)
+      || (Array.isArray(item.evidence_citations) && item.evidence_citations.length > 0)),
+  )
 }
 
 function parseOptionSource(value: unknown): unknown {
@@ -447,6 +455,8 @@ export function buildDetailedExplanation(item: GradingResultItem): DetailedExpla
 
 export function buildQuestionReview(item: GradingResultItem) {
   const responseValue = item.response ?? item.student_answer ?? item.selected_answer
+  const answerAvailable = hasMeaningfulAnswer(responseValue)
+  const answerEvaluatedFromScan = !answerAvailable && hasEvaluatedScanEvidence(item)
   const nestedQuestion = recordValue(item, ['question', 'question_data', 'question_details'])
   const questionText = answerDisplay(recordValue(item, ['question_text', 'text', 'prompt']))
     || answerDisplay(recordValue(nestedQuestion, ['question_text', 'text', 'prompt']))
@@ -461,7 +471,9 @@ export function buildQuestionReview(item: GradingResultItem) {
     optionBased,
     options,
     optionContext,
-    unanswered: !hasMeaningfulAnswer(responseValue),
+    answerAvailable,
+    answerEvaluatedFromScan,
+    unanswered: !answerAvailable && !answerEvaluatedFromScan,
     studentAnswer: answerDisplay(responseValue),
     expectedAnswer: answerDisplay(item.expected_answer),
     detailedExplanation: buildDetailedExplanation(item),
@@ -485,6 +497,9 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
     return sum + Math.max(0, (item.max_score ?? 0) - (item.score ?? 0))
   }, 0)
 
+  const published = Boolean(paper.results_published || paper.release_status === 'published')
+  const hasUnresolvedBlocker = Boolean(paper.processing_blockers?.some((blocker) => !blocker.resolved_by_teacher))
+  const provisional = !published && Boolean(paper.needs_review || hasUnresolvedBlocker || paper.status === 'pending_question_review')
   const headline = percent == null
     ? 'Your diagnosis will appear when checking finishes.'
     : percent >= 85
@@ -507,7 +522,7 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
       : firstRepair?.recommendation || firstRepair?.feedback || paper.grading_feedback || 'Review each question and carry the strongest method into your next attempt.',
   )
 
-  return { questions, totalScore, maxScore, percent, correct, wrong, missed, pending, firstRepair, recoverableMarks, repairCount, headline, diagnosisTitle, diagnosisBody }
+  return { questions, totalScore, maxScore, percent, correct, wrong, missed, pending, firstRepair, recoverableMarks, repairCount, headline, diagnosisTitle, diagnosisBody, provisional }
 }
 
 export function pendingQuestionReviewItems(paper: CheckedPaper) {
