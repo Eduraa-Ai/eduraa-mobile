@@ -26,6 +26,7 @@ import SchoolApprovalStatusScreen from '../screens/auth/SchoolApprovalStatusScre
 import HomeScreen from '../screens/home/HomeScreen'
 import PapersScreen from '../screens/papers/PapersScreen'
 import GeneratePaperScreen from '../screens/papers/GeneratePaperScreen'
+import CustomPaperScreen from '../screens/papers/CustomPaperScreen'
 import PaperDetailScreen from '../screens/papers/PaperDetailScreen'
 import AttemptPaperScreen from '../screens/papers/AttemptPaperScreen'
 import QuizScreen from '../screens/papers/QuizScreen'
@@ -45,6 +46,7 @@ import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
 import AttendanceScreen from '../screens/workspace/AttendanceScreen'
 import ScanUploadScreen from '../screens/workspace/ScanUploadScreen'
+import CheckedPaperStatusScreen from '../screens/workspace/CheckedPaperStatusScreen'
 import ExamsScreen from '../screens/workspace/ExamsScreen'
 import AnnouncementsScreen from '../screens/workspace/AnnouncementsScreen'
 import DoubtsScreen from '../screens/workspace/DoubtsScreen'
@@ -70,6 +72,7 @@ export type AuthStackParamList = {
 export type PapersStackParamList = {
   PapersList: undefined
   GeneratePaper: undefined
+  CustomPaper: undefined
   PaperDetail: {
     paperId: string
     generationNotice?: string
@@ -123,11 +126,13 @@ export type StaffWorkspaceStackParamList = {
   Approvals: undefined;
   Attendance: undefined;
   ScanUpload: undefined;
+  CheckedPaperStatus: { checkedPaperId: string };
   Exams: undefined;
   Announcements: { announcementId?: string } | undefined;
   Doubts: { doubtId?: string } | undefined;
   StaffAIStudio: undefined;
   StaffGeneratePaper: undefined;
+  StaffCustomPaper: undefined;
   StaffPapers: undefined;
   StaffResults: undefined;
   ResultDetail: { submissionId?: string; checkedPaperId?: string };
@@ -256,6 +261,11 @@ function PapersNavigator() {
         name="GeneratePaper"
         component={GeneratePaperScreen}
         options={{ title: "Generate paper" }}
+      />
+      <PapersStack.Screen
+        name="CustomPaper"
+        component={CustomPaperScreen}
+        options={{ title: "Custom paper" }}
       />
       <PapersStack.Screen
         name="PaperDetail"
@@ -430,6 +440,11 @@ function StaffWorkspaceNavigator() {
         options={{ title: "Scan upload" }}
       />
       <StaffWorkspaceStack.Screen
+        name="CheckedPaperStatus"
+        component={CheckedPaperStatusScreen}
+        options={{ title: "Scan status" }}
+      />
+      <StaffWorkspaceStack.Screen
         name="Exams"
         component={ExamsScreen}
         options={{ title: "Exams" }}
@@ -453,6 +468,11 @@ function StaffWorkspaceNavigator() {
         name="StaffGeneratePaper"
         component={GeneratePaperScreen}
         options={{ title: "Generate paper" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="StaffCustomPaper"
+        component={CustomPaperScreen}
+        options={{ title: "Custom paper" }}
       />
       <StaffWorkspaceStack.Screen
         name="StaffPapers"
