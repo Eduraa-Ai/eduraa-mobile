@@ -240,6 +240,30 @@ export async function warmTopicLessons(
   }
 }
 
+/**
+ * Warms the single lesson a learner is most likely to open, from a screen that
+ * does not yet know which topic that is.
+ *
+ * Home only knows a focus chapter, not a topic id, so this resolves the
+ * priority action first (a cheap non-LLM call, usually already cached) and
+ * then warms that one lesson. Running this from Home buys the whole time the
+ * learner spends reading their plan before tapping "Start learning".
+ */
+export async function warmPriorityLesson(queryClient: QueryClient) {
+  try {
+    const actions = await queryClient.fetchQuery({
+      queryKey: ['agentic-quick-actions'],
+      queryFn: agenticLearningApi.getQuickActions,
+      staleTime: 30 * 60 * 1000,
+    })
+    const topicId = actions.find((action) => action.available && action.target_topic_id)?.target_topic_id
+    if (!topicId) return
+    await warmTopicLessons(queryClient, [topicId], 1)
+  } catch {
+    // Best effort. The hub and subject screens warm again on arrival.
+  }
+}
+
 export async function prefetchAgenticLearning(
   queryClient: QueryClient,
   checkedPaperId?: string,
