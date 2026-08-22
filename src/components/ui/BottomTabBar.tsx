@@ -22,6 +22,7 @@ const iconByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
   Papers: 'document-text-outline',
   Results: 'bar-chart-outline',
   PreviousPapers: 'documents-outline',
+  StaffPreviousPapers: 'documents-outline',
   CheatSheets: 'reader-outline',
   ScanUpload: 'scan-outline',
   Attendance: 'today-outline',
@@ -46,7 +47,7 @@ function RouteIcon({
   routeName?: string
 }) {
   const icon = iconByRoute[routeName ?? ''] ?? 'ellipse-outline'
-  if (routeName !== 'PreviousPapers') {
+  if (routeName !== 'PreviousPapers' && routeName !== 'StaffPreviousPapers') {
     return <Ionicons name={icon} size={20} color={color} />
   }
 
@@ -60,7 +61,7 @@ function RouteIcon({
   )
 }
 
-const fullScreenNestedRoutes = new Set(['AttemptPaper', 'Quiz', 'AIStudio', 'StaffAIStudio'])
+const fullScreenNestedRoutes = new Set(['AttemptPaper', 'Quiz', 'AIStudio', 'StaffAIStudio', 'Announcements', 'Approvals', 'Doubts'])
 
 function isTabBarStyleHidden(tabBarStyle: unknown) {
   if (!tabBarStyle) return false
@@ -193,7 +194,9 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   const shellWidth = Math.min(MAX_SHELL_WIDTH, Math.max(MIN_SHELL_WIDTH, windowWidth - SHELL_INSET * 2))
   const availableTabWidth = shellWidth - SHELL_EDGE_PADDING * 2
-  const fitsWithoutScrolling = state.routes.length <= 6
+  // Six labels become unreadable on 320 px devices. Keep the full labels and
+  // center the active route in the existing horizontal rail instead.
+  const fitsWithoutScrolling = state.routes.length < 6
   const itemWidth = fitsWithoutScrolling
     ? availableTabWidth / Math.max(1, state.routes.length)
     : SCROLLING_ITEM_WIDTH
@@ -452,6 +455,18 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
             )
           })}
         </ScrollView>
+        {!fitsWithoutScrolling ? (
+          <>
+            <View pointerEvents="none" style={[styles.overflowCue, styles.overflowCueLeft]} accessibilityElementsHidden>
+              <LinearGradient colors={['rgba(255,250,242,0.98)', 'rgba(255,250,242,0)']} style={StyleSheet.absoluteFill} />
+              <Ionicons name="chevron-back" size={16} color={colors.accent} />
+            </View>
+            <View pointerEvents="none" style={styles.overflowCue} accessibilityElementsHidden>
+              <LinearGradient colors={['rgba(255,250,242,0)', 'rgba(255,250,242,0.98)']} style={StyleSheet.absoluteFill} />
+              <Ionicons name="chevron-forward" size={16} color={colors.accent} />
+            </View>
+          </>
+        ) : null}
       </View>
     </View>
   )
@@ -513,6 +528,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     paddingHorizontal: SHELL_EDGE_PADDING,
+  },
+  overflowCue: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 28,
+    height: SHELL_HEIGHT,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingRight: 3,
+    zIndex: 8,
+  },
+  overflowCueLeft: {
+    left: 0,
+    right: undefined,
+    alignItems: 'flex-start',
+    paddingLeft: 3,
+    paddingRight: 0,
   },
   item: {
     position: 'relative',

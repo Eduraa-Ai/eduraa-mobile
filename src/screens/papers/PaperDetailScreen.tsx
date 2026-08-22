@@ -146,10 +146,12 @@ export default function PaperDetailScreen() {
   });
   const paper = paperQuery.data;
 
+  const isTeacherReference = params.presentation === 'teacher_reference'
+
   const attemptsQuery = useQuery({
     queryKey: ["paper-attempts-detail", params.paperId],
     queryFn: () => papersApi.listAttempts(params.paperId),
-    enabled: !!paper,
+    enabled: Boolean(paper && !isTeacherReference),
     retry: false,
   });
   const attempts = attemptsQuery.data?.items ?? [];
@@ -167,24 +169,18 @@ export default function PaperDetailScreen() {
   );
 
   const ownedPapersQuery = useQuery({
-    queryKey: ["papers", "mine", user?.id],
-    queryFn: () => papersApi.list({ skip: 0, limit: 100, scope: "mine" }),
-    enabled: Boolean(paper && user?.role === "student"),
-  });
-  const canDelete =
-    user?.role === "b2c_student" ||
-    Boolean(
-      ownedPapersQuery.data?.items.some((item) => item.id === params.paperId),
-    );
-  // Teachers author papers for a class rather than sitting them, so the whole
-  // attempt/quiz/retest set belongs to learners only.
+    queryKey: ['papers', 'mine', user?.id],
+    queryFn: () => papersApi.list({ skip: 0, limit: 100, scope: 'mine' }),
+    enabled: Boolean(paper && user?.role === 'student'),
+  })
+  const canDelete = !isTeacherReference && (
+    user?.role === 'b2c_student'
+    || Boolean(ownedPapersQuery.data?.items.some((item) => item.id === params.paperId))
+    || Boolean(paper?.created_by && paper.created_by === user?.id)
+  )
   const isTeacher = user?.role === "teacher";
   const isPublished = paper?.status === "published";
-  // The detail response carries no `created_by`, but a teacher's paper list is
-  // already scoped to papers they own and the backend rejects publishing
-  // anyone else's, so ownership does not need re-checking here.
   const canPublish = isTeacher && Boolean(paper) && !isPublished;
-  // The backend accepts a rename from whoever created the paper.
   const canRename = isTeacher || canDelete;
 
   const downloadMutation = useMutation({
@@ -292,25 +288,21 @@ export default function PaperDetailScreen() {
   });
 
   useEffect(() => {
-    if (!isFocused) return;
-    resultOpeningRef.current = false;
-    setIsOpeningResult(false);
-    void paperQuery.refetch();
-    if (paper) void attemptsQuery.refetch();
-  }, [isFocused, params.paperId]);
+    if (!isFocused) return
+    resultOpeningRef.current = false
+    setIsOpeningResult(false)
+    void paperQuery.refetch()
+    if (paper && !isTeacherReference) void attemptsQuery.refetch()
+  }, [isFocused, isTeacherReference, params.paperId])
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <HeaderAction
-          label="Paper actions"
-          icon="ellipsis-horizontal"
-          busy={
-            downloadMutation.isPending ||
-            retestMutation.isPending ||
-            deleteMutation.isPending
-          }
-          onPress={() => setActionMenuOpen(true)}
+          label={isTeacherReference ? 'Download paper PDF' : 'Paper actions'}
+          icon={isTeacherReference ? 'download-outline' : 'ellipsis-horizontal'}
+          busy={downloadMutation.isPending || retestMutation.isPending || deleteMutation.isPending}
+          onPress={isTeacherReference ? () => downloadMutation.mutate() : () => setActionMenuOpen(true)}
         />
       ),
     });
@@ -318,6 +310,7 @@ export default function PaperDetailScreen() {
     canDelete,
     deleteMutation.isPending,
     downloadMutation.isPending,
+    isTeacherReference,
     navigation,
     params.paperId,
     retestMutation.isPending,
@@ -469,7 +462,26 @@ export default function PaperDetailScreen() {
         ) : null}
 
         <View style={styles.actions}>
-          {canPublish ? (
+          {isTeacherReference ? (
+            <TouchableOpacity
+              style={[styles.downloadBtn, downloadMutation.isPending && styles.primaryBtnDisabled]}
+              onPress={() => downloadMutation.mutate()}
+              activeOpacity={0.82}
+              disabled={downloadMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Download teacher reference PDF"
+            >
+              {downloadMutation.isPending ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Ionicons name="download-outline" size={24} color={colors.accent} />
+              )}
+              <View style={styles.downloadCopy}>
+                <Text style={styles.downloadTitle}>Download teacher reference PDF</Text>
+                <Text style={styles.downloadMeta}>Save the question paper without answers.</Text>
+              </View>
+            </TouchableOpacity>
+          ) : canPublish ? (
             <TouchableOpacity
               style={[
                 styles.primaryBtn,

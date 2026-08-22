@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -325,11 +325,11 @@ export default function RegisterSchoolScreen() {
           email: principalForm.email.trim().toLowerCase(),
         })
       }
-      Alert.alert(
-        'Account created',
-        'Thank you for creating the account. You will be able to access your account once it has been approved by your assigned supervisor.',
-        [{ text: 'Back to login', onPress: () => navigation.navigate('Login') }],
-      )
+      navigation.replace('SchoolApprovalStatus', {
+        identifier: activeForm.email.trim().toLowerCase(),
+        role,
+        displayName: `${activeForm.first_name.trim()} ${activeForm.last_name.trim()}`.trim(),
+      })
     } catch (err) {
       setFormError(getErrorMessage(err, 'Please check the details and try again.'))
     } finally {

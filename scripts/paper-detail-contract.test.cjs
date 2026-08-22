@@ -13,11 +13,19 @@ const resultsNavigationSource = fs.readFileSync(path.join(root, 'src/navigation/
 
 test('paper detail keeps retest, download, and owned-paper delete in the top-right action area', () => {
   assert.match(detailSource, /headerRight/)
-  assert.match(detailSource, /label="Paper actions"/)
+  assert.match(detailSource, /label=\{isTeacherReference \? 'Download paper PDF' : 'Paper actions'\}/)
   assert.match(detailSource, /accessibilityLabel="Start a fresh retest"/)
   assert.match(detailSource, /accessibilityLabel="Download paper PDF"/)
   assert.match(detailSource, /accessibilityLabel="Delete paper"/)
   assert.match(detailSource, /canDelete \?/)
+})
+
+test('teacher references do not request attempts or expose learner paper actions', () => {
+  assert.match(detailSource, /params\.presentation === 'teacher_reference'/)
+  assert.match(detailSource, /enabled: Boolean\(paper && !isTeacherReference\)/)
+  assert.match(detailSource, /if \(paper && !isTeacherReference\) void attemptsQuery\.refetch\(\)/)
+  assert.match(detailSource, /Download teacher reference PDF/)
+  assert.match(detailSource, /const canDelete = !isTeacherReference/)
 })
 
 test('delete requires the Eduraa confirmation sheet and calls the production paper route', () => {

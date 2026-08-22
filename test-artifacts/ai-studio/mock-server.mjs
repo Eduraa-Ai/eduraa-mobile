@@ -1,6 +1,6 @@
 import http from 'node:http'
 
-const PORT = 8000
+const PORT = Number(process.env.MOCK_PORT || 8000)
 const SEED = 'studio-row-20260718'
 const PAPER_SEED = 'paper-studio-row-20260718'
 const PREVIOUS_PAPERS_SEED = 'pr6-pyq-20260725'
@@ -66,7 +66,90 @@ let paperDetailMode = 'checking'
 let paperDetailDeleted = false
 let questionVisualMode = 'ready'
 let examWorkspaceMode = 'ready'
+let syntheticRole = 'b2c_student'
+let schoolPreviousPapersMode = 'ready'
+let attendanceMode = 'ready'
+let attendanceRevision = 7
+let studentAttendanceCorrection = null
+let leaderAttendanceCorrectionStatus = 'pending'
+let attendanceReopened = false
+let announcementsMode = 'ready'
+const announcementClasses = [
+    { id: 'b1000000-0000-4000-8000-000000000001', standard: '10', division: 'A', student_count: 28 },
+    { id: 'b1000000-0000-4000-8000-000000000002', standard: '10', division: 'B', student_count: 27 },
+]
+let announcements = [
+    {
+        id: 'b2000000-0000-4000-8000-000000000001', teacher_id: 'b3000000-0000-4000-8000-000000000001', teacher_name: 'Meera Subramaniam',
+        announcement_type: 'announcement', target_scope: 'class', class_section_id: announcementClasses[0].id,
+        class_label: 'Std 10 - A', title: 'Library hours during project week',
+        body: 'The library will remain open until 5:30 PM from Wednesday to Friday. Bring your school ID and review the project research guide at https://school.example.test/library-guide before arriving.\n\nStudents using the media room should check in with the librarian first.',
+        recipient_count: 28,
+        attachments: [{ id: 'b4000000-0000-4000-8000-000000000001', file_name: 'Project-week-library-guide.pdf', content_type: 'application/pdf', file_size: 184320, url: '/api/v1/communication/attachments/b4000000-0000-4000-8000-000000000001' }],
+        publish_state: 'published', published_at: '2026-08-19T16:40:00.000Z', archived_at: null,
+        updated_at: '2026-08-19T16:40:00.000Z', created_at: '2026-08-19T16:30:00.000Z', is_read: false,
+    },
+    {
+        id: 'b2000000-0000-4000-8000-000000000002', teacher_id: 'b3000000-0000-4000-8000-000000000001', teacher_name: 'Meera Subramaniam',
+        announcement_type: 'announcement', target_scope: 'all_classes', class_section_id: null,
+        class_label: null, title: 'Friday assembly location', body: 'This Friday’s assembly will be held in the indoor court because of the weather forecast.',
+        recipient_count: 55, attachments: [], publish_state: 'published', published_at: '2026-08-18T14:00:00.000Z', archived_at: null,
+        updated_at: '2026-08-18T14:00:00.000Z', created_at: '2026-08-18T13:50:00.000Z', is_read: true,
+    },
+    {
+        id: 'b2000000-0000-4000-8000-000000000003', teacher_id: 'b3000000-0000-4000-8000-000000000001', teacher_name: 'Meera Subramaniam',
+        announcement_type: 'home_work', target_scope: 'class', class_section_id: announcementClasses[0].id,
+        class_label: 'Std 10 - A', title: 'Science observation journal', body: 'Complete the observation table before Monday.',
+        recipient_count: 0, attachments: [], publish_state: 'draft', published_at: null, archived_at: null,
+        updated_at: '2026-08-19T17:05:00.000Z', created_at: '2026-08-19T17:05:00.000Z', is_read: null,
+    },
+]
+const announcementSeed = JSON.stringify(announcements)
 const examWorkspaceAudit = []
+
+const attendanceRecords = Array.from({ length: 12 }, (_, index) => ({
+    id: `a1000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    student_id: `a2000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    student_name: ['Aarav Jain', 'Diya Menon', 'Kabir Shah', 'Meera Iyer', 'Reyansh Gupta', 'Saanvi Rao', 'Vihaan Patel', 'Anaya Bose', 'Arjun Nair', 'Ishita Singh', 'Rohan Das', 'Zoya Khan'][index],
+    student_code: `ST-${String(index + 1).padStart(3, '0')}`,
+    standard: '10',
+    division: 'A',
+    status: index === 3 ? 'absent' : index === 6 ? 'late' : index === 9 ? 'half_day' : index === 11 ? 'excused' : 'present',
+    note: null,
+    is_override: false,
+    updated_by_user_id: 'a3000000-0000-4000-8000-000000000001',
+    updated_by_role: 'teacher',
+    updated_at: '2026-08-19T15:30:00.000Z',
+}))
+
+function attendanceSummary() {
+    return {
+        total_students: attendanceRecords.length,
+        present_count: attendanceRecords.filter((row) => row.status === 'present').length,
+        absent_count: attendanceRecords.filter((row) => row.status === 'absent').length,
+        late_count: attendanceRecords.filter((row) => row.status === 'late').length,
+        half_day_count: attendanceRecords.filter((row) => row.status === 'half_day').length,
+        excused_count: attendanceRecords.filter((row) => row.status === 'excused').length,
+        scheduled_count: attendanceRecords.filter((row) => row.status !== 'excused').length,
+    }
+}
+
+function attendanceSheet(status = 'draft') {
+    return {
+        id: 'a4000000-0000-4000-8000-000000000001',
+        school_id: 'a5000000-0000-4000-8000-000000000001',
+        branch_id: 'a6000000-0000-4000-8000-000000000001',
+        class_section_id: 'a7000000-0000-4000-8000-000000000001',
+        attendance_date: '2026-08-19',
+        standard: '10', division: 'A', status, revision: attendanceRevision,
+        marked_by_teacher_id: 'a3000000-0000-4000-8000-000000000001',
+        submitted_at: status === 'submitted' ? '2026-08-19T16:00:00.000Z' : null,
+        reopened_at: null, reopened_reason: null, locked_at: null,
+        class_note: null,
+        records: attendanceMode === 'empty' ? [] : attendanceRecords,
+        summary: attendanceMode === 'empty' ? { total_students: 0, present_count: 0, absent_count: 0, late_count: 0, half_day_count: 0, excused_count: 0, scheduled_count: 0 } : attendanceSummary(),
+    }
+}
 
 const teacherExams = [
     {
@@ -656,7 +739,7 @@ const server = http.createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', origin)
     response.setHeader('Access-Control-Allow-Credentials', 'true')
     response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept')
-    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
     response.setHeader('Access-Control-Expose-Headers', 'Content-Disposition')
 
     if (request.method === 'OPTIONS') {
@@ -667,6 +750,21 @@ const server = http.createServer(async (request, response) => {
 
     const url = new URL(request.url, `http://${request.headers.host}`)
     const path = url.pathname
+
+    if (request.method === 'POST' && path === '/__test__/attendance-mode') {
+        const payload = await readBody(request)
+        attendanceMode = String(payload.mode || 'ready')
+        json(response, 200, { mode: attendanceMode, revision: attendanceRevision })
+        return
+    }
+
+    if (request.method === 'POST' && path === '/__test__/announcements-mode') {
+        const payload = await readBody(request)
+        announcementsMode = String(payload.mode || 'ready')
+        if (payload.reset === true) announcements = JSON.parse(announcementSeed)
+        json(response, 200, { mode: announcementsMode })
+        return
+    }
 
     if (request.method === 'POST' && path === '/__test__/previous-papers-mode') {
         const payload = await readBody(request)
@@ -710,8 +808,15 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'POST' && path === '/api/v1/auth/login') {
         const payload = await readBody(request)
+        const attendanceTeacherJourney = String(payload.identifier || payload.email || '').includes('attendance-teacher')
+        const attendanceStudentJourney = String(payload.identifier || payload.email || '').includes('attendance-student')
+        const attendanceLeaderJourney = String(payload.identifier || payload.email || '').includes('attendance-leader')
         const b2bExamJourney = String(payload.identifier || payload.email || '').includes('exam-b2b')
+        const schoolStudentJourney = String(payload.identifier || payload.email || '').includes('school-student')
+        const schoolTeacherJourney = String(payload.identifier || payload.email || '').includes('school-teacher')
         const previousPapersJourney = String(payload.identifier || payload.email || '').includes('pr6')
+        const schoolRole = attendanceLeaderJourney ? 'principal' : (attendanceTeacherJourney || schoolTeacherJourney ? 'teacher' : (attendanceStudentJourney || b2bExamJourney || schoolStudentJourney ? 'student' : null))
+        syntheticRole = schoolRole || 'b2c_student'
         json(response, 200, {
             access_token: `synthetic-${SEED}`,
             token_type: 'bearer',
@@ -721,16 +826,307 @@ const server = http.createServer(async (request, response) => {
                     : '00000000-0000-4000-8000-000000000018',
                 display_name: 'Aarav Test',
                 identifier: `aarav.${SEED}@example.test`,
-                role: b2bExamJourney ? 'student' : 'b2c_student',
+                role: schoolRole || 'b2c_student',
                 profile_completed: true,
                 is_email_verified: true,
                 b2c_education_level: previousPapersJourney ? 'school' : 'competitive_exams',
                 b2c_target_exam: previousPapersJourney ? null : 'JEE Main + Advanced',
                 b2c_subjects: ['Physics', 'Mathematics', 'Chemistry'],
-                standard: b2bExamJourney ? '12' : undefined,
-                division: b2bExamJourney ? 'A' : undefined,
+                standard: schoolRole === 'student' ? '10' : undefined,
+                division: schoolRole === 'student' ? 'A' : undefined,
             },
         })
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/communication/teacher/classes') {
+        if (syntheticRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
+        json(response, 200, announcementClasses)
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/communication/announcements') {
+        if (announcementsMode === 'error') return json(response, 503, { detail: 'Announcements are temporarily unavailable.' })
+        if (announcementsMode === 'loading') await new Promise(resolve => setTimeout(resolve, 2200))
+        const visible = announcementsMode === 'empty'
+            ? []
+            : syntheticRole === 'teacher'
+                ? announcements
+                : announcements.filter(item => item.publish_state === 'published' && item.archived_at == null)
+        json(response, 200, { items: visible })
+        return
+    }
+
+    if (request.method === 'POST' && path === '/api/v1/communication/announcements') {
+        if (syntheticRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
+        const payload = await readBody(request)
+        const now = new Date().toISOString()
+        const section = announcementClasses.find(item => item.id === payload.class_section_id)
+        const item = {
+            id: `b2000000-0000-4000-8000-${String(announcements.length + 10).padStart(12, '0')}`,
+            teacher_id: 'b3000000-0000-4000-8000-000000000001', teacher_name: 'Aarav Test',
+            announcement_type: payload.announcement_type, target_scope: payload.target_scope,
+            class_section_id: payload.class_section_id, class_label: section ? `Std ${section.standard} - ${section.division}` : null,
+            title: payload.title, body: payload.body, recipient_count: 0, attachments: [],
+            publish_state: payload.publish_state || 'draft', published_at: payload.publish_state === 'published' ? now : null,
+            archived_at: null, updated_at: now, created_at: now, is_read: null,
+        }
+        announcements = [item, ...announcements]
+        json(response, 200, item)
+        return
+    }
+
+    const announcementMatch = path.match(/^\/api\/v1\/communication\/announcements\/([^/]+)$/)
+    if (announcementMatch && request.method === 'GET') {
+        const item = announcements.find(entry => entry.id === announcementMatch[1])
+        const visible = item && (syntheticRole === 'teacher' || (item.publish_state === 'published' && item.archived_at == null))
+        if (!visible || announcementsMode === 'deleted') return json(response, 404, { detail: 'Announcement not found.' })
+        if (announcementsMode === 'forbidden') return json(response, 403, { detail: 'This announcement is not for your enrollment.' })
+        json(response, 200, item)
+        return
+    }
+
+    if (announcementMatch && request.method === 'PUT') {
+        if (syntheticRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
+        const index = announcements.findIndex(entry => entry.id === announcementMatch[1])
+        if (index < 0) return json(response, 404, { detail: 'Announcement not found.' })
+        const payload = await readBody(request)
+        const section = announcementClasses.find(item => item.id === payload.class_section_id)
+        announcements[index] = { ...announcements[index], ...payload, attachments: announcements[index].attachments, class_label: section ? `Std ${section.standard} - ${section.division}` : null, updated_at: new Date().toISOString() }
+        json(response, 200, announcements[index])
+        return
+    }
+
+    const announcementActionMatch = path.match(/^\/api\/v1\/communication\/announcements\/([^/]+)\/(publish|archive|read)$/)
+    if (announcementActionMatch && request.method === 'POST') {
+        const index = announcements.findIndex(entry => entry.id === announcementActionMatch[1])
+        if (index < 0) return json(response, 404, { detail: 'Announcement not found.' })
+        const action = announcementActionMatch[2]
+        const now = new Date().toISOString()
+        if (action === 'publish') announcements[index] = { ...announcements[index], publish_state: 'published', published_at: announcements[index].published_at || now, recipient_count: announcements[index].target_scope === 'class' ? 28 : 55, updated_at: now }
+        if (action === 'archive') announcements[index] = { ...announcements[index], publish_state: 'archived', archived_at: now, updated_at: now }
+        if (action === 'read') announcements[index] = { ...announcements[index], is_read: true }
+        json(response, 200, announcements[index])
+        return
+    }
+
+    if (request.method === 'GET' && path.startsWith('/api/v1/communication/attachments/')) {
+        const bytes = Buffer.from('%PDF-1.4\n% Synthetic announcement attachment\n%%EOF\n')
+        response.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': bytes.length })
+        response.end(bytes)
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/attendance/teacher/today') {
+        if (attendanceMode === 'error') return json(response, 503, { detail: 'The roster service is temporarily unavailable.' })
+        const sheet = attendanceSheet(attendanceMode === 'submitted' ? 'submitted' : 'draft')
+        json(response, 200, { class_section_id: sheet.class_section_id, attendance_date: sheet.attendance_date, sheet })
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/attendance/dashboard/teacher-summary') {
+        const summary = attendanceMode === 'empty'
+            ? { total_students: 0, present_count: 0, absent_count: 0, late_count: 0, half_day_count: 0, excused_count: 0, scheduled_count: 0 }
+            : attendanceSummary()
+        json(response, 200, { attendance_date: '2026-08-19', class_section_id: 'a7000000-0000-4000-8000-000000000001', standard: '10', division: 'A', status: attendanceMode === 'submitted' ? 'submitted' : 'draft', ...summary })
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/attendance/dashboard/leadership') {
+        const classes = [
+            { class_section_id: 'a7000000-0000-4000-8000-000000000001', standard: '10', division: 'A', class_teacher_name: 'Meera Subramaniam', class_teacher_id: 'a3000000-0000-4000-8000-000000000001', student_count: 12, status: attendanceReopened ? 'reopened' : 'submitted', submitted_at: '2026-08-19T16:00:00.000Z' },
+            { class_section_id: 'a7000000-0000-4000-8000-000000000002', standard: '10', division: 'B', class_teacher_name: 'Ravi Menon', class_teacher_id: 'a3000000-0000-4000-8000-000000000002', student_count: 38, status: null, submitted_at: null },
+        ]
+        json(response, 200, { attendance_date: '2026-08-19', total_classes: 2, submitted_classes: attendanceReopened ? 0 : 1, pending_classes: 1, total_students: 50, present_count: 44, absent_count: 2, late_count: 2, half_day_count: 1, excused_count: 1, reopened_sheets: attendanceReopened ? 1 : 0, classes, pending: [classes[1]] })
+        return
+    }
+
+    if (request.method === 'GET' && path.startsWith('/api/v1/attendance/classes/') && path.endsWith('/sheet')) {
+        json(response, 200, attendanceSheet(attendanceReopened ? 'reopened' : 'submitted'))
+        return
+    }
+
+    if (request.method === 'POST' && path.includes('/api/v1/attendance/sheets/') && path.endsWith('/reopen')) {
+        attendanceRevision += 1
+        attendanceReopened = true
+        json(response, 200, { ...attendanceSheet('reopened'), reopened_at: '2026-08-19T17:00:00.000Z', reopened_reason: (await readBody(request)).reason })
+        return
+    }
+
+    if (request.method === 'PATCH' && path.includes('/api/v1/attendance/sheets/') && path.endsWith('/records')) {
+        const payload = await readBody(request)
+        if (attendanceMode === 'conflict') return json(response, 409, { detail: 'Attendance changed on another device. Refresh before saving your draft.' })
+        for (const update of payload.records || []) {
+            const record = attendanceRecords.find((row) => row.id === update.record_id)
+            if (record) record.status = update.status
+        }
+        attendanceRevision += 1
+        json(response, 200, attendanceSheet())
+        return
+    }
+
+    if (request.method === 'POST' && path.includes('/api/v1/attendance/sheets/') && path.endsWith('/submit')) {
+        const payload = await readBody(request)
+        for (const update of payload.records || []) {
+            const record = attendanceRecords.find((row) => row.id === update.record_id)
+            if (record) record.status = update.status
+        }
+        attendanceRevision += 1
+        json(response, 200, attendanceSheet('submitted'))
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/attendance/students/me/summary') {
+        json(response, 200, {
+            month: '2026-08', attendance_percent: 92.5, present_equivalent: 18.5,
+            scheduled_count: 20, absent_count: 1, excused_count: 1, latest_status: 'present',
+            history: attendanceRecords.slice(0, 6).map((row, index) => ({ record_id: row.id, attendance_date: `2026-08-${String(19 - index).padStart(2, '0')}`, status: row.status, note: row.note, class_note: null, standard: '10', division: 'A' })),
+        })
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/attendance/corrections') {
+        json(response, 200, syntheticRole === 'principal'
+            ? [{ id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: attendanceRecords[3].id, student_id: attendanceRecords[3].student_id, requested_by_user_id: attendanceRecords[3].student_id, requested_by_role: 'student', reason: 'I was present after the school bus arrived late.', status: leaderAttendanceCorrectionStatus, resolved_by_user_id: leaderAttendanceCorrectionStatus === 'pending' ? null : 'leader', resolved_by_role: leaderAttendanceCorrectionStatus === 'pending' ? null : 'principal', resolved_at: leaderAttendanceCorrectionStatus === 'pending' ? null : '2026-08-19T17:10:00.000Z', resolution_note: leaderAttendanceCorrectionStatus === 'pending' ? null : 'Reviewed against the teacher register.' }]
+            : studentAttendanceCorrection ? [studentAttendanceCorrection] : [])
+        return
+    }
+
+    if (request.method === 'POST' && path.includes('/api/v1/attendance/corrections/') && path.endsWith('/resolve')) {
+        const payload = await readBody(request)
+        leaderAttendanceCorrectionStatus = payload.status
+        json(response, 200, { id: path.split('/').at(-2), sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: attendanceRecords[3].id, student_id: attendanceRecords[3].student_id, requested_by_user_id: attendanceRecords[3].student_id, requested_by_role: 'student', reason: 'I was present after the school bus arrived late.', status: payload.status, resolved_by_user_id: 'leader', resolved_by_role: 'principal', resolved_at: '2026-08-19T17:10:00.000Z', resolution_note: payload.resolution_note })
+        return
+    }
+
+    if (request.method === 'POST' && path === '/api/v1/attendance/corrections') {
+        const payload = await readBody(request)
+        studentAttendanceCorrection = { id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: payload.record_id, student_id: 'a2000000-0000-4000-8000-000000000001', requested_by_user_id: null, requested_by_role: syntheticRole, reason: payload.reason, status: 'pending', resolved_by_user_id: null, resolved_by_role: null, resolved_at: null, resolution_note: null }
+        json(response, 200, studentAttendanceCorrection)
+        return
+    }
+
+    if (request.method === 'POST' && path === '/__test__/school-previous-papers-mode') {
+        const payload = await readBody(request)
+        schoolPreviousPapersMode = String(payload.mode || 'ready')
+        json(response, 200, { mode: schoolPreviousPapersMode })
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/roster/student/master-profile') {
+        json(response, 200, {
+            profile: {
+                student_id: 'STU-2048',
+                first_name: 'Aarav',
+                last_name: 'Ramanathan',
+                email: 'school-student@example.test',
+                school_name: 'Eduraa International School — North Campus',
+                branch_name: 'North Campus',
+                board: 'CBSE',
+                standard: '10',
+                division: 'A',
+            },
+            class_teacher_name: 'Mrs. Meera Subramaniam',
+            assignment_status: 'active',
+            subjects: [
+                { subject_name: 'Mathematics' },
+                { subject_name: 'Science' },
+                { subject_name: 'English Language and Literature' },
+            ],
+        })
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/roster/teacher/master-profile') {
+        json(response, 200, {
+            profile: {
+                first_name: 'Meera',
+                last_name: 'Subramaniam',
+                email: 'school-teacher@example.test',
+                teacher_id: 'TCH-1024',
+                school_id: 'school-north',
+                school_name: 'Eduraa International School — North Campus',
+                branch_id: 'branch-north',
+                branch_name: 'North Campus',
+                board: 'CBSE',
+                standards_taught: ['9', '10'],
+                divisions_taught: ['A', 'B'],
+                subjects_taught: ['Mathematics', 'Science'],
+                class_teacher_opt_in: true,
+                class_teacher_standard: '10',
+                class_teacher_division: 'A',
+                is_approved: true,
+                is_active: true,
+            },
+            assignment_status: 'active',
+            subject_mappings: [],
+            pending_update_request: null,
+        })
+        return
+    }
+
+    if (request.method === 'GET' && (path === '/api/v1/question-papers/student' || path === '/api/v1/question-papers/teacher')) {
+        if (schoolPreviousPapersMode === 'loading') await new Promise(resolve => setTimeout(resolve, 2500))
+        if (schoolPreviousPapersMode === 'error') {
+            json(response, 503, { detail: 'The school paper library is temporarily unavailable.' })
+            return
+        }
+        if (schoolPreviousPapersMode === 'forbidden') {
+            json(response, 403, { detail: 'School paper permission is no longer active.' })
+            return
+        }
+        const teacherView = path.endsWith('/teacher')
+        const items = schoolPreviousPapersMode === 'empty' ? [] : [
+            {
+                id: '73000000-0000-4000-8000-000000000001',
+                title: 'Mathematics Annual Examination — Complete Revision Paper',
+                description: 'Original school paper with diagrams, formulae, and section-wise marks preserved.',
+                original_filename: 'mathematics-annual-examination.pdf',
+                content_type: 'application/pdf',
+                file_size_bytes: 2480128,
+                subject_id: '83000000-0000-4000-8000-000000000001',
+                subject_label: 'Mathematics',
+                target_scope: 'class',
+                class_section_id: '93000000-0000-4000-8000-000000000001',
+                class_label: 'Standard 10 · Division A',
+                standard: '10',
+                division: 'A',
+                status: 'published',
+                uploaded_by_teacher_id: '00000000-0000-4000-8000-000000000020',
+                teacher_name: 'Mrs. Meera Subramaniam',
+                view_url: '/api/v1/question-papers/73000000-0000-4000-8000-000000000001/view',
+                download_url: '/api/v1/question-papers/73000000-0000-4000-8000-000000000001/download',
+                published_at: '2025-03-14T09:00:00.000Z',
+                archived_at: null,
+                created_at: '2025-03-12T09:00:00.000Z',
+                updated_at: '2025-03-14T09:00:00.000Z',
+            },
+            ...(teacherView ? [{
+                id: '73000000-0000-4000-8000-000000000002',
+                title: 'Science Midterm Paper',
+                description: null,
+                original_filename: 'science-midterm.pdf',
+                content_type: 'application/pdf',
+                file_size_bytes: 912000,
+                subject_id: '83000000-0000-4000-8000-000000000002',
+                subject_label: 'Science',
+                target_scope: 'all_classes',
+                class_section_id: null,
+                class_label: null,
+                standard: null,
+                division: null,
+                status: 'archived',
+                uploaded_by_teacher_id: '00000000-0000-4000-8000-000000000020',
+                teacher_name: 'Mrs. Meera Subramaniam',
+                view_url: '/api/v1/question-papers/73000000-0000-4000-8000-000000000002/view',
+                download_url: '/api/v1/question-papers/73000000-0000-4000-8000-000000000002/download',
+                published_at: '2024-09-20T09:00:00.000Z',
+                archived_at: '2025-06-01T09:00:00.000Z',
+                created_at: '2024-09-18T09:00:00.000Z',
+                updated_at: '2025-06-01T09:00:00.000Z',
+            }] : []),
+        ]
+        json(response, 200, { items, total: items.length, page: 1, page_size: items.length })
         return
     }
 
@@ -1207,6 +1603,50 @@ const server = http.createServer(async (request, response) => {
                 skip: 0,
                 limit: 200,
             })
+            return
+        }
+        if (syntheticRole === 'student' || syntheticRole === 'teacher') {
+            if (schoolPreviousPapersMode === 'loading') await new Promise(resolve => setTimeout(resolve, 2500))
+            if (schoolPreviousPapersMode === 'error') {
+                json(response, 503, { detail: 'Structured school papers are temporarily unavailable.' })
+                return
+            }
+            if (schoolPreviousPapersMode === 'forbidden') {
+                json(response, 403, { detail: 'Structured paper permission is no longer active.' })
+                return
+            }
+            const items = [
+                {
+                    id: PREVIOUS_ATTEMPT_PAPER_ID,
+                    title: previousAttemptPaper.title,
+                    subject_name: 'Physics',
+                    standard: '10',
+                    division: 'A',
+                    category: 'Previous Paper Practice',
+                    total_marks: previousAttemptPaper.total_marks,
+                    duration_minutes: previousAttemptPaper.duration_minutes,
+                    status: 'published',
+                    is_submitted_by_me: syntheticRole === 'student',
+                    created_at: '2025-03-10T09:00:00.000Z',
+                    question_count: previousAttemptPaper.questions.length,
+                },
+                {
+                    id: '50000000-0000-4000-8000-000000000003',
+                    title: 'Science Term II Practice Paper with Extended Response Sections',
+                    subject_name: 'Science',
+                    standard: '10',
+                    division: 'A',
+                    category: 'Term II',
+                    total_marks: 100,
+                    duration_minutes: null,
+                    status: 'published',
+                    is_submitted_by_me: false,
+                    created_at: '2024-11-17T09:00:00.000Z',
+                    question_count: 42,
+                },
+            ]
+            const visibleItems = schoolPreviousPapersMode === 'empty' ? [] : items
+            json(response, 200, { items: visibleItems, total: visibleItems.length, skip: 0, limit: 100 })
             return
         }
         json(response, 200, {

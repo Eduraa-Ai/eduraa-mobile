@@ -27,7 +27,12 @@ function isCompetitiveProfile(user: AccountMinimal) {
 
 const COMPETITIVE_EXAM_LEVELS = new Set(['competitive_exam', 'competitive_exams'])
 
+export function isSchoolPreviousPapersEligible(user?: AccountMinimal | null) {
+  return user?.role === 'student' || user?.role === 'teacher'
+}
+
 export function isPreviousPapersEligible(user?: AccountMinimal | null) {
+  if (isSchoolPreviousPapersEligible(user)) return true
   if (
     user?.role !== 'b2c_student' ||
     !COMPETITIVE_EXAM_LEVELS.has(String(user.b2c_education_level ?? '').trim())

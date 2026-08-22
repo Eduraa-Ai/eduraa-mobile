@@ -83,6 +83,7 @@ export default function WorkspaceScreen() {
     if (!user?.role) return []
     const competitive = isCompetitiveProfile(user, b2cQuery.data)
     const jee = isJeeProfile(user, b2cQuery.data)
+    const requiresB2CEntitlements = user.role === 'b2c_student'
 
     return mobileControls.filter((control) => {
       if (control.hiddenOnWeb || !roleCanSeeControl(user.role, control)) return false
@@ -91,8 +92,8 @@ export default function WorkspaceScreen() {
         // answer is the gate. Issue #61 forbids a client flag deciding this.
         if (!classTeacherAccess.isAuthorized) return false
       }
-      if (control.requiresCompetitiveExam && !competitive) return false
-      if (control.requiresJee && !jee) return false
+      if (requiresB2CEntitlements && control.requiresCompetitiveExam && !competitive) return false
+      if (requiresB2CEntitlements && control.requiresJee && !jee) return false
       return true
     })
   }, [b2cQuery.data, classTeacherAccess.isAuthorized, user])
@@ -125,6 +126,14 @@ export default function WorkspaceScreen() {
       else navigation.navigate('Exams')
       return
     }
+    if (control.id === 'announcements') {
+      navigation.navigate('Announcements')
+      return
+    }
+    if (control.id === 'doubts') {
+      navigation.navigate('Doubts')
+      return
+    }
 
     if (control.target.kind === 'tab') {
       const isStaffTabs = parentRoutes.includes('StaffHome')
@@ -133,6 +142,7 @@ export default function WorkspaceScreen() {
         else if (control.target.tab === 'Papers' && control.target.screen === 'GeneratePaper') navigation.navigate('StaffGeneratePaper')
         else if (control.target.tab === 'Papers') navigation.navigate('StaffPapers')
         else if (control.target.tab === 'Results') navigation.navigate('StaffResults')
+        else if (control.target.tab === 'PreviousPapers' && parentRoutes.includes('StaffPreviousPapers')) parent.navigate('StaffPreviousPapers')
         else if (control.target.tab === 'Profile' && parentRoutes.includes('StaffProfile')) parent.navigate('StaffProfile')
         else if (control.target.tab === 'Home' && !control.target.screen) parent.navigate('StaffHome')
         else navigation.navigate('Feature', { featureId: control.id })

@@ -42,6 +42,32 @@ test('sends bearer authorization only to the configured API origin', () => {
   )
 })
 
+test('accepts only same-origin school question-paper view and download routes', () => {
+  assert.equal(
+    documents.resolveSchoolQuestionPaperFileUrl(
+      '/api/v1/question-papers/paper-1/view',
+      'https://api.example.test',
+    ),
+    'https://api.example.test/api/v1/question-papers/paper-1/view',
+  )
+  assert.equal(
+    documents.resolveSchoolQuestionPaperFileUrl(
+      'https://api.example.test/api/v1/question-papers/paper-1/download',
+      'https://api.example.test',
+    ),
+    'https://api.example.test/api/v1/question-papers/paper-1/download',
+  )
+  assert.throws(() => documents.resolveSchoolQuestionPaperFileUrl(
+    'https://files.example.test/api/v1/question-papers/paper-1/view',
+    'https://api.example.test',
+  ))
+  assert.throws(() => documents.resolveSchoolQuestionPaperFileUrl(
+    '/api/v1/accounts/me',
+    'https://api.example.test',
+  ))
+  assert.throws(() => documents.resolveSchoolQuestionPaperFileUrl(' ', 'https://api.example.test'))
+})
+
 test('builds a safe authenticated checked-paper PDF download request', () => {
   assert.equal(
     documents.checkedPaperDownloadEndpoint('paper id/synthetic'),

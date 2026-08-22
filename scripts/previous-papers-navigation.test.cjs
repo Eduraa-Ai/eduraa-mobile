@@ -15,12 +15,22 @@ test('previous papers is an eligible final root tab with an accessible symbol', 
   assert.ok(profileIndex >= 0)
   assert.ok(previousPapersIndex > profileIndex)
   assert.match(navigation, /previousPapersEligible\s*\?\s*\(/)
-  assert.match(navigation, /tabBarAccessibilityLabel:\s*'Previous-year JEE papers'/)
+  assert.match(navigation, /previousPapersAccessibilityLabel = 'Previous-year JEE papers'/)
   assert.doesNotMatch(navigation, /<HomeStack\.Screen name="PreviousPapers"/)
   assert.match(bottomTabBar, /function ConstellationField\(/)
   assert.match(bottomTabBar, /PreviousPapers:\s*'documents-outline'/)
   assert.match(bottomTabBar, /options\?\.tabBarAccessibilityLabel \?\? label/)
-  assert.match(bottomTabBar, /state\.routes\.length <= 6/)
+  assert.match(bottomTabBar, /state\.routes\.length < 6/)
+})
+
+test('B2B students and teachers receive role-appropriate previous-paper tabs', () => {
+  const navigation = read('src/navigation/index.tsx')
+  const bottomTabBar = read('src/components/ui/BottomTabBar.tsx')
+
+  assert.match(navigation, /landing === 'school_learner'[\s\S]*previousPapersEligible=\{isPreviousPapersEligible\(user\)\}/)
+  assert.match(navigation, /previousPapersAccessibilityLabel="School previous question papers"/)
+  assert.match(navigation, /user\.role === 'teacher'[\s\S]*name="StaffPreviousPapers"/)
+  assert.match(bottomTabBar, /StaffPreviousPapers:\s*'documents-outline'/)
 })
 
 test('the library back action falls back to Home without history', () => {

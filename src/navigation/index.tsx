@@ -22,6 +22,7 @@ import RegisterIndividualScreen from '../screens/auth/RegisterIndividualScreen'
 import RegisterSchoolScreen from '../screens/auth/RegisterSchoolScreen'
 import VerifyEmailScreen from '../screens/auth/VerifyEmailScreen'
 import RegistrationCompleteScreen from '../screens/auth/RegistrationCompleteScreen'
+import SchoolApprovalStatusScreen from '../screens/auth/SchoolApprovalStatusScreen'
 import HomeScreen from '../screens/home/HomeScreen'
 import PapersScreen from '../screens/papers/PapersScreen'
 import GeneratePaperScreen from '../screens/papers/GeneratePaperScreen'
@@ -47,6 +48,8 @@ import AttendanceScreen from '../screens/workspace/AttendanceScreen'
 import ScanUploadScreen from '../screens/workspace/ScanUploadScreen'
 import CheckedPaperStatusScreen from '../screens/workspace/CheckedPaperStatusScreen'
 import ExamsScreen from '../screens/workspace/ExamsScreen'
+import AnnouncementsScreen from '../screens/workspace/AnnouncementsScreen'
+import DoubtsScreen from '../screens/workspace/DoubtsScreen'
 import ClassTeacherOverviewScreen from '../screens/classTeacher/ClassTeacherOverviewScreen';
 import ClassRosterScreen from '../screens/classTeacher/ClassRosterScreen';
 import ClassSubjectsScreen from '../screens/classTeacher/ClassSubjectsScreen';
@@ -54,6 +57,7 @@ import SubjectEnrollmentScreen from '../screens/classTeacher/SubjectEnrollmentSc
 import ClassValidationScreen from '../screens/classTeacher/ClassValidationScreen';
 import AIStudioScreen from '../screens/studio/AIStudioScreen'
 import ProfileScreen from '../screens/profile/ProfileScreen'
+import { canAccessApprovalActions } from '../screens/workspace/approvalsModel'
 
 export type AuthStackParamList = {
   Login: undefined
@@ -62,13 +66,18 @@ export type AuthStackParamList = {
   RegisterSchool: undefined
   VerifyEmail: { email: string; devOtp?: string; message?: string; deliveryChannel?: string }
   RegistrationComplete: { authToken: AuthToken }
+  SchoolApprovalStatus: { identifier?: string; role?: 'student' | 'teacher' | 'principal'; displayName?: string } | undefined
 }
 
 export type PapersStackParamList = {
   PapersList: undefined
   GeneratePaper: undefined
   CustomPaper: undefined
-  PaperDetail: { paperId: string; generationNotice?: string }
+  PaperDetail: {
+    paperId: string
+    generationNotice?: string
+    presentation?: 'teacher_reference'
+  }
   AttemptPaper: {
     paperId: string
     examId?: string
@@ -101,6 +110,8 @@ export type HomeStackParamList = {
   Attendance: undefined
   ScanUpload: undefined
   Exams: undefined
+  Announcements: { announcementId?: string } | undefined
+  Doubts: { doubtId?: string } | undefined
   AIStudio: undefined
 }
 
@@ -117,6 +128,8 @@ export type StaffWorkspaceStackParamList = {
   ScanUpload: undefined;
   CheckedPaperStatus: { checkedPaperId: string };
   Exams: undefined;
+  Announcements: { announcementId?: string } | undefined;
+  Doubts: { doubtId?: string } | undefined;
   StaffAIStudio: undefined;
   StaffGeneratePaper: undefined;
   StaffCustomPaper: undefined;
@@ -141,6 +154,7 @@ export type TabParamList = {
   Profile: undefined
   PreviousPapers: undefined
   CheatSheets: undefined
+  Attendance: undefined
 }
 
 export type StaffTabParamList = {
@@ -150,6 +164,7 @@ export type StaffTabParamList = {
   StaffScanUpload: undefined;
   StaffExams: undefined;
   StaffPapers: undefined;
+  StaffPreviousPapers: undefined;
   StaffResults: undefined;
   StaffAIStudio: undefined;
   StaffProfile: undefined;
@@ -168,7 +183,7 @@ const OnboardingStack = createNativeStackNavigator<{
   B2COnboarding: undefined;
 }>();
 
-const linking: LinkingOptions<TabParamList> = {
+const linking: LinkingOptions<any> = {
   prefixes: ['eduraa://'],
   config: {
     screens: {
@@ -180,6 +195,13 @@ const linking: LinkingOptions<TabParamList> = {
           AgenticLearning: 'learning/agentic',
           AgenticSubject: 'learning/agentic/subjects/:subjectId',
           AgenticTopic: 'learning/agentic/topics/:topicId',
+          Announcements: 'announcements/:announcementId?',
+          Doubts: 'student/doubts/:doubtId?',
+        },
+      },
+      StaffHome: {
+        screens: {
+          Doubts: 'teacher/doubts/:doubtId?',
         },
       },
       Results: {
@@ -222,6 +244,7 @@ function AuthNavigator() {
       />
       <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
       <AuthStack.Screen name="RegistrationComplete" component={RegistrationCompleteScreen} options={{ gestureEnabled: false }} />
+      <AuthStack.Screen name="SchoolApprovalStatus" component={SchoolApprovalStatusScreen} />
     </AuthStack.Navigator>
   );
 }
@@ -300,6 +323,8 @@ function HomeNavigator() {
       <HomeStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <HomeStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
       <HomeStack.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
+      <HomeStack.Screen name="Announcements" component={AnnouncementsScreen} options={{ headerShown: false }} />
+      <HomeStack.Screen name="Doubts" component={DoubtsScreen} options={{ headerShown: false }} />
       <HomeStack.Screen name="AIStudio" component={AIStudioScreen} options={{ headerShown: false }} />
     </HomeStack.Navigator>
   );
@@ -319,10 +344,14 @@ function ProfileNavigator() {
 
 function StudentTabs({
   previousPapersEligible = false,
+  previousPapersAccessibilityLabel = 'Previous-year JEE papers',
   cheatSheetsEligible = false,
+  attendanceEligible = false,
 }: {
   previousPapersEligible?: boolean
+  previousPapersAccessibilityLabel?: string
   cheatSheetsEligible?: boolean
+  attendanceEligible?: boolean
 }) {
   return (
     <Tab.Navigator
@@ -336,11 +365,14 @@ function StudentTabs({
       <Tab.Screen name="Papers" component={PapersNavigator} options={{ title: 'Papers' }} />
       <Tab.Screen name="Results" component={ResultsNavigator} options={{ title: 'Results' }} />
       <Tab.Screen name="Profile" component={ProfileNavigator} options={{ title: 'Profile' }} />
+      {attendanceEligible ? (
+        <Tab.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
+      ) : null}
       {previousPapersEligible ? (
         <Tab.Screen
           name="PreviousPapers"
           component={PreviousPapersScreen}
-          options={{ title: 'Previous', tabBarAccessibilityLabel: 'Previous-year JEE papers' }}
+          options={{ title: 'Previous', tabBarAccessibilityLabel: previousPapersAccessibilityLabel }}
         />
       ) : null}
       {cheatSheetsEligible ? (
@@ -418,6 +450,16 @@ function StaffWorkspaceNavigator() {
         options={{ title: "Exams" }}
       />
       <StaffWorkspaceStack.Screen
+        name="Doubts"
+        component={DoubtsScreen}
+        options={{ headerShown: false }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="Announcements"
+        component={AnnouncementsScreen}
+        options={{ headerShown: false }}
+      />
+      <StaffWorkspaceStack.Screen
         name="StaffAIStudio"
         component={AIStudioScreen}
         options={{ headerShown: false }}
@@ -469,11 +511,13 @@ function StaffTabs({ user }: { user: AccountMinimal }) {
         component={StaffWorkspaceNavigator}
         options={{ title: "Workspace" }}
       />
-      <StaffTab.Screen
-        name="StaffApprovals"
-        component={ApprovalsScreen}
-        options={{ title: "Approvals" }}
-      />
+      {canAccessApprovalActions(user.role) ? (
+        <StaffTab.Screen
+          name="StaffApprovals"
+          component={ApprovalsScreen}
+          options={{ title: "Approvals", tabBarStyle: { display: 'none' } }}
+        />
+      ) : null}
       <StaffTab.Screen
         name="StaffAttendance"
         component={AttendanceScreen}
@@ -494,6 +538,13 @@ function StaffTabs({ user }: { user: AccountMinimal }) {
         component={PapersNavigator}
         options={{ title: "Papers" }}
       />
+      {user.role === 'teacher' ? (
+        <StaffTab.Screen
+          name="StaffPreviousPapers"
+          component={PreviousPapersScreen}
+          options={{ title: "Previous", tabBarAccessibilityLabel: "School previous question papers" }}
+        />
+      ) : null}
       <StaffTab.Screen
         name="StaffResults"
         component={ResultsNavigator}
@@ -541,7 +592,15 @@ function AuthenticatedNavigator({ user }: { user: AccountMinimal }) {
       />
     )
   }
-  if (landing === 'school_learner') return <StudentTabs />
+  if (landing === 'school_learner') {
+    return (
+      <StudentTabs
+        previousPapersEligible={isPreviousPapersEligible(user)}
+        previousPapersAccessibilityLabel="School previous question papers"
+        attendanceEligible={user?.role === 'student'}
+      />
+    )
+  }
   if (landing === 'admin_workspace') return <StaffTabs user={user} />
   if (landing === 'developer_workspace') return <StaffTabs user={user} />
   return <StaffTabs user={user} />

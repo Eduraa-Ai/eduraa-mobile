@@ -22,6 +22,15 @@ const messageFromError = (error: unknown) => {
   return 'Sign in is unavailable right now. Please try again.'
 }
 
+const pendingSchoolRole = (error: unknown): 'student' | 'teacher' | 'principal' | null => {
+  const detail = (error as { response?: { status?: number; data?: { detail?: string } } }).response?.data?.detail
+  if ((error as { response?: { status?: number } }).response?.status !== 403 || !detail?.toLowerCase().includes('pending approval')) return null
+  if (detail.toLowerCase().includes('student')) return 'student'
+  if (detail.toLowerCase().includes('teacher')) return 'teacher'
+  if (detail.toLowerCase().includes('principal')) return 'principal'
+  return null
+}
+
 export default function LoginScreen() {
   const navigation = useNavigation<Nav>()
   const insets = useSafeAreaInsets()
@@ -89,6 +98,13 @@ export default function LoginScreen() {
       if (handoffDelay) await new Promise((resolve) => setTimeout(resolve, handoffDelay))
       await setAuth(token)
     } catch (loginError) {
+      const pendingRole = pendingSchoolRole(loginError)
+      if (pendingRole) {
+        setMotionState('idle')
+        setPassword('')
+        navigation.navigate('SchoolApprovalStatus', { identifier: identifier.trim(), role: pendingRole })
+        return
+      }
       const message = messageFromError(loginError)
       setError(message)
       const isOffline = message.includes('could not reach')
@@ -260,6 +276,18 @@ export default function LoginScreen() {
                   </>
                 )}
               </Pressable>
+
+              {!recoveryMode ? (
+                <Pressable
+                  onPress={() => navigation.navigate('SchoolApprovalStatus', identifier.trim() ? { identifier: identifier.trim() } : undefined)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Check school approval status"
+                  style={styles.recoveryButton}
+                >
+                  <Text style={styles.recoveryText}>Check school approval</Text>
+                </Pressable>
+              ) : null}
 
               <Pressable
                 onPress={recoveryMessage ? handleRecovery : toggleRecoveryMode}

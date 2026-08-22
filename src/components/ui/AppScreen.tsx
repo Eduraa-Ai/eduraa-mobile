@@ -12,10 +12,11 @@ interface AppScreenProps extends ScrollViewProps {
   tone?: 'default' | 'auth'
   ambient?: boolean
   protectedChrome?: boolean
+  scrollRef?: React.RefObject<ScrollView | null>
 }
 
 export const AppScreen = forwardRef<ScrollView, AppScreenProps>(function AppScreen(
-  { children, scroll = true, contentStyle, padded = true, tone = 'default', ambient = true, protectedChrome = false, style, ...props },
+  { children, scroll = true, contentStyle, padded = true, tone = 'default', ambient = true, protectedChrome = false, scrollRef, style, ...props },
   ref,
 ) {
   const insets = useSafeAreaInsets()
@@ -56,7 +57,7 @@ export const AppScreen = forwardRef<ScrollView, AppScreenProps>(function AppScre
 
   return (
     <ScrollView
-      ref={ref}
+      ref={ref ?? scrollRef}
       style={[
         styles.root,
         tone === 'auth' && styles.authRoot,

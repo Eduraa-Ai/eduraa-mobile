@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { Role } from '../types'
+import type { ApprovalQueueKey } from '../screens/workspace/approvalsModel'
 
 export interface PendingAccount {
   id: string
@@ -63,44 +64,34 @@ export interface ApprovalQueues {
   errors: Partial<Record<keyof Omit<ApprovalQueues, 'errors'>, string>>
 }
 
-async function safeList<T>(path: string): Promise<{ data: T[]; error?: string }> {
-  try {
-    const response = await apiClient.get<T[]>(path)
-    return { data: response.data }
-  } catch (error) {
-    const detail = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
-    return { data: [], error: detail || 'Unable to load this approval queue.' }
-  }
+export type ApprovalQueueData = {
+  principals: PendingAccount[]
+  teachers: PendingAccount[]
+  students: PendingAccount[]
+  classTeacherRequests: ClassTeacherApproval[]
+  teacherProfileUpdates: TeacherProfileApproval[]
 }
 
 export const approvalsApi = {
-  async getQueues(): Promise<ApprovalQueues> {
-    const [principals, teachers, students, classTeacherRequests, teacherProfileUpdates] = await Promise.all([
-      safeList<PendingAccount>('/approvals/principals/pending'),
-      safeList<PendingAccount>('/approvals/teachers/pending'),
-      safeList<PendingAccount>('/approvals/students/pending'),
-      safeList<ClassTeacherApproval>('/approvals/class-teacher-requests/pending'),
-      safeList<TeacherProfileApproval>('/approvals/teacher-profile-updates/pending'),
-    ])
-
-    return {
-      principals: principals.data,
-      teachers: teachers.data,
-      students: students.data,
-      classTeacherRequests: classTeacherRequests.data,
-      teacherProfileUpdates: teacherProfileUpdates.data,
-      errors: {
-        principals: principals.error,
-        teachers: teachers.error,
-        students: students.error,
-        classTeacherRequests: classTeacherRequests.error,
-        teacherProfileUpdates: teacherProfileUpdates.error,
-      },
+  async getQueue<K extends ApprovalQueueKey>(key: K): Promise<ApprovalQueueData[K]> {
+    const paths: Record<ApprovalQueueKey, string> = {
+      principals: '/approvals/principals/pending',
+      teachers: '/approvals/teachers/pending',
+      students: '/approvals/students/pending',
+      classTeacherRequests: '/approvals/class-teacher-requests/pending',
+      teacherProfileUpdates: '/approvals/teacher-profile-updates/pending',
     }
+    const response = await apiClient.get<ApprovalQueueData[K]>(paths[key])
+    return response.data
   },
 
   async approvePrincipal(id: string, password: string) {
     const response = await apiClient.post<PendingAccount>(`/approvals/principals/${id}/approve`, { password })
+    return response.data
+  },
+
+  async rejectPrincipal(id: string, password: string) {
+    const response = await apiClient.post<PendingAccount>(`/approvals/principals/${id}/reject`, { password })
     return response.data
   },
 
@@ -109,8 +100,18 @@ export const approvalsApi = {
     return response.data
   },
 
+  async rejectTeacher(id: string) {
+    const response = await apiClient.post<PendingAccount>(`/approvals/teachers/${id}/reject`, {})
+    return response.data
+  },
+
   async approveStudent(id: string) {
     const response = await apiClient.post<PendingAccount>(`/approvals/students/${id}/approve`)
+    return response.data
+  },
+
+  async rejectStudent(id: string) {
+    const response = await apiClient.post<PendingAccount>(`/approvals/students/${id}/reject`, {})
     return response.data
   },
 
@@ -119,8 +120,18 @@ export const approvalsApi = {
     return response.data
   },
 
+  async rejectClassTeacherRequest(id: string) {
+    const response = await apiClient.post<ClassTeacherApproval>(`/approvals/class-teacher-requests/${id}/reject`, {})
+    return response.data
+  },
+
   async approveTeacherProfileUpdate(id: string) {
     const response = await apiClient.post<TeacherProfileApproval>(`/approvals/teacher-profile-updates/${id}/approve`)
+    return response.data
+  },
+
+  async rejectTeacherProfileUpdate(id: string) {
+    const response = await apiClient.post<TeacherProfileApproval>(`/approvals/teacher-profile-updates/${id}/reject`, {})
     return response.data
   },
 }

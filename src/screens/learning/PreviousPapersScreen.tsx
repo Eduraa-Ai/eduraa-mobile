@@ -35,6 +35,7 @@ import { isPreviousPapersEligible } from '../../auth/landing'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
 import PreviousPaperAssemblyState, { type AssemblyStage } from './PreviousPaperAssemblyState'
+import SchoolPreviousPapersScreen from './SchoolPreviousPapersScreen'
 import {
   buildPreviousPaperStartRequest,
   filterPreviousPapers,
@@ -346,7 +347,7 @@ function QuestionCard({ question }: { question: PreviousQuestion }) {
   )
 }
 
-export default function PreviousPapersScreen() {
+function CompetitivePreviousPapersScreen() {
   const navigation = useNavigation<any>()
   const insets = useSafeAreaInsets()
   const queryClient = useQueryClient()
@@ -1220,6 +1221,12 @@ export default function PreviousPapersScreen() {
         )}
     </AppScreen>
   )
+}
+
+export default function PreviousPapersScreen() {
+  const role = useAuthStore((state) => state.user?.role)
+  if (role === 'student' || role === 'teacher') return <SchoolPreviousPapersScreen />
+  return <CompetitivePreviousPapersScreen />
 }
 
 const styles = StyleSheet.create({

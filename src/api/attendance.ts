@@ -44,6 +44,7 @@ export interface AttendanceSheet {
   reopened_reason?: string | null
   locked_at?: string | null
   class_note?: string | null
+  revision: number
   records: AttendanceRecord[]
   summary: AttendanceSheetSummary
 }
@@ -97,6 +98,7 @@ export interface LeadershipAttendanceSummary {
 
 export interface StudentAttendanceHistoryRow {
   attendance_date: string
+  record_id: string
   status: AttendanceStatus
   note?: string | null
   class_note?: string | null
@@ -152,6 +154,13 @@ export const attendanceApi = {
     return response.data
   },
 
+  async getSheet(classSectionId: string, attendanceDate: string) {
+    const response = await apiClient.get<AttendanceSheet>(`/attendance/classes/${classSectionId}/sheet`, {
+      params: { attendance_date: attendanceDate },
+    })
+    return response.data
+  },
+
   async getStudentSummary() {
     const response = await apiClient.get<StudentAttendanceSummary>('/attendance/students/me/summary')
     return response.data
@@ -162,22 +171,26 @@ export const attendanceApi = {
     return response.data
   },
 
-  async updateRecords(sheetId: string, records: AttendanceRecordUpdate[], classNote?: string | null) {
+  async updateRecords(sheetId: string, expectedRevision: number, records: AttendanceRecordUpdate[], classNote?: string | null) {
     const response = await apiClient.patch<AttendanceSheet>(`/attendance/sheets/${sheetId}/records`, {
       class_note: classNote,
+      expected_revision: expectedRevision,
       records,
     })
     return response.data
   },
 
-  async markAllPresent(sheetId: string) {
-    const response = await apiClient.post<AttendanceSheet>(`/attendance/sheets/${sheetId}/mark-all-present`)
+  async markAllPresent(sheetId: string, expectedRevision: number) {
+    const response = await apiClient.post<AttendanceSheet>(`/attendance/sheets/${sheetId}/mark-all-present`, {
+      expected_revision: expectedRevision,
+    })
     return response.data
   },
 
-  async submitSheet(sheetId: string, classNote?: string | null, records: AttendanceRecordUpdate[] = []) {
+  async submitSheet(sheetId: string, expectedRevision: number, classNote?: string | null, records: AttendanceRecordUpdate[] = []) {
     const response = await apiClient.post<AttendanceSheet>(`/attendance/sheets/${sheetId}/submit`, {
       class_note: classNote,
+      expected_revision: expectedRevision,
       records,
     })
     return response.data
@@ -188,7 +201,15 @@ export const attendanceApi = {
     return response.data
   },
 
-  async resolveCorrection(requestId: string, status: AttendanceCorrectionStatus, resolutionNote?: string | null) {
+  async createCorrection(recordId: string, reason: string) {
+    const response = await apiClient.post<AttendanceCorrectionRequest>('/attendance/corrections', {
+      record_id: recordId,
+      reason,
+    })
+    return response.data
+  },
+
+  async resolveCorrection(requestId: string, status: AttendanceCorrectionStatus, resolutionNote: string) {
     const response = await apiClient.post<AttendanceCorrectionRequest>(`/attendance/corrections/${requestId}/resolve`, {
       status,
       resolution_note: resolutionNote,
