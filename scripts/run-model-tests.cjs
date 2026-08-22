@@ -16,6 +16,7 @@ const models = [
   'src/screens/learning/agenticLearningModel.ts',
   'src/screens/learning/previousPapersModel.ts',
   'src/screens/papers/generatePaperSettingsModel.ts',
+  'src/screens/papers/customPaperModel.ts',
   'src/screens/papers/paperAttemptModel.ts',
   'src/screens/papers/paperDetailModel.ts',
   'src/screens/workspace/examWorkspaceModel.ts',
@@ -53,6 +54,10 @@ const suites = [
   {
     file: 'scripts/generate-paper-settings.test.cjs',
     env: { GENERATE_PAPER_SETTINGS_MODEL_PATH: path.join(outDir, 'screens/papers/generatePaperSettingsModel.js') },
+  },
+  {
+    file: 'scripts/custom-paper-model.test.cjs',
+    env: { CUSTOM_PAPER_MODEL_PATH: path.join(outDir, 'screens/papers/customPaperModel.js') },
   },
   {
     file: 'scripts/paper-attempt-model.test.cjs',
