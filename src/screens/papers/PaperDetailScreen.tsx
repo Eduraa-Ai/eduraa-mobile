@@ -9,6 +9,7 @@ import {
   Animated,
   Modal,
   Pressable,
+  TextInput,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -97,6 +98,8 @@ export default function PaperDetailScreen() {
   const user = useAuthStore((state) => state.user);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [isOpeningResult, setIsOpeningResult] = useState(false);
   const resultOpeningRef = useRef(false);
@@ -136,14 +139,17 @@ export default function PaperDetailScreen() {
     user?.role === "b2c_student" ||
     Boolean(
       ownedPapersQuery.data?.items.some((item) => item.id === params.paperId),
-    ) ||
-    Boolean(paper?.created_by && paper.created_by === user?.id);
-  // Publishing is what releases a draft to the teacher's class, so it is only
-  // offered to the teacher who created it.
-  const canPublish =
-    user?.role === "teacher" &&
-    Boolean(paper?.created_by && paper.created_by === user?.id) &&
-    paper?.status !== "published";
+    );
+  // Teachers author papers for a class rather than sitting them, so the whole
+  // attempt/quiz/retest set belongs to learners only.
+  const isTeacher = user?.role === "teacher";
+  const isPublished = paper?.status === "published";
+  // The detail response carries no `created_by`, but a teacher's paper list is
+  // already scoped to papers they own and the backend rejects publishing
+  // anyone else's, so ownership does not need re-checking here.
+  const canPublish = isTeacher && Boolean(paper) && !isPublished;
+  // The backend accepts a rename from whoever created the paper.
+  const canRename = isTeacher || canDelete;
 
   const downloadMutation = useMutation({
     mutationFn: async () => {
@@ -194,6 +200,27 @@ export default function PaperDetailScreen() {
         typeof detail === "string"
           ? detail
           : "This paper could not be published. Make sure it has a standard and division.",
+      );
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: (title: string) => papersApi.updateTitle(params.paperId, title),
+    onMutate: () => setActionError(null),
+    onSuccess: async () => {
+      setRenameOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["paper", params.paperId] }),
+        queryClient.invalidateQueries({ queryKey: ["papers"] }),
+      ]);
+    },
+    onError: (error: any) => {
+      setRenameOpen(false);
+      const detail = error?.response?.data?.detail;
+      setActionError(
+        typeof detail === "string"
+          ? detail
+          : "This paper could not be renamed. Only papers you created can be edited.",
       );
     },
   });
@@ -425,7 +452,21 @@ export default function PaperDetailScreen() {
               </Text>
             </TouchableOpacity>
           ) : null}
-          {canOpenSubmittedResult && submittedAttempt ? (
+          {isTeacher && isPublished ? (
+            <View style={styles.publishedNotice}>
+              <Ionicons
+                name="checkmark-circle"
+                size={18}
+                color={colors.success}
+              />
+              <Text style={styles.publishedNoticeText}>
+                {paper.standard && paper.division
+                  ? `Published to ${paper.standard} ${paper.division}`
+                  : "Published to your class"}
+              </Text>
+            </View>
+          ) : null}
+          {isTeacher ? null : canOpenSubmittedResult && submittedAttempt ? (
             <TouchableOpacity
               style={[
                 styles.primaryBtn,
@@ -492,7 +533,7 @@ export default function PaperDetailScreen() {
               </Text>
             </TouchableOpacity>
           )}
-          {submittedAttempt ? (
+          {isTeacher ? null : submittedAttempt ? (
             <TouchableOpacity
               style={[
                 styles.secondaryBtn,
@@ -646,7 +687,7 @@ export default function PaperDetailScreen() {
             style={[styles.actionMenu, { top: insets.top + 54 }]}
           >
             <Text style={styles.actionMenuEyebrow}>Paper actions</Text>
-            {submittedAttempt ? (
+            {submittedAttempt && !isTeacher ? (
               <Pressable
                 accessibilityRole="menuitem"
                 accessibilityLabel="Start a fresh retest"
@@ -672,6 +713,35 @@ export default function PaperDetailScreen() {
                   </Text>
                   <Text style={styles.actionMenuBody}>
                     Keep every previous result and open a blank attempt.
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+            {canRename ? (
+              <Pressable
+                accessibilityRole="menuitem"
+                accessibilityLabel="Rename paper"
+                onPress={() => {
+                  setActionMenuOpen(false);
+                  setRenameValue(paper.title);
+                  setRenameOpen(true);
+                }}
+                style={({ pressed }) => [
+                  styles.actionMenuItem,
+                  pressed && styles.headerActionPressed,
+                ]}
+              >
+                <View style={styles.actionMenuIcon}>
+                  <Ionicons
+                    name="create-outline"
+                    size={20}
+                    color={colors.accentStrong}
+                  />
+                </View>
+                <View style={styles.actionMenuCopy}>
+                  <Text style={styles.actionMenuTitle}>Rename paper</Text>
+                  <Text style={styles.actionMenuBody}>
+                    Change the title students and teachers see.
                   </Text>
                 </View>
               </Pressable>
@@ -740,6 +810,98 @@ export default function PaperDetailScreen() {
                 </View>
               </Pressable>
             ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={renameOpen}
+        onRequestClose={() => {
+          if (!renameMutation.isPending) setRenameOpen(false);
+        }}
+      >
+        <View style={styles.confirmBackdrop}>
+          <Pressable
+            accessibilityLabel="Cancel rename"
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              if (!renameMutation.isPending) setRenameOpen(false);
+            }}
+          />
+          <View
+            style={[
+              styles.confirmSheet,
+              { paddingBottom: insets.bottom + spacing[5] },
+            ]}
+          >
+            <View style={styles.confirmHandle} />
+            <View style={styles.confirmIcon}>
+              <Ionicons
+                name="create-outline"
+                size={24}
+                color={colors.accentStrong}
+              />
+            </View>
+            <Text style={styles.confirmEyebrow}>Paper name</Text>
+            <Text style={styles.confirmTitle}>Rename this paper</Text>
+            <TextInput
+              value={renameValue}
+              onChangeText={setRenameValue}
+              maxLength={200}
+              autoFocus
+              selectTextOnFocus
+              editable={!renameMutation.isPending}
+              placeholder="Paper name"
+              placeholderTextColor={colors.textMuted}
+              style={styles.renameInput}
+              accessibilityLabel="Paper name"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                const next = renameValue.trim();
+                if (next && next !== paper.title) renameMutation.mutate(next);
+              }}
+            />
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={renameMutation.isPending}
+                onPress={() => setRenameOpen(false)}
+                style={styles.confirmCancel}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel rename"
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                disabled={
+                  renameMutation.isPending ||
+                  !renameValue.trim() ||
+                  renameValue.trim() === paper.title
+                }
+                onPress={() => renameMutation.mutate(renameValue.trim())}
+                style={[
+                  styles.confirmSave,
+                  (renameMutation.isPending ||
+                    !renameValue.trim() ||
+                    renameValue.trim() === paper.title) &&
+                    styles.primaryBtnDisabled,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Save paper name"
+              >
+                {renameMutation.isPending ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color={colors.white} />
+                )}
+                <Text style={styles.confirmDeleteText}>
+                  {renameMutation.isPending ? "Saving…" : "Save name"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -925,6 +1087,24 @@ const styles = StyleSheet.create({
   submittedScore: { fontSize: 12, color: colors.success, marginTop: 2 },
 
   actions: { flexDirection: "row", gap: spacing[3] },
+  publishedNotice: {
+    flex: 1,
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+  },
+  publishedNoticeText: {
+    color: colors.success,
+    fontWeight: "700",
+    fontSize: 14,
+  },
   primaryBtn: {
     flex: 1,
     height: 50,
@@ -1245,6 +1425,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing[2],
     backgroundColor: colors.danger,
+  },
+  confirmSave: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: spacing[2],
+    backgroundColor: colors.accent,
+  },
+  renameInput: {
+    width: "100%",
+    minHeight: 52,
+    marginTop: spacing[4],
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    color: colors.text,
+    fontSize: 15,
   },
   confirmDeleteText: {
     color: colors.white,

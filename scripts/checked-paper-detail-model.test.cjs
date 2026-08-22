@@ -70,6 +70,42 @@ test('question evidence resolves by stable id before index', () => {
   assert.equal(evidence.item.question_number, 7)
 })
 
+test('unread teacher responses are separate from resolved review history', () => {
+  const fixture = paper()
+  fixture.grading_results[0].question_review_thread = [
+    { author_role: 'student', event_type: 'requested' },
+    { author_role: 'teacher', event_type: 'resolved', student_notification_pending: false },
+  ]
+  fixture.grading_results[1].question_review_thread = [
+    { author_role: 'student', event_type: 'requested' },
+    { author_role: 'teacher', event_type: 'teacher_reply', student_notification_pending: true },
+  ]
+
+  assert.equal(model.hasUnreadTeacherReviewResponse(fixture.grading_results[0]), false)
+  assert.equal(model.hasUnreadTeacherReviewResponse(fixture.grading_results[1]), true)
+  assert.deepEqual(
+    model.unreadQuestionReviewResponseItems(fixture).map(({ index }) => index),
+    [1],
+  )
+})
+
+test('legacy review threads notify only for the newest teacher response after the latest student message', () => {
+  const item = question(4, 1, 1, {
+    result_id: 'result-4',
+    question_review_thread: [
+      { author_role: 'student', message: 'First request', created_at: '2026-08-20T10:00:00Z' },
+      { author_role: 'teacher', message: 'First response', created_at: '2026-08-20T10:01:00Z' },
+      { author_role: 'student', message: 'Please check again', created_at: '2026-08-20T10:02:00Z' },
+      { author_role: 'teacher', event_type: 'resolved', message: 'Updated', created_at: '2026-08-20T10:03:00Z' },
+    ],
+  })
+  const key = model.reviewResponseNotificationKey('paper-1', item, 3)
+
+  assert.equal(key, 'paper-1:result-4:2026-08-20T10:03:00Z')
+  assert.equal(model.hasUnreadTeacherReviewResponse(item, 3, 'paper-1'), true)
+  assert.equal(model.hasUnreadTeacherReviewResponse(item, 3, 'paper-1', new Set([key])), false)
+})
+
 test('question evidence survives refreshed data when a unique stable id moves', () => {
   const fixture = paper()
   const moved = fixture.grading_results.splice(6, 1)[0]

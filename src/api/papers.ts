@@ -241,7 +241,11 @@ export const papersApi = {
     const response = await apiClient.post<Paper>(`/papers/${paperId}/publish`);
     return normalizePaperQuestionVisuals(response.data);
   },
-
+  // Returns the paper without its questions, so callers should refresh the
+  // detail rather than replacing a cached paper with this response.
+  updateTitle: async (paperId: string, title: string): Promise<void> => {
+    await apiClient.patch(`/papers/${paperId}/title`, { title });
+  },
   getInteractiveAssist: async (
     paperId: string,
     data: {

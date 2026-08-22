@@ -1,4 +1,5 @@
 import type { CheckedPaper } from '../../types'
+import { hasUnreadTeacherReviewResponse } from './checkedPaperDetailModel'
 
 export type CheckedPaperTab = 'all' | 'needs_attention' | 'strong'
 
@@ -23,6 +24,56 @@ export function getPaperSubject(paper: CheckedPaper) {
 
 export function getQuestionCount(paper: CheckedPaper) {
   return paper.grading_results?.length ?? null
+}
+
+export function getQuestionReviewItems(paper: CheckedPaper) {
+  return (paper.grading_results ?? [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => Boolean(item.manual_review_requested && !item.manual_review_completed))
+}
+
+export function questionReviewLabel(item: { question_number?: number | null }, index: number) {
+  return `Question ${item.question_number ?? index + 1}`
+}
+
+export function getQuestionReviewLabels(paper: CheckedPaper) {
+  const labels = paper.pending_question_review_labels?.filter(Boolean) ?? []
+  if (labels.length) return labels
+  const itemLabels = getQuestionReviewItems(paper).map(({ item, index }) => questionReviewLabel(item, index))
+  if (itemLabels.length) return itemLabels
+  return paper.manual_review_requested ? ['Question review'] : []
+}
+
+export function getQuestionReviewCount(paper: CheckedPaper) {
+  if (paper.pending_question_review_count && paper.pending_question_review_count > 0) {
+    return paper.pending_question_review_count
+  }
+  const itemCount = getQuestionReviewItems(paper).length
+  if (itemCount > 0) return itemCount
+  return paper.manual_review_requested ? 1 : 0
+}
+
+export function getUnreadReviewResponseItems(paper: CheckedPaper, seenKeys: ReadonlySet<string> = new Set()) {
+  return (paper.grading_results ?? [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item, index }) => hasUnreadTeacherReviewResponse(item, index, paper.id, seenKeys))
+}
+
+export function getUnreadReviewResponseLabels(paper: CheckedPaper, seenKeys: ReadonlySet<string> = new Set()) {
+  const itemLabels = getUnreadReviewResponseItems(paper, seenKeys).map(({ item, index }) => questionReviewLabel(item, index))
+  if (paper.grading_results) return itemLabels
+  const labels = paper.unread_question_review_response_labels?.filter(Boolean) ?? []
+  if (labels.length) return labels
+  return itemLabels
+}
+
+export function getUnreadReviewResponseCount(paper: CheckedPaper, seenKeys: ReadonlySet<string> = new Set()) {
+  const itemCount = getUnreadReviewResponseItems(paper, seenKeys).length
+  if (paper.grading_results) return itemCount
+  if (paper.unread_question_review_response_count && paper.unread_question_review_response_count > 0) {
+    return paper.unread_question_review_response_count
+  }
+  return itemCount
 }
 
 export function scorePercent(paper: CheckedPaper) {
@@ -62,6 +113,7 @@ export function isNeedsAttention(paper: CheckedPaper) {
   const percent = scorePercent(paper)
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
   if (failedStatuses.has(status)) return true
+  if (getQuestionReviewCount(paper) > 0) return true
   if (paper.manual_review_requested || paper.needs_review || paper.status === 'pending_manual_review') return true
   if (checkingStatuses.has(status)) return true
   return percent != null ? percent < STRONG_PERCENT : false
@@ -75,6 +127,8 @@ export function isStrong(paper: CheckedPaper) {
 
 export function paperStatusLabel(paper: CheckedPaper) {
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  const questionReviewCount = getQuestionReviewCount(paper)
+  if (questionReviewCount > 0) return `${questionReviewCount} question review${questionReviewCount === 1 ? '' : 's'}`
   if (paper.manual_review_requested) return 'Manual review requested'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'Needs review'
   if (failedStatuses.has(status)) return 'Checking failed'
@@ -87,6 +141,11 @@ export function paperStatusLabel(paper: CheckedPaper) {
 export function paperInsight(paper: CheckedPaper) {
   const percent = scorePercent(paper)
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  const questionReviewCount = getQuestionReviewCount(paper)
+  if (questionReviewCount > 0) {
+    const labels = getQuestionReviewLabels(paper).slice(0, 2).join(', ')
+    return `${questionReviewCount} review request${questionReviewCount === 1 ? '' : 's'} pending${labels ? `: ${labels}` : ''}.`
+  }
   if (paper.manual_review_requested) return 'Awaiting a manual review.'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'The reviewer needs to look at this paper.'
   if (failedStatuses.has(status)) return 'Checking did not finish. Open this paper for a safe recovery path.'
@@ -111,7 +170,7 @@ export function buildAssessmentModel(papers: CheckedPaper[]) {
   const strongCount = papers.filter(isStrong).length
   const attentionCount = papers.filter(isNeedsAttention).length
   const reviewCount = papers.filter(
-    (paper) => paper.manual_review_requested || paper.needs_review || paper.status === 'pending_manual_review',
+    (paper) => paper.manual_review_requested || paper.needs_review || paper.status === 'pending_manual_review' || getQuestionReviewCount(paper) > 0,
   ).length
   const latest = scored[0] ?? null
   const previous = scored[1] ?? null
