@@ -205,6 +205,65 @@ export function agenticFailureKind(error: unknown): AgenticLearningFailureKind {
   return error instanceof AgenticLearningContentError ? 'content' : 'api'
 }
 
+/**
+ * Warms concept lessons so opening a card is instant instead of a 15-20s wait.
+ *
+ * Lessons are LLM-generated on first request and cached server-side
+ * afterwards, so one warm makes that topic permanently fast for the learner.
+ * Deliberately conservative: each warm costs a generation, so this runs
+ * sequentially, skips anything already cached, and caps how many it takes.
+ */
+export async function warmTopicLessons(
+  queryClient: QueryClient,
+  topicIds: string[],
+  limit = 3,
+) {
+  const pending = topicIds
+    .filter(Boolean)
+    .filter((topicId) => !queryClient.getQueryData(['agentic-topic', topicId]))
+    .slice(0, limit)
+
+  // Sequential on purpose. Firing these in parallel would put several
+  // concurrent LLM generations against the same rate limit for a screen the
+  // learner may never scroll through.
+  for (const topicId of pending) {
+    try {
+      await queryClient.prefetchQuery({
+        queryKey: ['agentic-topic', topicId],
+        queryFn: ({ signal }) => agenticLearningApi.getTopic(topicId, signal),
+        staleTime: 30 * 60 * 1000,
+        gcTime: 24 * 60 * 60 * 1000,
+      })
+    } catch {
+      // Warming is best-effort; a failure just means the card opens the slow way.
+    }
+  }
+}
+
+/**
+ * Warms the single lesson a learner is most likely to open, from a screen that
+ * does not yet know which topic that is.
+ *
+ * Home only knows a focus chapter, not a topic id, so this resolves the
+ * priority action first (a cheap non-LLM call, usually already cached) and
+ * then warms that one lesson. Running this from Home buys the whole time the
+ * learner spends reading their plan before tapping "Start learning".
+ */
+export async function warmPriorityLesson(queryClient: QueryClient) {
+  try {
+    const actions = await queryClient.fetchQuery({
+      queryKey: ['agentic-quick-actions'],
+      queryFn: agenticLearningApi.getQuickActions,
+      staleTime: 30 * 60 * 1000,
+    })
+    const topicId = actions.find((action) => action.available && action.target_topic_id)?.target_topic_id
+    if (!topicId) return
+    await warmTopicLessons(queryClient, [topicId], 1)
+  } catch {
+    // Best effort. The hub and subject screens warm again on arrival.
+  }
+}
+
 export async function prefetchAgenticLearning(
   queryClient: QueryClient,
   checkedPaperId?: string,

@@ -1,9 +1,9 @@
-import React, { ReactNode, useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import React, { ReactNode, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectField, SelectableChip, SkeletonCard, TextInputField } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, DateField, ErrorState, GradientHeroCard, MultiSelectField, SelectField, SelectableChip, SkeletonCard, TextInputField } from '../../components/ui'
 import { examsApi, ExamPayload } from '../../api/exams'
 import { cheatSheetsApi, CheatSheetSyllabus, CheatSheetSyllabusList } from '../../api/cheatSheets'
 import { checkedPapersApi } from '../../api/checkedPapers'
@@ -40,6 +40,7 @@ type SubjectVisual = {
 }
 
 const adminRoles: Role[] = ['admin', 'developer', 'principal', 'school_super_admin', 'branch_admin']
+const defaultSemesterOptions = ['Semester 1', 'Semester 2', 'Annual']
 const fallbackSubjectVisual: SubjectVisual = { icon: 'document-text-outline', tone: colors.accent }
 const subjectVisuals: Array<SubjectVisual & { keys: string[] }> = [
   { keys: ['physics', 'mechanics', 'electricity', 'magnetism', 'optics'], icon: 'planet-outline', tone: colors.info },
@@ -942,7 +943,6 @@ interface ExamFormState {
   standard: string
   division: string
   semester: string
-  category: string
   examDate: string
   durationMinutes: string
   autoGradeEnabled: boolean
@@ -957,7 +957,6 @@ const emptyForm: ExamFormState = {
   standard: '',
   division: '',
   semester: '',
-  category: '',
   examDate: '',
   durationMinutes: '',
   autoGradeEnabled: true,
@@ -973,7 +972,6 @@ function formFromExam(exam: Exam): ExamFormState {
     standard: exam.standard || '',
     division: exam.division || '',
     semester: exam.semester || '',
-    category: exam.category || '',
     examDate: exam.exam_date || '',
     durationMinutes: exam.duration_minutes ? String(exam.duration_minutes) : '',
     autoGradeEnabled: exam.auto_grade_enabled,
@@ -1078,6 +1076,11 @@ function StaffExamCard({
 
       <View style={styles.staffCardActions}>
         <StaffCardActionButton
+          label="Edit"
+          icon="create-outline"
+          onPress={onPress}
+        />
+        <StaffCardActionButton
           label={syllabus ? 'Update syllabus' : 'Share syllabus'}
           icon="share-social-outline"
           loading={sharingSyllabus}
@@ -1090,8 +1093,10 @@ function StaffExamCard({
 
 function StaffExamsView({ role }: { role?: Role }) {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null)
   const [form, setForm] = useState<ExamFormState>(emptyForm)
+  const scrollRef = useRef<ScrollView>(null)
 
   const examsQuery = useQuery({ queryKey: ['exams', 'staff'], queryFn: examsApi.listStaffExams })
   const subjectsQuery = useQuery({ queryKey: ['exams', 'subjects'], queryFn: examsApi.listSubjects })
@@ -1128,12 +1133,23 @@ function StaffExamsView({ role }: { role?: Role }) {
     return Array.from(new Set([...(optionsQuery.data?.divisions ?? []), ...fromPapers]))
   }, [optionsQuery.data?.divisions, papers])
 
-  const subjectSelectOptions = subjects.map((subject) => ({ value: subject.id, label: subject.name }))
+  const visibleSubjects = useMemo(() => {
+    if (role !== 'teacher') return subjects
+    const taught = new Set((user?.subjects_taught ?? []).map((name) => name.trim().toLowerCase()).filter(Boolean))
+    if (taught.size === 0) return subjects
+    return subjects.filter((subject) => taught.has(subject.name.trim().toLowerCase()))
+  }, [role, subjects, user?.subjects_taught])
+
+  const subjectSelectOptions = visibleSubjects.map((subject) => ({ value: subject.id, label: subject.name }))
   const teacherSelectOptions = teachers
     .filter((teacher) => teacher.is_active && teacher.is_approved)
     .map((teacher) => ({ value: teacher.id, label: compact([`${teacher.first_name} ${teacher.last_name}`, teacher.teacher_id, teacher.email]) }))
   const standardSelectOptions = standardOptions.map((value) => ({ value, label: value }))
   const divisionSelectOptions = divisionOptions.map((value) => ({ value, label: value }))
+  const semesterSelectOptions = useMemo(() => {
+    const fromExams = exams.map((exam) => exam.semester).filter((value): value is string => Boolean(value))
+    return Array.from(new Set([...defaultSemesterOptions, ...fromExams])).map((value) => ({ value, label: value }))
+  }, [exams])
 
   const filteredPapers = useMemo(() => {
     return papers.filter((paper) => {
@@ -1143,6 +1159,11 @@ function StaffExamsView({ role }: { role?: Role }) {
       return true
     })
   }, [form.division, form.standard, form.subjectId, papers])
+
+  const paperSelectOptions = useMemo(
+    () => filteredPapers.map((paper) => ({ value: paper.id, label: compact([paper.title, `${paper.total_marks} marks`]) })),
+    [filteredPapers],
+  )
 
   const resetForm = () => {
     setSelectedExam(null)
@@ -1166,7 +1187,6 @@ function StaffExamsView({ role }: { role?: Role }) {
         standard: form.standard || null,
         division: form.division || null,
         semester: form.semester.trim() || null,
-        category: form.category.trim() || null,
         exam_date: form.examDate.trim() || null,
         duration_minutes: duration,
         auto_grade_enabled: form.autoGradeEnabled,
@@ -1226,17 +1246,9 @@ function StaffExamsView({ role }: { role?: Role }) {
     )
   }
 
-  const togglePaper = (paperId: string) => {
-    setForm((current) => ({
-      ...current,
-      paperIds: current.paperIds.includes(paperId)
-        ? current.paperIds.filter((id) => id !== paperId)
-        : [...current.paperIds, paperId],
-    }))
-  }
-
   return (
     <AppScreen
+      ref={scrollRef}
       contentStyle={styles.screen}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
         void examsQuery.refetch()
@@ -1312,12 +1324,11 @@ function StaffExamsView({ role }: { role?: Role }) {
           </View>
           <View style={styles.twoColumn}>
             <View style={styles.fieldHalf}>
-              <TextInputField
+              <DateField
                 label="Exam date"
                 value={form.examDate}
-                onChangeText={(examDate) => setForm((current) => ({ ...current, examDate }))}
-                placeholder="YYYY-MM-DD"
-                left={<Ionicons name="calendar" size={17} color={colors.textMuted} />}
+                onChange={(examDate) => setForm((current) => ({ ...current, examDate }))}
+                placeholder="Select date"
               />
             </View>
             <View style={styles.fieldHalf}>
@@ -1331,24 +1342,21 @@ function StaffExamsView({ role }: { role?: Role }) {
               />
             </View>
           </View>
-          <View style={styles.twoColumn}>
-            <View style={styles.fieldHalf}>
-              <TextInputField
-                label="Semester"
-                value={form.semester}
-                onChangeText={(semester) => setForm((current) => ({ ...current, semester }))}
-                placeholder="Optional"
-              />
-            </View>
-            <View style={styles.fieldHalf}>
-              <TextInputField
-                label="Category"
-                value={form.category}
-                onChangeText={(category) => setForm((current) => ({ ...current, category }))}
-                placeholder="Unit test"
-              />
-            </View>
-          </View>
+          <SelectField
+            label="Semester"
+            value={form.semester}
+            placeholder="Select semester"
+            options={semesterSelectOptions}
+            onChange={(semester) => setForm((current) => ({ ...current, semester }))}
+          />
+          <MultiSelectField
+            label="Papers"
+            values={form.paperIds}
+            placeholder="Select papers"
+            options={paperSelectOptions}
+            onChange={(paperIds) => setForm((current) => ({ ...current, paperIds }))}
+            disabled={paperSelectOptions.length === 0}
+          />
           <View style={styles.chipRow}>
             <SelectableChip
               label="Auto grade"
@@ -1369,28 +1377,6 @@ function StaffExamsView({ role }: { role?: Role }) {
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title="Attach papers" subtitle="Published papers matching the selected filters." count={filteredPapers.length} />
-        {filteredPapers.length === 0 ? (
-          <AnimatedCard style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No matching published papers.</Text>
-          </AnimatedCard>
-        ) : (
-          filteredPapers.map((paper) => {
-            const selected = form.paperIds.includes(paper.id)
-            return (
-              <Pressable key={paper.id} onPress={() => togglePaper(paper.id)} style={({ pressed }) => [styles.paperSelectCard, selected && styles.paperSelectCardActive, pressed && styles.pressed]}>
-                <View style={styles.paperRowCopy}>
-                  <Text style={styles.paperRowTitle}>{paper.title}</Text>
-                  <Text style={styles.paperRowMeta}>{compact([paper.subject_name, paper.standard, paper.division, `${paper.total_marks} marks`])}</Text>
-                </View>
-                <Ionicons name={selected ? 'checkmark-circle' : 'add-circle-outline'} size={22} color={selected ? colors.accent : colors.textSoft} />
-              </Pressable>
-            )
-          })
-        )}
-      </View>
-
-      <View style={styles.section}>
         <SectionHeader title="Existing exams" subtitle="Tap an exam to edit its mobile form." count={exams.length} />
         {exams.length === 0 ? (
           <AnimatedCard style={styles.emptyCard}>
@@ -1408,6 +1394,7 @@ function StaffExamsView({ role }: { role?: Role }) {
               onPress={() => {
                 setSelectedExam(exam)
                 setForm(formFromExam(exam))
+                scrollRef.current?.scrollTo({ y: 0, animated: true })
               }}
               onShareSyllabus={() => shareSyllabusMutation.mutate(exam)}
             />
@@ -2267,22 +2254,6 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-  },
-  paperSelectCard: {
-    minHeight: 70,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.card,
-    padding: spacing[4],
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    ...shadows.sm,
-  },
-  paperSelectCardActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSurface,
   },
   pressed: {
     opacity: 0.72,

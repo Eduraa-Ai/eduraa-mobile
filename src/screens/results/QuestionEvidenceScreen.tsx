@@ -33,15 +33,18 @@ import {
   findEvidenceQuestion,
   findNextEvidenceQuestion,
   findPreviousEvidenceQuestion,
+  hasUnreadTeacherReviewResponse,
   questionStatus,
   questionTypeLabel,
   readableMathText,
+  reviewResponseNotificationKey,
   type DetailedExplanationSection,
   type QuestionEvidenceTab,
   type QuestionOptionContext,
   type QuestionReviewFigure,
   type QuestionReviewOption,
 } from './checkedPaperDetailModel'
+import { loadSeenReviewResponseKeys, markReviewResponseSeen } from './reviewNotificationState'
 
 type Route = RouteProp<ResultsStackParamList, 'QuestionEvidence'>
 type Nav = NativeStackNavigationProp<ResultsStackParamList, 'QuestionEvidence'>
@@ -331,11 +334,15 @@ export default function QuestionEvidenceScreen() {
   const isB2BStudent = user?.role === 'student'
   const compact = width < 380
   const scrollRef = useRef<ScrollView>(null)
+  const reviewSeenKeyRef = useRef<string | null>(null)
   const [activeTab, setActiveTab] = useState<QuestionEvidenceTab>('feedback')
   const [reviewNote, setReviewNote] = useState('')
   const [teacherReply, setTeacherReply] = useState('')
   const [teacherScore, setTeacherScore] = useState('')
   const [teacherFeedback, setTeacherFeedback] = useState('')
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null)
+  const [seenReviewResponseKeys, setSeenReviewResponseKeys] = useState<Set<string>>(new Set())
+  const [seenReviewResponseKeysLoaded, setSeenReviewResponseKeysLoaded] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const [isOpeningScan, setIsOpeningScan] = useState(false)
   const { data, isLoading, isError, refetch } = useQuery({
@@ -348,6 +355,32 @@ export default function QuestionEvidenceScreen() {
     [data, params.questionId, params.questionIndex],
   )
   const review = useMemo(() => evidence ? buildQuestionReview(evidence.item) : null, [evidence])
+  const responseNotificationKey = evidence
+    ? reviewResponseNotificationKey(params.checkedPaperId, evidence.item, evidence.index)
+    : null
+  const unreadTeacherResponse = Boolean(
+    seenReviewResponseKeysLoaded
+    && evidence
+    && hasUnreadTeacherReviewResponse(
+      evidence.item,
+      evidence.index,
+      params.checkedPaperId,
+      seenReviewResponseKeys,
+    )
+  )
+
+  const reviewSeenMutation = useMutation({
+    mutationFn: () => checkedPapersApi.markQuestionReviewSeen(params.checkedPaperId, {
+      question_id: evidence?.item.question_id || null,
+      result_id: evidence?.item.result_id || null,
+    }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['checked-paper', params.checkedPaperId] }),
+        queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
+      ])
+    },
+  })
 
   const reviewMutation = useMutation({
     mutationFn: () => {
@@ -359,6 +392,8 @@ export default function QuestionEvidenceScreen() {
       })
     },
     onSuccess: async () => {
+      setReviewNotice('Review request sent. Your teacher will see this question in their review list.')
+      setActiveTab('review')
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['checked-paper', params.checkedPaperId] }),
         queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
@@ -372,8 +407,9 @@ export default function QuestionEvidenceScreen() {
       result_id: evidence?.item.result_id || null,
       resolve,
     }),
-    onSuccess: async () => {
+    onSuccess: async (_data, resolve) => {
       setTeacherReply('')
+      setReviewNotice(resolve ? 'Review resolved. The student can see your response on this question.' : 'Response saved. The student can see it on this question.')
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['checked-paper', params.checkedPaperId] }),
         queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
@@ -396,6 +432,7 @@ export default function QuestionEvidenceScreen() {
       })
     },
     onSuccess: async () => {
+      setReviewNotice('Updated marks saved for this question.')
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['checked-paper', params.checkedPaperId] }),
         queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
@@ -404,17 +441,51 @@ export default function QuestionEvidenceScreen() {
   })
 
   useEffect(() => {
+    let active = true
+    setSeenReviewResponseKeysLoaded(false)
+    void loadSeenReviewResponseKeys(user?.id).then((keys) => {
+      if (!active) return
+      setSeenReviewResponseKeys(keys)
+      setSeenReviewResponseKeysLoaded(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [user?.id])
+
+  useEffect(() => {
     setActiveTab('feedback')
     setReviewNote('')
     setTeacherReply('')
     setTeacherScore('')
     setTeacherFeedback('')
+    setReviewNotice(null)
     setScanError(null)
     reviewMutation.reset()
     teacherCommentMutation.reset()
     teacherRegradeMutation.reset()
+    reviewSeenMutation.reset()
+    reviewSeenKeyRef.current = null
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }))
   }, [params.questionId, params.questionIndex])
+
+  useEffect(() => {
+    if (!isB2BStudent || !evidence) return
+    if (unreadTeacherResponse || evidence.item.manual_review_requested) {
+      setActiveTab('review')
+    }
+  }, [evidence, isB2BStudent, unreadTeacherResponse])
+
+  useEffect(() => {
+    if (!isB2BStudent || !user?.id || activeTab !== 'review' || !evidence || !responseNotificationKey || !unreadTeacherResponse || reviewSeenMutation.isPending) return
+    if (reviewSeenKeyRef.current === responseNotificationKey) return
+    reviewSeenKeyRef.current = responseNotificationKey
+    void markReviewResponseSeen(user.id, responseNotificationKey).then((keys) => {
+      setSeenReviewResponseKeys(keys)
+      void queryClient.invalidateQueries({ queryKey: ['checked-papers'] })
+      reviewSeenMutation.mutate()
+    })
+  }, [activeTab, evidence, isB2BStudent, queryClient, responseNotificationKey, reviewSeenMutation, unreadTeacherResponse, user?.id])
 
   if (!data || !evidence || !review) {
     return (
@@ -618,6 +689,16 @@ export default function QuestionEvidenceScreen() {
                 <Ionicons name="arrow-forward" size={17} color={colors.accentStrong} />
               </Pressable>
             </View>
+
+            {reviewNotice ? (
+              <View style={styles.reviewSuccessNotice} accessibilityRole="alert">
+                <Ionicons name="checkmark-circle-outline" size={18} color={colors.success} />
+                <Text style={styles.reviewSuccessText}>{reviewNotice}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Dismiss review notice" hitSlop={8} onPress={() => setReviewNotice(null)}>
+                  <Ionicons name="close" size={17} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            ) : null}
 
             {activeTab === 'feedback' ? (
               <View style={[styles.panel, compact && styles.panelCompact]}>
@@ -941,6 +1022,8 @@ const styles = StyleSheet.create({
   questionNavigationDisabled: { opacity: 0.34 },
   questionNavigationLabel: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 17 },
   questionNavigationProgress: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14, textAlign: 'center' },
+  reviewSuccessNotice: { width: '100%', maxWidth: 760, alignSelf: 'center', minHeight: 48, marginBottom: spacing[3], borderRadius: 14, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successSurface, paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  reviewSuccessText: { flex: 1, minWidth: 0, color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 15 },
   panel: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: spacing[3] },
   panelCompact: { gap: spacing[2] },
   questionBlock: { paddingBottom: spacing[4], borderBottomWidth: 1, borderBottomColor: '#eadfd1' },

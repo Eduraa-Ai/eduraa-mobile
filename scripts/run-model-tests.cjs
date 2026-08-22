@@ -17,6 +17,7 @@ const models = [
   'src/screens/learning/previousPapersModel.ts',
   'src/screens/learning/schoolPreviousPapersModel.ts',
   'src/screens/papers/generatePaperSettingsModel.ts',
+  'src/screens/papers/customPaperModel.ts',
   'src/screens/papers/paperAttemptModel.ts',
   'src/screens/papers/paperDetailModel.ts',
   'src/screens/workspace/examWorkspaceModel.ts',
@@ -24,6 +25,7 @@ const models = [
   'src/screens/workspace/announcementModel.ts',
   'src/screens/workspace/attendanceModel.ts',
   'src/screens/workspace/doubtWorkspaceModel.ts',
+  'src/screens/workspace/checkedPaperPipelineModel.ts',
   'src/navigation/paperResultsNavigation.ts',
   'src/utils/mathText.ts',
   'src/utils/mathContent.ts',
@@ -31,6 +33,7 @@ const models = [
   'src/utils/latex.ts',
   'src/utils/aiResponseContent.ts',
   'src/utils/questionVisual.ts',
+  'src/utils/matchColumns.ts',
   'src/utils/bookPaperGeneration.ts',
   'src/auth/queryCacheScope.ts',
   'src/auth/roles.ts',
@@ -64,6 +67,10 @@ const suites = [
     env: { GENERATE_PAPER_SETTINGS_MODEL_PATH: path.join(outDir, 'screens/papers/generatePaperSettingsModel.js') },
   },
   {
+    file: 'scripts/custom-paper-model.test.cjs',
+    env: { CUSTOM_PAPER_MODEL_PATH: path.join(outDir, 'screens/papers/customPaperModel.js') },
+  },
+  {
     file: 'scripts/paper-attempt-model.test.cjs',
     env: { PAPER_ATTEMPT_MODEL_PATH: path.join(outDir, 'screens/papers/paperAttemptModel.js') },
   },
@@ -82,6 +89,10 @@ const suites = [
   {
     file: 'scripts/exam-workspace-model.test.cjs',
     env: { EXAM_WORKSPACE_MODEL_PATH: path.join(outDir, 'screens/workspace/examWorkspaceModel.js') },
+  },
+  {
+    file: 'scripts/checked-paper-pipeline-model.test.cjs',
+    env: { CHECKED_PAPER_PIPELINE_MODEL_PATH: path.join(outDir, 'screens/workspace/checkedPaperPipelineModel.js') },
   },
   {
     file: 'scripts/exam-workspace-contract.test.cjs',
@@ -185,6 +196,10 @@ const suites = [
   {
     file: 'scripts/book-paper-generation.test.cjs',
     env: { BOOK_PAPER_GENERATION_MODEL_PATH: path.join(outDir, 'utils/bookPaperGeneration.js') },
+  },
+  {
+    file: 'scripts/match-columns.test.cjs',
+    env: { MATCH_COLUMNS_MODEL_PATH: path.join(outDir, 'utils/matchColumns.js') },
   },
 ]
 

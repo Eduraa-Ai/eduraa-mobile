@@ -217,10 +217,20 @@ export function questionTypeLabel(item: GradingResultItem) {
   return QUESTION_TYPE_LABELS[raw] || raw.replace(/_/g, ' ') || 'Question'
 }
 
+// V2 manifest pipeline stages report a blocked state via a "_failed" or
+// "_needs_review" suffix (e.g. "integrity_failed", "evidence_needs_review").
+// Matching that substring keeps this detail screen in sync with those stages
+// without having to enumerate every one here.
+function isBlockedStatus(status: string) {
+  return ['failed', 'error', 'grading_failed', 'checking_failed'].includes(status)
+    || status.includes('needs_review')
+    || status.includes('failed')
+}
+
 export function isCheckedPaperChecking(paper: CheckedPaper) {
   const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
-  if (['failed', 'error', 'grading_failed', 'checking_failed'].includes(status)) return false
-  if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review' || status === 'needs_review') {
+  if (isBlockedStatus(status)) return false
+  if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review') {
     return false
   }
   return ['submitted', 'checking', 'processing', 'uploaded'].includes(status)
@@ -231,7 +241,7 @@ export function isCheckedPaperChecking(paper: CheckedPaper) {
 
 export function isCheckedPaperCheckFailed(paper: CheckedPaper) {
   const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
-  return ['failed', 'error', 'grading_failed', 'checking_failed'].includes(status)
+  return isBlockedStatus(status)
 }
 
 export function buildCheckingEstimate(createdAt?: string | null, now = Date.now()) {
@@ -498,6 +508,57 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
   )
 
   return { questions, totalScore, maxScore, percent, correct, wrong, missed, pending, firstRepair, recoverableMarks, repairCount, headline, diagnosisTitle, diagnosisBody }
+}
+
+export function pendingQuestionReviewItems(paper: CheckedPaper) {
+  return (paper.grading_results ?? [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => Boolean(item.manual_review_requested && !item.manual_review_completed))
+}
+
+export function teacherReviewResponseNotification(item: GradingResultItem, index: number) {
+  const thread = item.question_review_thread ?? []
+  let latestStudentIndex = -1
+  thread.forEach((entry, entryIndex) => {
+    if (entry.author_role === 'student') latestStudentIndex = entryIndex
+  })
+  if (latestStudentIndex < 0) return null
+
+  let teacherEntryIndex = -1
+  for (let entryIndex = latestStudentIndex + 1; entryIndex < thread.length; entryIndex += 1) {
+    if (thread[entryIndex]?.author_role === 'teacher') teacherEntryIndex = entryIndex
+  }
+  if (teacherEntryIndex < 0) return null
+  const entry = thread[teacherEntryIndex]
+  if (entry.student_notification_pending === false) return null
+  const resultKey = item.result_id || item.question_id || `index-${index}`
+  const eventKey = entry.created_at || `${entry.event_type || 'teacher-response'}-${teacherEntryIndex}`
+  return { entry, keyPart: `${resultKey}:${eventKey}` }
+}
+
+export function reviewResponseNotificationKey(paperId: string, item: GradingResultItem, index: number) {
+  const notification = teacherReviewResponseNotification(item, index)
+  return notification ? `${paperId}:${notification.keyPart}` : null
+}
+
+export function hasUnreadTeacherReviewResponse(
+  item: GradingResultItem,
+  index = 0,
+  paperId = '',
+  seenKeys: ReadonlySet<string> = new Set(),
+) {
+  const key = reviewResponseNotificationKey(paperId, item, index)
+  return Boolean(key && !seenKeys.has(key))
+}
+
+export function unreadQuestionReviewResponseItems(paper: CheckedPaper, seenKeys: ReadonlySet<string> = new Set()) {
+  return (paper.grading_results ?? [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item, index }) => hasUnreadTeacherReviewResponse(item, index, paper.id, seenKeys))
+}
+
+export function questionReviewLabel(item: GradingResultItem, index: number) {
+  return `Question ${item.question_number ?? index + 1}`
 }
 
 export function findEvidenceQuestion(paper: CheckedPaper, questionId?: string, questionIndex?: number) {

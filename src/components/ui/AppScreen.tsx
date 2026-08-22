@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react'
+import React, { ReactNode, forwardRef } from 'react'
 import { ScrollView, ScrollViewProps, StyleSheet, View, ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -15,7 +15,10 @@ interface AppScreenProps extends ScrollViewProps {
   scrollRef?: React.RefObject<ScrollView | null>
 }
 
-export function AppScreen({ children, scroll = true, contentStyle, padded = true, tone = 'default', ambient = true, protectedChrome = false, scrollRef, style, ...props }: AppScreenProps) {
+export const AppScreen = forwardRef<ScrollView, AppScreenProps>(function AppScreen(
+  { children, scroll = true, contentStyle, padded = true, tone = 'default', ambient = true, protectedChrome = false, scrollRef, style, ...props },
+  ref,
+) {
   const insets = useSafeAreaInsets()
 
   const content = (
@@ -54,7 +57,7 @@ export function AppScreen({ children, scroll = true, contentStyle, padded = true
 
   return (
     <ScrollView
-      ref={scrollRef}
+      ref={ref ?? scrollRef}
       style={[
         styles.root,
         tone === 'auth' && styles.authRoot,
@@ -68,7 +71,7 @@ export function AppScreen({ children, scroll = true, contentStyle, padded = true
       {content}
     </ScrollView>
   )
-}
+})
 
 const styles = StyleSheet.create({
   root: {

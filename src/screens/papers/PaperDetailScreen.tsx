@@ -32,6 +32,10 @@ import { colors } from "../../theme/colors";
 import { spacing, radius, shadows, layout } from "../../theme/spacing";
 import { shouldShowQuestionStemText } from "../../utils/questionVisual";
 import {
+  buildMatchColumnsRows,
+  isMatchColumnsOptions,
+} from "../../utils/matchColumns";
+import {
   isAttemptCheckDelayed,
   isAttemptChecking,
   paperPrimaryAction,
@@ -50,6 +54,38 @@ const Q_TYPE_LABELS: Record<string, string> = {
   match_columns: "Match Col",
   true_false: "True/False",
 };
+
+function MatchColumnsPreview({ options }: { options: unknown }) {
+  const rows = buildMatchColumnsRows(options);
+  if (!rows.left.length && !rows.right.length) return null;
+
+  return (
+    <View style={styles.matchColumns}>
+      {(
+        [
+          { label: "Column A", items: rows.left },
+          { label: "Column B", items: rows.right },
+        ] as const
+      ).map((column) => (
+        <View key={column.label} style={styles.matchColumn}>
+          <Text style={styles.matchColumnLabel}>{column.label}</Text>
+          {column.items.map((row) => (
+            <View key={row.key} style={styles.matchItemRow}>
+              <View style={styles.matchKeyBadge}>
+                <Text style={styles.matchKeyText}>{row.key}</Text>
+              </View>
+              <LatexText
+                value={row.label}
+                style={styles.matchItemText}
+                containerStyle={styles.matchItemTextContainer}
+              />
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function HeaderAction({
   label,
@@ -188,7 +224,12 @@ export default function PaperDetailScreen() {
     onMutate: () => setActionError(null),
     onSuccess: async (published) => {
       queryClient.setQueryData(["paper", params.paperId], published);
-      await queryClient.invalidateQueries({ queryKey: ["papers"] });
+      // The exam picker keeps its own published-paper list, which a `papers`
+      // prefix never reaches.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["papers"] }),
+        queryClient.invalidateQueries({ queryKey: ["exams", "papers"] }),
+      ]);
     },
     onError: (error: any) => {
       const detail = error?.response?.data?.detail;
@@ -208,6 +249,7 @@ export default function PaperDetailScreen() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["paper", params.paperId] }),
         queryClient.invalidateQueries({ queryKey: ["papers"] }),
+        queryClient.invalidateQueries({ queryKey: ["exams", "papers"] }),
       ]);
     },
     onError: (error: any) => {
@@ -229,6 +271,7 @@ export default function PaperDetailScreen() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["papers"] }),
         queryClient.invalidateQueries({ queryKey: ["exams", "practice"] }),
+        queryClient.invalidateQueries({ queryKey: ["exams", "papers"] }),
       ]);
       queryClient.removeQueries({ queryKey: ["paper", params.paperId] });
       queryClient.removeQueries({
@@ -678,6 +721,9 @@ export default function PaperDetailScreen() {
                 )}
               </View>
             )}
+            {isMatchColumnsOptions(q.options) ? (
+              <MatchColumnsPreview options={q.options} />
+            ) : null}
           </View>
         ))}
       </ScrollView>
@@ -1277,6 +1323,50 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 20,
     paddingTop: 3,
+  },
+  matchColumns: {
+    flexDirection: "row",
+    gap: spacing[2],
+  },
+  matchColumn: {
+    flex: 1,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surface2,
+    padding: spacing[3],
+    gap: spacing[2],
+  },
+  matchColumnLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+    color: colors.muted,
+  },
+  matchItemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[2],
+  },
+  matchKeyBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface1,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 4,
+    flexShrink: 0,
+  },
+  matchKeyText: { fontSize: 10, fontWeight: "700", color: colors.muted },
+  matchItemTextContainer: { flex: 1 },
+  matchItemText: {
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
   },
   actionMenuBackdrop: {
     flex: 1,

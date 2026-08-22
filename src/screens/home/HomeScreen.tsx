@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect} from "react";
 import {
   Image,
   Pressable,
@@ -9,10 +9,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path } from "react-native-svg";
 import { analyticsApi } from "../../api/analytics";
+import { warmPriorityLesson } from "../../api/agenticLearning";
 import {
   isPreviousPapersEligible,
   resolveMobileLanding,
@@ -1064,6 +1065,17 @@ function LoadingHome() {
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
+
+  // Start building the learner's most likely concept lesson while they read
+  // their plan, so tapping "Start learning" and then a card does not wait on
+  // generation. No-ops once the lesson is cached, so returning to this tab
+  // costs nothing.
+  const warmClient = useQueryClient();
+  const isLearner = user?.role === "student" || user?.role === "b2c_student";
+  useEffect(() => {
+    if (!isLearner) return;
+    void warmPriorityLesson(warmClient);
+  }, [isLearner, warmClient]);
 
   // Derived from the session rather than passed down, so the Home tab and the
   // Home stack can register this screen with `component` instead of an inline

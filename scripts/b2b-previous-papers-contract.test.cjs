@@ -15,7 +15,8 @@ test('the client uses the backend-enforced school catalogs without tenant select
   assert.match(api, /subject_id: filters\.subject_id/)
   assert.doesNotMatch(api, /school_id:|branch_id:|board:|standard:|division:/)
   assert.match(api, /resolveSchoolQuestionPaperFileUrl\(url, API_BASE_URL\)/)
-  assert.match(screen, /papersApi\.list\(\{ status: 'published', limit: 100 \}\)/)
+  assert.match(screen, /papersApi\.list\(\{ status: 'published', limit: LIMIT \}\)/)
+  assert.match(screen, /papersApi\.list\(\{ status: 'published', skip, limit: LIMIT \}\)/)
 })
 
 test('student attempts reuse the canonical flow and teacher cards never receive attempt actions', () => {

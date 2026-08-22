@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -9,6 +9,8 @@ import AuthIntelligenceHero, { type AuthMotionState } from '../../components/aut
 import type { AuthStackParamList } from '../../navigation'
 import { useAuthStore } from '../../stores/authStore'
 import { typography } from '../../theme'
+import { useReducedMotion } from '../../hooks/useReducedMotion'
+import { getAuthHandoffDelay } from '../../components/auth/authMotionModel'
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>
 
@@ -33,6 +35,8 @@ export default function LoginScreen() {
   const navigation = useNavigation<Nav>()
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
+  const reducedMotion = useReducedMotion()
+  const passwordInputRef = useRef<TextInput>(null)
   const { setAuth } = useAuthStore()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -44,12 +48,14 @@ export default function LoginScreen() {
   const [motionState, setMotionState] = useState<AuthMotionState>('intro')
   const [recoveryMode, setRecoveryMode] = useState(false)
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null)
+  const [recoveryCooldown, setRecoveryCooldown] = useState(0)
   const [keyboardVisible, setKeyboardVisible] = useState(false)
-  const compact = height < 720 || keyboardVisible
-  const heroHeight = keyboardVisible ? 152 : compact ? 270 : Math.min(390, Math.max(348, Math.round(height * 0.44)))
+  const hasFeedback = Boolean(error || recoveryMessage)
+  const compact = height < 720 || keyboardVisible || hasFeedback
+  const heroHeight = keyboardVisible ? 152 : compact ? 240 : Math.min(320, Math.max(280, Math.round(height * 0.35)))
 
   useEffect(() => {
-    const timer = setTimeout(() => setMotionState((current) => current === 'intro' ? 'idle' : current), 1500)
+    const timer = setTimeout(() => setMotionState((current) => current === 'intro' ? 'idle' : current), 1240)
     return () => clearTimeout(timer)
   }, [])
 
@@ -61,6 +67,12 @@ export default function LoginScreen() {
       hide.remove()
     }
   }, [])
+
+  useEffect(() => {
+    if (!recoveryMessage || recoveryCooldown <= 0) return
+    const timer = setTimeout(() => setRecoveryCooldown((current) => Math.max(0, current - 1)), 1000)
+    return () => clearTimeout(timer)
+  }, [recoveryCooldown, recoveryMessage])
 
   const validate = () => {
     const missingIdentifier = identifier.trim() ? null : 'Enter your email or student ID.'
@@ -82,7 +94,8 @@ export default function LoginScreen() {
     try {
       const token = await authApi.login({ username: identifier.trim(), password })
       setMotionState('success')
-      await new Promise((resolve) => setTimeout(resolve, 430))
+      const handoffDelay = getAuthHandoffDelay(reducedMotion, 'login')
+      if (handoffDelay) await new Promise((resolve) => setTimeout(resolve, handoffDelay))
       await setAuth(token)
     } catch (loginError) {
       const pendingRole = pendingSchoolRole(loginError)
@@ -103,6 +116,8 @@ export default function LoginScreen() {
   }
 
   const handleRecovery = async () => {
+    if (loading || recoveryCooldown > 0) return
+    const isResend = Boolean(recoveryMessage)
     const value = identifier.trim()
     if (!value) {
       const message = 'Enter your email or student ID first.'
@@ -112,13 +127,16 @@ export default function LoginScreen() {
     }
     setLoading(true)
     setError(null)
-    setRecoveryMessage(null)
+    if (!isResend) setRecoveryMessage(null)
     try {
       const message = await authApi.forgotPassword(value)
       setRecoveryMessage(message)
+      setRecoveryCooldown(60)
       AccessibilityInfo.announceForAccessibility(message)
     } catch (recoveryError) {
       const message = messageFromError(recoveryError)
+      setRecoveryMessage(null)
+      setRecoveryCooldown(0)
       setError(message)
       AccessibilityInfo.announceForAccessibility(message)
     } finally {
@@ -128,6 +146,25 @@ export default function LoginScreen() {
 
   const returnToIdleFrom = (expected: AuthMotionState) => {
     setMotionState((current) => current === expected ? 'idle' : current)
+  }
+
+  const returnToSignIn = () => {
+    setRecoveryMode(false)
+    setRecoveryMessage(null)
+    setRecoveryCooldown(0)
+    setError(null)
+    setIdentifierError(null)
+    setMotionState('idle')
+  }
+
+  const toggleRecoveryMode = () => {
+    if (recoveryMode) returnToSignIn()
+    else {
+      setRecoveryMode(true)
+      setError(null)
+      setRecoveryMessage(null)
+      setIdentifierError(null)
+    }
   }
 
   return (
@@ -175,7 +212,9 @@ export default function LoginScreen() {
                     autoCorrect={false}
                     autoComplete="username"
                     returnKeyType="next"
-                    style={styles.input}
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => passwordInputRef.current?.focus()}
+                    style={[styles.input, styles.identifierInput]}
                     accessibilityLabel="Email or student ID"
                   />
                 </View>
@@ -186,6 +225,7 @@ export default function LoginScreen() {
                 <View style={[styles.field, passwordError && styles.fieldError]}>
                   <Ionicons name="lock-closed-outline" size={19} color="#667085" />
                   <TextInput
+                    ref={passwordInputRef}
                     value={password}
                     onChangeText={(value) => { setPassword(value); setPasswordError(null); setError(null) }}
                     onFocus={() => setMotionState('password')}
@@ -214,14 +254,27 @@ export default function LoginScreen() {
               </View> : null}
 
               <Pressable
-                onPress={recoveryMode ? handleRecovery : handleLogin}
+                onPress={recoveryMessage ? returnToSignIn : recoveryMode ? handleRecovery : handleLogin}
                 disabled={loading}
                 accessibilityRole="button"
                 accessibilityState={{ disabled: loading, busy: loading }}
-                style={({ pressed }) => [styles.continueButton, pressed && styles.continuePressed]}
+                style={({ pressed }) => [styles.continueButton, pressed && !reducedMotion && styles.continuePressed]}
               >
-                {loading ? <ActivityIndicator color="#101828" /> : <Text style={styles.continueText}>{recoveryMode ? 'Send recovery email' : 'Continue'}</Text>}
-                {!loading ? <Ionicons name="arrow-forward" size={21} color="#101828" /> : null}
+                {loading && !recoveryMessage ? (
+                  <>
+                    <ActivityIndicator color="#101828" />
+                    <Text style={styles.continueText} accessibilityLiveRegion="polite">
+                      {recoveryMode ? 'Sending…' : 'Signing in…'}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.continueText}>
+                      {recoveryMessage ? 'Back to sign in' : recoveryMode ? 'Send recovery email' : 'Continue'}
+                    </Text>
+                    <Ionicons name="arrow-forward" size={21} color="#101828" />
+                  </>
+                )}
               </Pressable>
 
               {!recoveryMode ? (
@@ -237,12 +290,30 @@ export default function LoginScreen() {
               ) : null}
 
               <Pressable
-                onPress={() => { setRecoveryMode((current) => !current); setError(null); setRecoveryMessage(null); setIdentifierError(null) }}
+                onPress={recoveryMessage ? handleRecovery : toggleRecoveryMode}
+                disabled={loading || Boolean(recoveryMessage && recoveryCooldown > 0)}
                 hitSlop={8}
                 accessibilityRole="button"
+                accessibilityState={{
+                  disabled: loading || Boolean(recoveryMessage && recoveryCooldown > 0),
+                  busy: Boolean(recoveryMessage && loading),
+                }}
                 style={styles.recoveryButton}
               >
-                <Text style={styles.recoveryText}>{recoveryMode ? 'Back to sign in' : 'Forgot password?'}</Text>
+                <Text
+                  style={[styles.recoveryText, recoveryMessage && recoveryCooldown > 0 && styles.recoveryTextDisabled]}
+                  accessibilityLiveRegion={recoveryMessage ? 'polite' : undefined}
+                >
+                  {recoveryMessage
+                    ? loading
+                      ? 'Sending…'
+                      : recoveryCooldown > 0
+                      ? `Resend available in ${recoveryCooldown}s`
+                      : 'Resend recovery email'
+                    : recoveryMode
+                      ? 'Back to sign in'
+                      : 'Forgot password?'}
+                </Text>
               </Pressable>
             </View>
 
@@ -277,7 +348,8 @@ const styles = StyleSheet.create({
   form: { marginTop: 21, gap: 12 },
   field: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 11, paddingLeft: 16, paddingRight: 8, borderRadius: 16, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: '#fbf6ec' },
   fieldError: { borderColor: '#ff817b', borderWidth: 1.5 },
-  input: { flex: 1, minHeight: 54, paddingVertical: 0, color: '#101828', fontFamily: typography.fonts.bodyMedium, fontSize: 15 },
+  input: { flex: 1, minWidth: 0, minHeight: 54, paddingVertical: 0, color: '#101828', fontFamily: typography.fonts.bodyMedium, fontSize: 15 },
+  identifierInput: { paddingRight: Platform.select({ web: 34, default: 0 }) },
   iconButton: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
   fieldMessage: { marginTop: 6, marginLeft: 4, color: '#ffb0aa', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
   continueButton: { minHeight: 56, marginTop: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 16, backgroundColor: '#f36c21', shadowColor: '#f36c21', shadowOpacity: 0.22, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
@@ -285,6 +357,7 @@ const styles = StyleSheet.create({
   continueText: { color: '#101828', fontFamily: typography.fonts.bodyBold, fontSize: 16 },
   recoveryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   recoveryText: { color: '#d4dbe6', fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  recoveryTextDisabled: { color: '#7d8a9c' },
   createRow: { minHeight: 48, marginTop: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   createPrompt: { color: '#aab5c6', fontFamily: typography.fonts.body, fontSize: 14 },
   createLink: { color: '#f36c21', fontFamily: typography.fonts.bodyBold, fontSize: 14 },

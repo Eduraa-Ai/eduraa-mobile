@@ -1,4 +1,5 @@
 import type { CheckedPaper } from '../../types'
+import { hasUnreadTeacherReviewResponse } from './checkedPaperDetailModel'
 
 export type CheckedPaperTab = 'all' | 'needs_attention' | 'strong'
 
@@ -8,6 +9,14 @@ export const STRONG_PERCENT = 65
 export const CHECKED_PAPERS_POLL_INTERVAL_MS = 4000
 const checkingStatuses = new Set(['submitted', 'checking', 'processing', 'uploaded'])
 const failedStatuses = new Set(['failed', 'error', 'grading_failed', 'checking_failed'])
+
+// V2 manifest pipeline stages report a blocked state via a "_failed" or
+// "_needs_review" suffix (e.g. "integrity_failed", "evidence_needs_review").
+// Matching that substring keeps this shared list in sync with those stages
+// without having to enumerate every one here.
+function isBlockedStatus(status: string) {
+  return failedStatuses.has(status) || status.includes('needs_review') || status.includes('failed')
+}
 
 export function normalize(value?: string | null) {
   return String(value ?? '').trim().toLowerCase()
@@ -25,6 +34,56 @@ export function getQuestionCount(paper: CheckedPaper) {
   return paper.grading_results?.length ?? null
 }
 
+export function getQuestionReviewItems(paper: CheckedPaper) {
+  return (paper.grading_results ?? [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => Boolean(item.manual_review_requested && !item.manual_review_completed))
+}
+
+export function questionReviewLabel(item: { question_number?: number | null }, index: number) {
+  return `Question ${item.question_number ?? index + 1}`
+}
+
+export function getQuestionReviewLabels(paper: CheckedPaper) {
+  const labels = paper.pending_question_review_labels?.filter(Boolean) ?? []
+  if (labels.length) return labels
+  const itemLabels = getQuestionReviewItems(paper).map(({ item, index }) => questionReviewLabel(item, index))
+  if (itemLabels.length) return itemLabels
+  return paper.manual_review_requested ? ['Question review'] : []
+}
+
+export function getQuestionReviewCount(paper: CheckedPaper) {
+  if (paper.pending_question_review_count && paper.pending_question_review_count > 0) {
+    return paper.pending_question_review_count
+  }
+  const itemCount = getQuestionReviewItems(paper).length
+  if (itemCount > 0) return itemCount
+  return paper.manual_review_requested ? 1 : 0
+}
+
+export function getUnreadReviewResponseItems(paper: CheckedPaper, seenKeys: ReadonlySet<string> = new Set()) {
+  return (paper.grading_results ?? [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item, index }) => hasUnreadTeacherReviewResponse(item, index, paper.id, seenKeys))
+}
+
+export function getUnreadReviewResponseLabels(paper: CheckedPaper, seenKeys: ReadonlySet<string> = new Set()) {
+  const itemLabels = getUnreadReviewResponseItems(paper, seenKeys).map(({ item, index }) => questionReviewLabel(item, index))
+  if (paper.grading_results) return itemLabels
+  const labels = paper.unread_question_review_response_labels?.filter(Boolean) ?? []
+  if (labels.length) return labels
+  return itemLabels
+}
+
+export function getUnreadReviewResponseCount(paper: CheckedPaper, seenKeys: ReadonlySet<string> = new Set()) {
+  const itemCount = getUnreadReviewResponseItems(paper, seenKeys).length
+  if (paper.grading_results) return itemCount
+  if (paper.unread_question_review_response_count && paper.unread_question_review_response_count > 0) {
+    return paper.unread_question_review_response_count
+  }
+  return itemCount
+}
+
 export function scorePercent(paper: CheckedPaper) {
   if (paper.total_score == null || paper.max_score == null || paper.max_score <= 0) return null
   return Math.max(0, Math.min(100, Math.round((paper.total_score / paper.max_score) * 100)))
@@ -37,7 +96,7 @@ export function scoreLabel(paper: CheckedPaper) {
 
 export function isPaperChecking(paper: CheckedPaper) {
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
-  if (failedStatuses.has(status)) return false
+  if (isBlockedStatus(status)) return false
   if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review' || status === 'needs_review') {
     return false
   }
@@ -61,7 +120,8 @@ export function formatPaperCount(count: number) {
 export function isNeedsAttention(paper: CheckedPaper) {
   const percent = scorePercent(paper)
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
-  if (failedStatuses.has(status)) return true
+  if (isBlockedStatus(status)) return true
+  if (getQuestionReviewCount(paper) > 0) return true
   if (paper.manual_review_requested || paper.needs_review || paper.status === 'pending_manual_review') return true
   if (checkingStatuses.has(status)) return true
   return percent != null ? percent < STRONG_PERCENT : false
@@ -75,9 +135,11 @@ export function isStrong(paper: CheckedPaper) {
 
 export function paperStatusLabel(paper: CheckedPaper) {
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  const questionReviewCount = getQuestionReviewCount(paper)
+  if (questionReviewCount > 0) return `${questionReviewCount} question review${questionReviewCount === 1 ? '' : 's'}`
   if (paper.manual_review_requested) return 'Manual review requested'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'Needs review'
-  if (failedStatuses.has(status)) return 'Checking failed'
+  if (isBlockedStatus(status)) return 'Checking failed'
   if (checkingStatuses.has(status)) return 'Checking in progress'
   if (isStrong(paper)) return 'Strong'
   if (scorePercent(paper) != null) return 'Needs attention'
@@ -87,9 +149,14 @@ export function paperStatusLabel(paper: CheckedPaper) {
 export function paperInsight(paper: CheckedPaper) {
   const percent = scorePercent(paper)
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  const questionReviewCount = getQuestionReviewCount(paper)
+  if (questionReviewCount > 0) {
+    const labels = getQuestionReviewLabels(paper).slice(0, 2).join(', ')
+    return `${questionReviewCount} review request${questionReviewCount === 1 ? '' : 's'} pending${labels ? `: ${labels}` : ''}.`
+  }
   if (paper.manual_review_requested) return 'Awaiting a manual review.'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'The reviewer needs to look at this paper.'
-  if (failedStatuses.has(status)) return 'Checking did not finish. Open this paper for a safe recovery path.'
+  if (isBlockedStatus(status)) return 'Checking did not finish. Open this paper for a safe recovery path.'
   if (checkingStatuses.has(status)) return 'Eduraa is still checking this result.'
   if (percent == null) return 'Score will appear after checking completes.'
   if (percent >= STRONG_PERCENT) return 'Strong performance with a clear next step.'
@@ -111,7 +178,7 @@ export function buildAssessmentModel(papers: CheckedPaper[]) {
   const strongCount = papers.filter(isStrong).length
   const attentionCount = papers.filter(isNeedsAttention).length
   const reviewCount = papers.filter(
-    (paper) => paper.manual_review_requested || paper.needs_review || paper.status === 'pending_manual_review',
+    (paper) => paper.manual_review_requested || paper.needs_review || paper.status === 'pending_manual_review' || getQuestionReviewCount(paper) > 0,
   ).length
   const latest = scored[0] ?? null
   const previous = scored[1] ?? null
