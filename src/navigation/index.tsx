@@ -44,6 +44,7 @@ import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
 import AttendanceScreen from '../screens/workspace/AttendanceScreen'
 import ScanUploadScreen from '../screens/workspace/ScanUploadScreen'
+import CheckedPaperStatusScreen from '../screens/workspace/CheckedPaperStatusScreen'
 import ExamsScreen from '../screens/workspace/ExamsScreen'
 import ClassTeacherOverviewScreen from '../screens/classTeacher/ClassTeacherOverviewScreen';
 import ClassRosterScreen from '../screens/classTeacher/ClassRosterScreen';
@@ -112,6 +113,7 @@ export type StaffWorkspaceStackParamList = {
   Approvals: undefined;
   Attendance: undefined;
   ScanUpload: undefined;
+  CheckedPaperStatus: { checkedPaperId: string };
   Exams: undefined;
   StaffAIStudio: undefined;
   StaffGeneratePaper: undefined;
@@ -396,6 +398,11 @@ function StaffWorkspaceNavigator() {
         name="ScanUpload"
         component={ScanUploadScreen}
         options={{ title: "Scan upload" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="CheckedPaperStatus"
+        component={CheckedPaperStatusScreen}
+        options={{ title: "Scan status" }}
       />
       <StaffWorkspaceStack.Screen
         name="Exams"

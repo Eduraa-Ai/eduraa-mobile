@@ -13,6 +13,39 @@ export interface ManualReviewRequestPayload {
   result_id?: string | null
 }
 
+export interface CheckedPaperScannedPage {
+  id: string
+  content_sha256?: string | null
+  pixel_sha256?: string | null
+  width?: number | null
+  height?: number | null
+}
+
+export interface CheckedPaperIntegrity {
+  script_version: Record<string, unknown> | null
+  integrity_run: Record<string, unknown> | null
+  pages: CheckedPaperScannedPage[]
+}
+
+export interface RevisionPayload {
+  expected_revision: number
+}
+
+export interface IdempotentRevisionPayload extends RevisionPayload {
+  idempotency_key: string
+}
+
+export interface IntegrityResolvePayload extends IdempotentRevisionPayload {
+  ordered_page_ids: string[]
+  complete_script_confirmed: true
+  identity_confirmed: true
+  acknowledged_issue_ids: string[]
+}
+
+export interface RevokePayload extends IdempotentRevisionPayload {
+  reason: string
+}
+
 export interface QuestionReviewCommentPayload {
   note?: string | null
   question_id?: string | null
@@ -98,6 +131,46 @@ export const checkedPapersApi = {
       `/checked-papers/${id}/teacher-review`,
       payload,
     )
+    return response.data
+  },
+
+  getIntegrity: async (id: string): Promise<CheckedPaperIntegrity> => {
+    const response = await apiClient.get<CheckedPaperIntegrity>(`/checked-papers/${id}/integrity`)
+    return response.data
+  },
+
+  integrityRetry: async (id: string, payload: IdempotentRevisionPayload): Promise<CheckedPaper> => {
+    const response = await apiClient.post<CheckedPaper>(`/checked-papers/${id}/integrity/retry`, payload)
+    return response.data
+  },
+
+  integrityResolve: async (id: string, payload: IntegrityResolvePayload): Promise<CheckedPaper> => {
+    const response = await apiClient.post<CheckedPaper>(`/checked-papers/${id}/integrity/resolve`, payload)
+    return response.data
+  },
+
+  evidenceRetry: async (id: string, payload: RevisionPayload): Promise<CheckedPaper> => {
+    const response = await apiClient.post<CheckedPaper>(`/checked-papers/${id}/evidence/retry`, payload)
+    return response.data
+  },
+
+  regrade: async (id: string, payload: IdempotentRevisionPayload): Promise<CheckedPaper> => {
+    const response = await apiClient.post<CheckedPaper>(`/checked-papers/${id}/regrade`, payload)
+    return response.data
+  },
+
+  approve: async (id: string, payload: IdempotentRevisionPayload): Promise<CheckedPaper> => {
+    const response = await apiClient.post<CheckedPaper>(`/checked-papers/${id}/approve`, payload)
+    return response.data
+  },
+
+  publish: async (id: string, payload: IdempotentRevisionPayload): Promise<CheckedPaper> => {
+    const response = await apiClient.post<CheckedPaper>(`/checked-papers/${id}/publish`, payload)
+    return response.data
+  },
+
+  revoke: async (id: string, payload: RevokePayload): Promise<CheckedPaper> => {
+    const response = await apiClient.post<CheckedPaper>(`/checked-papers/${id}/revoke`, payload)
     return response.data
   },
 }
