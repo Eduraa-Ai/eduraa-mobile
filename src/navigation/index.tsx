@@ -97,6 +97,13 @@ export type ResultsStackParamList = {
   };
 };
 
+export type ScanUploadParams = {
+  initialPaperId?: string
+  initialExamId?: string
+  initialStudentId?: string
+  initialSubjectId?: string
+} | undefined
+
 export type HomeStackParamList = {
   HomeMain: undefined
   CompetitiveExam: undefined
@@ -108,7 +115,7 @@ export type HomeStackParamList = {
   Feature: { featureId: string }
   Approvals: undefined
   Attendance: undefined
-  ScanUpload: undefined
+  ScanUpload: ScanUploadParams
   Exams: undefined
   Announcements: { announcementId?: string } | undefined
   Doubts: { doubtId?: string } | undefined
@@ -125,7 +132,7 @@ export type StaffWorkspaceStackParamList = {
   Feature: { featureId: string };
   Approvals: undefined;
   Attendance: undefined;
-  ScanUpload: undefined;
+  ScanUpload: ScanUploadParams;
   CheckedPaperStatus: { checkedPaperId: string };
   Exams: undefined;
   Announcements: { announcementId?: string } | undefined;

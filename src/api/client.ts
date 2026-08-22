@@ -4,6 +4,7 @@
  */
 
 import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
+import { fetch as expoFetch, type FetchRequestInit } from 'expo/fetch'
 import { Platform } from 'react-native'
 import {
   clearStoredAccessToken,
@@ -143,6 +144,33 @@ async function refreshAccessToken() {
   }
 
   return refreshState.promise
+}
+
+/**
+ * Authenticated fetch for native transports that need Expo's file/blob support.
+ * It mirrors the Axios client's single-refresh behavior so file uploads do not
+ * silently lose session recovery just because they use the native fetch stack.
+ */
+export async function authenticatedFetch(url: string, init: FetchRequestInit = {}) {
+  const request = async (token: string | null) => {
+    const headers = new Headers(init.headers)
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    return expoFetch(url, { ...init, headers })
+  }
+
+  const response = await request(await getAccessToken())
+  if (response.status !== 401 || isAuthEndpoint(url)) return response
+
+  const requestRevision = accessTokenRevision
+  try {
+    return await request(await refreshAccessToken())
+  } catch (error) {
+    if (requestRevision === accessTokenRevision) {
+      await clearExpiredAccessToken()
+      logoutCallback?.()
+    }
+    throw error
+  }
 }
 
 apiClient.interceptors.response.use(

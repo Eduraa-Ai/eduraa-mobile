@@ -35,12 +35,15 @@ test('blocked detection matches any status containing needs_review or failed', (
   assert.equal(model.isCheckedPaperStatusBlocked('rubric_grading'), false)
 })
 
-test('friendlyStage always returns a non-blank label for every active or blocked status', () => {
-  const statuses = [...model.CHECKED_PAPER_ACTIVE_STATUSES, 'integrity_needs_review', 'evidence_failed', 'grading_failed']
-  for (const status of statuses) {
-    assert.ok(model.friendlyStage(status).length > 0, `${status} should have a label`)
-  }
-  assert.equal(model.friendlyStage(null), 'Processing')
+test('teacher-facing status is limited to the four experience states', () => {
+  assert.equal(model.checkedPaperExperienceStatus({ status: 'rubric_grading' }), 'checking')
+  assert.equal(model.checkedPaperExperienceStatus({ status: 'auto_assessed' }), 'ready_for_review')
+  assert.equal(model.checkedPaperExperienceStatus({ status: 'evidence_failed' }), 'needs_input')
+  assert.equal(model.checkedPaperExperienceStatus({ status: 'pending_question_review' }), 'needs_input')
+  assert.equal(model.checkedPaperExperienceStatus({ status: 'graded', results_published: true }), 'published')
+  assert.equal(model.friendlyStage('rubric_grading'), 'Checking')
+  assert.equal(model.friendlyStage('grading_failed'), 'Needs your input')
+  assert.equal(model.friendlyStage(null), 'Checking')
 })
 
 test('continue as exception only shows when every blocker is teacher-resolvable', () => {
@@ -49,16 +52,6 @@ test('continue as exception only shows when every blocker is teacher-resolvable'
   assert.equal(model.canContinueAsException(mixed), false)
   assert.equal(model.canContinueAsException(allResolvable), true)
   assert.equal(model.canContinueAsException([]), false)
-})
-
-test('retry actions only surface for their exact failed status and stage', () => {
-  const evidenceBlocker = [{ stage: 'answer_reading' }]
-  const gradingBlocker = [{ stage: 'rubric_grading' }]
-  assert.equal(model.canRetryEvidence('evidence_failed', evidenceBlocker), true)
-  assert.equal(model.canRetryEvidence('evidence_failed', gradingBlocker), false)
-  assert.equal(model.canRetryEvidence('mapping_failed', evidenceBlocker), false)
-  assert.equal(model.canRetryGrading('grading_failed', gradingBlocker), true)
-  assert.equal(model.canRetryGrading('grading_failed', evidenceBlocker), false)
 })
 
 test('standard/division matching normalizes "Class 10" / "Std. 10" prefixes and case', () => {
@@ -79,6 +72,66 @@ test('matchesStandardDivision treats a missing target field as unfiltered', () =
   assert.equal(model.matchesStandardDivision({ standard: '10' }, {}), true)
 })
 
+test('staff upload modes expose only confirmed custom papers in paper mode', () => {
+  assert.equal(model.isPaperAvailableForUploadMode('custom_paper', 'custom_paper'), true)
+  assert.equal(model.isPaperAvailableForUploadMode('ai_generation_system', 'custom_paper'), false)
+  assert.equal(model.isPaperAvailableForUploadMode(null, 'custom_paper'), false)
+  assert.equal(model.isPaperAvailableForUploadMode('custom_paper', 'ai_generation_system'), false)
+})
+
+test('scan upload linking matches the web request contract', () => {
+  assert.deepEqual(
+    model.resolveScanUploadLink({
+      isStaff: true,
+      mode: 'ai_generation_system',
+      selectedPaperId: 'paper-ignored',
+      selectedExamId: 'exam-1',
+    }),
+    { paperId: null, examId: 'exam-1', uploadMode: 'ai_generation_system' },
+  )
+  assert.deepEqual(
+    model.resolveScanUploadLink({
+      isStaff: true,
+      mode: 'custom_paper',
+      selectedPaperId: 'paper-1',
+      selectedExamId: 'exam-ignored',
+    }),
+    { paperId: 'paper-1', examId: null, uploadMode: 'custom_paper' },
+  )
+  assert.deepEqual(
+    model.resolveScanUploadLink({
+      isStaff: false,
+      mode: 'ai_generation_system',
+      selectedPaperId: 'paper-2',
+      selectedExamId: 'exam-ignored',
+    }),
+    { paperId: 'paper-2', examId: null, uploadMode: null },
+  )
+})
+
+test('scan upload always sends the authoritative student identity', () => {
+  assert.equal(
+    model.resolveScanUploadStudentId({
+      isStaff: true,
+      selectedStudentId: 'roster-student',
+      authenticatedUserId: 'teacher-account',
+    }),
+    'roster-student',
+  )
+  assert.equal(
+    model.resolveScanUploadStudentId({
+      isStaff: false,
+      selectedStudentId: 'ignored-selection',
+      authenticatedUserId: 'learner-account',
+    }),
+    'learner-account',
+  )
+  assert.equal(
+    model.resolveScanUploadStudentId({ isStaff: false }),
+    null,
+  )
+})
+
 test('idempotency keys are unique and look like a uuid v4', () => {
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   const first = model.generateIdempotencyKey()
@@ -94,5 +147,13 @@ test('friendlyUploadError maps known backend codes and passes through unknown de
     'This paper needs its answer key confirmed before it can be checked. Confirm the paper first.',
   )
   assert.equal(model.friendlyUploadError('Student is not in the teacher\'s section.'), 'Student is not in the teacher\'s section.')
+  assert.equal(
+    model.friendlyUploadError('CHECKED_PAPER_LEGACY_READ_ONLY'),
+    'This older checked paper is read-only.',
+  )
+  assert.equal(
+    model.friendlyUploadError('checked_paper_v2_b2c_integrity_unavailable'),
+    'Checking is not available for this paper yet. No grading was started.',
+  )
   assert.equal(model.friendlyUploadError(null, 'Unable to upload this scan.'), 'Unable to upload this scan.')
 })
