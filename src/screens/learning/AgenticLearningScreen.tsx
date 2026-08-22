@@ -1,10 +1,10 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute } from '@react-navigation/native'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Svg, { Circle } from 'react-native-svg'
-import { agenticLearningApi, AgenticLearningSubjectBucket } from '../../api/agenticLearning'
+import { agenticLearningApi, AgenticLearningSubjectBucket, warmTopicLessons } from '../../api/agenticLearning'
 import { AppScreen, ErrorState } from '../../components/ui'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { AgenticHeader, AgenticIntro, AgenticSectionHeader, AgenticSurface } from './AgenticLearningFrame'
@@ -124,6 +124,15 @@ export default function AgenticLearningScreen() {
   const priorityTitle = quickAction?.label || prioritySubject?.top_weak_topic || 'Your next repair will appear here'
   const priorityDescription = quickAction?.description || (prioritySubject ? `Weakest current signal in ${prioritySubject.subject_name}.` : 'Complete an attempt to unlock a focused repair.')
   const priorityReady = clampPercent(prioritySubject?.average_mastery)
+
+  // The highlighted repair is the most likely first tap, so build its lesson
+  // while the learner is still reading the hub.
+  const warmQueryClient = useQueryClient()
+  const priorityTopicId = quickAction?.target_topic_id ?? null
+  useEffect(() => {
+    if (!priorityTopicId) return
+    void warmTopicLessons(warmQueryClient, [priorityTopicId], 1)
+  }, [priorityTopicId, warmQueryClient])
 
   const openPriority = () => {
     if (quickAction?.target_topic_id) {

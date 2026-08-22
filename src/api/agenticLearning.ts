@@ -205,6 +205,41 @@ export function agenticFailureKind(error: unknown): AgenticLearningFailureKind {
   return error instanceof AgenticLearningContentError ? 'content' : 'api'
 }
 
+/**
+ * Warms concept lessons so opening a card is instant instead of a 15-20s wait.
+ *
+ * Lessons are LLM-generated on first request and cached server-side
+ * afterwards, so one warm makes that topic permanently fast for the learner.
+ * Deliberately conservative: each warm costs a generation, so this runs
+ * sequentially, skips anything already cached, and caps how many it takes.
+ */
+export async function warmTopicLessons(
+  queryClient: QueryClient,
+  topicIds: string[],
+  limit = 3,
+) {
+  const pending = topicIds
+    .filter(Boolean)
+    .filter((topicId) => !queryClient.getQueryData(['agentic-topic', topicId]))
+    .slice(0, limit)
+
+  // Sequential on purpose. Firing these in parallel would put several
+  // concurrent LLM generations against the same rate limit for a screen the
+  // learner may never scroll through.
+  for (const topicId of pending) {
+    try {
+      await queryClient.prefetchQuery({
+        queryKey: ['agentic-topic', topicId],
+        queryFn: ({ signal }) => agenticLearningApi.getTopic(topicId, signal),
+        staleTime: 30 * 60 * 1000,
+        gcTime: 24 * 60 * 60 * 1000,
+      })
+    } catch {
+      // Warming is best-effort; a failure just means the card opens the slow way.
+    }
+  }
+}
+
 export async function prefetchAgenticLearning(
   queryClient: QueryClient,
   checkedPaperId?: string,
