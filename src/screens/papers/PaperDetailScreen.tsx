@@ -25,6 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PapersStackParamList } from "../../navigation";
 import { navigateToCheckedPapers } from "../../navigation/paperResultsNavigation";
 import { papersApi } from "../../api/papers";
+import { SCAN_UPLOAD_OPTIONS_QUERY_KEY } from "../../api/scanUpload";
 import { presentPdf } from "../../utils/pdfDownload";
 import { useAuthStore } from "../../stores/authStore";
 import { LatexText, QuestionVisual } from "../../components/ui";
@@ -229,6 +230,7 @@ export default function PaperDetailScreen() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["papers"] }),
         queryClient.invalidateQueries({ queryKey: ["exams", "papers"] }),
+        queryClient.invalidateQueries({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY }),
       ]);
     },
     onError: (error: any) => {

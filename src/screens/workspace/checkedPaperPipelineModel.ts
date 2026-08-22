@@ -1,5 +1,60 @@
 import type { CheckedPaperProcessingBlocker } from '../../types'
 
+export type StaffScanUploadMode = 'ai_generation_system' | 'custom_paper'
+
+export function isPaperAvailableForUploadMode(
+  sourceType: string | null | undefined,
+  mode: StaffScanUploadMode,
+) {
+  return mode === 'custom_paper' && sourceType === 'custom_paper'
+}
+
+export function resolveScanUploadLink({
+  isStaff,
+  mode,
+  selectedPaperId,
+  selectedExamId,
+}: {
+  isStaff: boolean
+  mode: StaffScanUploadMode
+  selectedPaperId?: string | null
+  selectedExamId?: string | null
+}) {
+  if (!isStaff) {
+    return {
+      paperId: selectedPaperId || null,
+      examId: null,
+      uploadMode: null,
+    }
+  }
+
+  if (mode === 'custom_paper') {
+    return {
+      paperId: selectedPaperId || null,
+      examId: null,
+      uploadMode: mode,
+    }
+  }
+
+  return {
+    paperId: null,
+    examId: selectedExamId || null,
+    uploadMode: mode,
+  }
+}
+
+export function resolveScanUploadStudentId({
+  isStaff,
+  selectedStudentId,
+  authenticatedUserId,
+}: {
+  isStaff: boolean
+  selectedStudentId?: string | null
+  authenticatedUserId?: string | null
+}) {
+  return isStaff ? selectedStudentId || null : authenticatedUserId || null
+}
+
 // Mirrors the backend's V2 manifest pipeline status groupings exactly — do not
 // invent new groupings client-side, since the backend can add stages between
 // releases and any client-side reclassification would silently drift from it.
@@ -46,56 +101,43 @@ export function isCheckedPaperStatusBlocked(status?: string | null) {
   return value.includes('needs_review') || value.includes('failed')
 }
 
-const FRIENDLY_STAGE_LABELS: Record<string, string> = {
-  uploaded: 'Scan received',
-  pending: 'Queued for checking',
-  integrity_pending: 'Queued for script integrity check',
-  integrity_running: 'Checking script integrity',
-  integrity_verified: 'Script integrity verified',
-  integrity_needs_review: 'Script integrity needs your review',
-  integrity_failed: 'Script integrity check failed',
-  evidence_pending: 'Queued for answer reading',
-  evidence_inventory: 'Reading answer pages',
-  evidence_grouping: 'Grouping answer attempts',
-  attempt_grouping: 'Grouping answer attempts',
-  evidence_ready: 'Answer reading complete',
-  evidence_needs_review: 'Answer reading needs your review',
-  evidence_failed: 'Answer reading failed',
-  mapping_pending: 'Queued for answer mapping',
-  blind_mapping: 'Mapping answers to questions',
-  mapping_ready: 'Answer mapping complete',
-  mapping_needs_review: 'Answer mapping needs your review',
-  mapping_failed: 'Answer mapping failed',
-  grading_pending: 'Queued for grading',
-  grading: 'Grading answers',
-  rubric_grading: 'Grading answers',
-  policy_ready: 'Grading complete, applying policy',
-  grading_needs_review: 'Grading needs your review',
-  grading_failed: 'Grading failed',
-  release_evaluation_pending: 'Preparing results',
-  completeness_challenge: 'Verifying completeness',
-  release_evaluation_failed: 'Results preparation failed',
-  auto_assessed: 'Auto-assessed',
-  pending_question_review: 'Awaiting question review',
-  graded: 'Graded',
-  pending_manual_review: 'Pending manual review',
+export type CheckedPaperExperienceStatus = 'checking' | 'ready_for_review' | 'needs_input' | 'published'
+
+export function checkedPaperExperienceStatus(paper: {
+  status?: string | null
+  release_status?: string | null
+  results_published?: boolean | null
+  needs_review?: boolean | null
+  manual_review_requested?: boolean | null
+}): CheckedPaperExperienceStatus {
+  if (paper.results_published || paper.release_status === 'published') return 'published'
+  if (!paper.status) return 'checking'
+  if (isCheckedPaperStatusActive(paper.status)) return 'checking'
+  if (
+    paper.needs_review
+    || paper.manual_review_requested
+    ||
+    isCheckedPaperStatusBlocked(paper.status)
+    || paper.status === 'pending_manual_review'
+    || paper.status === 'needs_review'
+    || paper.status === 'pending_question_review'
+  ) return 'needs_input'
+  return 'ready_for_review'
+}
+
+export const CHECKED_PAPER_EXPERIENCE_LABELS: Record<CheckedPaperExperienceStatus, string> = {
+  checking: 'Checking',
+  ready_for_review: 'Ready for review',
+  needs_input: 'Needs your input',
+  published: 'Published',
 }
 
 export function friendlyStage(status?: string | null) {
-  const value = String(status ?? '')
-  return FRIENDLY_STAGE_LABELS[value] || (value ? value.replace(/_/g, ' ') : 'Processing')
+  return CHECKED_PAPER_EXPERIENCE_LABELS[checkedPaperExperienceStatus({ status })]
 }
 
 export function canContinueAsException(blockers: CheckedPaperProcessingBlocker[]) {
   return blockers.length > 0 && blockers.every((blocker) => blocker.resolvable_by_teacher)
-}
-
-export function canRetryEvidence(status?: string | null, blockers: CheckedPaperProcessingBlocker[] = []) {
-  return status === 'evidence_failed' && blockers.some((blocker) => blocker.stage === 'answer_reading')
-}
-
-export function canRetryGrading(status?: string | null, blockers: CheckedPaperProcessingBlocker[] = []) {
-  return status === 'grading_failed' && blockers.some((blocker) => blocker.stage === 'rubric_grading')
 }
 
 export function normalizeStandard(value?: string | number | null) {
@@ -127,8 +169,8 @@ const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
   checked_paper_expected_page_count_invalid: 'Expected page count must be between 1 and 60.',
   CHECKED_PAPER_V2_MANIFEST_REQUIRED: 'This paper needs its answer key confirmed before it can be checked. Confirm the paper first.',
   GENERATED_PAPER_NOT_READY_FOR_CHECKING: 'This paper is not ready to be checked yet. Confirm the paper first.',
-  CHECKED_PAPER_LEGACY_READ_ONLY: 'This checked paper is on the legacy pipeline and is read-only.',
-  checked_paper_v2_b2c_integrity_unavailable: 'This account type does not support the new checking pipeline yet.',
+  CHECKED_PAPER_LEGACY_READ_ONLY: 'This older checked paper is read-only.',
+  checked_paper_v2_b2c_integrity_unavailable: 'Checking is not available for this paper yet. No grading was started.',
 }
 
 export function friendlyUploadError(detail?: string | null, fallback = 'Unable to upload this scan.') {

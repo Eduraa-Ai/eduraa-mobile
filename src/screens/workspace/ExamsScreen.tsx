@@ -8,6 +8,7 @@ import { examsApi, ExamPayload } from '../../api/exams'
 import { cheatSheetsApi, CheatSheetSyllabus, CheatSheetSyllabusList } from '../../api/cheatSheets'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { papersApi } from '../../api/papers'
+import { SCAN_UPLOAD_OPTIONS_QUERY_KEY } from '../../api/scanUpload'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import type { Exam, PaperListItem, Role, StudentExamRead, StudentExamPaper } from '../../types'
@@ -1198,7 +1199,10 @@ function StaffExamsView({ role }: { role?: Role }) {
       return selectedExam ? examsApi.update(selectedExam.id, payload) : examsApi.create(payload)
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['exams', 'staff'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['exams', 'staff'] }),
+        queryClient.invalidateQueries({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY }),
+      ])
       notify(selectedExam ? 'Exam updated' : 'Exam created', 'The exam list has been refreshed.')
       resetForm()
     },

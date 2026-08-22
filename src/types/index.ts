@@ -398,6 +398,11 @@ export interface CheckedPaperProcessingBlocker {
   message: string;
   stage: string;
   resolvable_by_teacher: boolean;
+  page_ids?: string[];
+  page_numbers?: number[];
+  occurrence_ids?: string[];
+  attempt_ids?: string[];
+  resolved_by_teacher?: boolean;
 }
 
 export interface GradingResultItem {
@@ -422,6 +427,10 @@ export interface GradingResultItem {
   status?: string | null;
   result_status?: string | null;
   correctness?: string | null;
+  policy_status?: string | null;
+  selected?: boolean | null;
+  attempt_ids?: string[] | null;
+  evidence_citations?: unknown[] | null;
   score?: number | null;
   max_score?: number | null;
   feedback?: string | null;

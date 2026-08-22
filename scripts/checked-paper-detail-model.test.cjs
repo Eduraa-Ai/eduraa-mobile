@@ -63,6 +63,18 @@ test('report never fabricates a score when summary metadata is missing', () => {
   assert.equal(report.headline, 'Your diagnosis will appear when checking finishes.')
 })
 
+test('partial review keeps known marks visible and labels them provisional', () => {
+  const report = model.buildCheckedPaperReport(paper({
+    status: 'pending_question_review',
+    needs_review: true,
+    total_score: 67,
+  }))
+  assert.equal(report.totalScore, 67)
+  assert.equal(report.provisional, true)
+  assert.equal(model.isCheckedPaperChecking(paper({ status: 'pending_question_review', needs_review: true, total_score: 67 })), false)
+  assert.equal(model.isCheckedPaperCheckFailed(paper({ status: 'mapping_needs_review', needs_review: true })), false)
+})
+
 test('question evidence resolves by stable id before index', () => {
   const fixture = paper()
   const evidence = model.findEvidenceQuestion(fixture, 'question-7', 0)
@@ -212,6 +224,33 @@ test('unanswered MCQs have no selected option and preserve the expected option',
   assert.equal(review.unanswered, true)
   assert.equal(review.options.some((option) => option.selected), false)
   assert.equal(review.options[0].expected, true)
+})
+
+test('evaluated scan evidence is not mislabeled as an unanswered question when response text is omitted', () => {
+  const item = question(1, 1, 2, {
+    question_type: 'short_answer',
+    response: null,
+    policy_status: 'evaluated',
+    attempt_ids: ['attempt-1'],
+    evidence_citations: [{ page: 1, region_id: 'region-1' }],
+  })
+  const review = model.buildQuestionReview(item)
+
+  assert.equal(review.answerAvailable, false)
+  assert.equal(review.answerEvaluatedFromScan, true)
+  assert.equal(review.unanswered, false)
+  assert.equal(model.questionStatus(item), 'wrong')
+})
+
+test('published teacher-reviewed results are final even when resolved pipeline blockers remain in history', () => {
+  const report = model.buildCheckedPaperReport(paper({
+    status: 'graded',
+    release_status: 'published',
+    results_published: true,
+    processing_blockers: [{ code: 'slice_not_calibrated', resolved_by_teacher: true }],
+  }))
+
+  assert.equal(report.provisional, false)
 })
 
 test('missing and partial MCQ option payloads remain explicit without fabricating content', () => {

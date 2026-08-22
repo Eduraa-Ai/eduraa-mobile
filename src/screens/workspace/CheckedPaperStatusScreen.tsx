@@ -12,14 +12,11 @@ import { colors, radius, spacing, typography } from '../../theme'
 import type { CheckedPaperProcessingBlocker } from '../../types'
 import {
   CHECKED_PAPER_STATUS_POLL_INTERVAL_MS,
+  CHECKED_PAPER_EXPERIENCE_LABELS,
   canContinueAsException,
-  canRetryEvidence,
-  canRetryGrading,
-  friendlyStage,
+  checkedPaperExperienceStatus,
   generateIdempotencyKey,
   isCheckedPaperStatusActive,
-  isCheckedPaperStatusBlocked,
-  isCheckedPaperStatusCompleted,
 } from './checkedPaperPipelineModel'
 
 type Route = RouteProp<StaffWorkspaceStackParamList, 'CheckedPaperStatus'>
@@ -34,6 +31,11 @@ function extractStatusCode(error: unknown) {
 }
 
 function BlockerRow({ blocker }: { blocker: CheckedPaperProcessingBlocker }) {
+  const scope = blocker.page_numbers?.length
+    ? `Check ${blocker.page_numbers.map((page) => `page ${page}`).join(', ')}.`
+    : blocker.occurrence_ids?.length
+      ? `Check ${blocker.occurrence_ids.length === 1 ? 'the highlighted question' : `${blocker.occurrence_ids.length} highlighted questions`}.`
+      : null
   return (
     <View style={styles.blockerRow}>
       <View style={styles.blockerIcon}>
@@ -41,7 +43,7 @@ function BlockerRow({ blocker }: { blocker: CheckedPaperProcessingBlocker }) {
       </View>
       <View style={styles.blockerCopy}>
         <Text style={styles.blockerMessage}>{blocker.message}</Text>
-        <Text style={styles.blockerMeta}>{blocker.stage.replace(/_/g, ' ')} · {blocker.code}</Text>
+        {scope ? <Text style={styles.blockerMeta}>{scope}</Text> : null}
       </View>
     </View>
   )
@@ -71,9 +73,11 @@ export default function CheckedPaperStatusScreen() {
   })
 
   const status = data?.status ?? ''
-  const blocked = isCheckedPaperStatusBlocked(status)
-  const completed = isCheckedPaperStatusCompleted(status)
-  const active = isCheckedPaperStatusActive(status)
+  const experienceStatus = data ? checkedPaperExperienceStatus(data) : 'checking'
+  const blocked = experienceStatus === 'needs_input'
+  const completed = experienceStatus === 'ready_for_review' || experienceStatus === 'published'
+  const active = experienceStatus === 'checking'
+  const experienceLabel = CHECKED_PAPER_EXPERIENCE_LABELS[experienceStatus]
 
   const integrityQuery = useQuery({
     queryKey: ['checked-paper', id, 'integrity'],
@@ -89,8 +93,28 @@ export default function CheckedPaperStatusScreen() {
 
   const canAct = typeof data?.row_version === 'number'
   const showContinueAsException = blocked && status.startsWith('integrity') && canContinueAsException(blockers) && canAct
-  const showRetryEvidence = canRetryEvidence(status, blockers) && canAct
-  const showRetryGrading = canRetryGrading(status, blockers) && canAct
+  const confirmableResults = useMemo(
+    () => (data?.grading_results ?? []).flatMap((result) => {
+      const resultId = String(result.result_id ?? '').trim()
+      const questionId = String(result.question_id ?? '').trim()
+      if ((!resultId && !questionId) || typeof result.score !== 'number' || !Number.isFinite(result.score)) return []
+      return [{
+        result_id: resultId || null,
+        question_id: questionId || null,
+        score: result.score,
+        feedback: result.feedback ?? null,
+        selected: result.selected !== false,
+      }]
+    }),
+    [data?.grading_results],
+  )
+  const canConfirmReviewedMarks = Boolean(
+    blocked
+    && data?.can_save_review
+    && data.grading_results?.length
+    && confirmableResults.length === data.grading_results.length
+    && !data.manual_review_requested,
+  )
 
   const runAction = async (name: string, action: () => Promise<unknown>) => {
     setPendingAction(name)
@@ -127,22 +151,20 @@ export default function CheckedPaperStatusScreen() {
     )
   }
 
-  const retryEvidence = () => {
-    if (!data || data.row_version == null) return
-    void runAction('retry-evidence', () => checkedPapersApi.evidenceRetry(id, { expected_revision: data.row_version as number }))
-  }
-
-  const retryGrading = () => {
-    if (!data || data.row_version == null) return
-    void runAction('retry-grading', () =>
-      checkedPapersApi.regrade(id, { expected_revision: data.row_version as number, idempotency_key: generateIdempotencyKey() }),
-    )
-  }
-
   const approve = () => {
     if (!data || data.row_version == null) return
     void runAction('approve', () =>
       checkedPapersApi.approve(id, { expected_revision: data.row_version as number, idempotency_key: generateIdempotencyKey() }),
+    )
+  }
+
+  const confirmReviewedMarks = () => {
+    if (!data || !canConfirmReviewedMarks) return
+    void runAction('confirm-review', () =>
+      checkedPapersApi.updateTeacherReview(id, {
+        grading_feedback: data.grading_feedback ?? null,
+        results: confirmableResults,
+      }),
     )
   }
 
@@ -173,7 +195,12 @@ export default function CheckedPaperStatusScreen() {
 
   const reUpload = () => {
     if (routeNames(navigation).includes('ScanUpload')) {
-      navigation.navigate('ScanUpload')
+      navigation.navigate('ScanUpload', {
+        initialPaperId: data?.paper_id ?? undefined,
+        initialExamId: data?.exam_id ?? undefined,
+        initialStudentId: data?.student_id ?? undefined,
+        initialSubjectId: data?.subject_id ?? undefined,
+      })
       return
     }
     navigation.goBack()
@@ -222,14 +249,14 @@ export default function CheckedPaperStatusScreen() {
       <GradientHeroCard
         eyebrow="SCAN STATUS"
         title={data.student_name || 'Checked paper'}
-        subtitle={[data.exam_name || data.subject_name, friendlyStage(status)].filter(Boolean).join(' · ')}
+        subtitle={[data.exam_name || data.subject_name, experienceLabel].filter(Boolean).join(' · ')}
       />
 
       {active ? (
         <AnimatedCard style={styles.statusCard}>
           <ActivityIndicator color={colors.accent} />
           <View style={styles.statusCopy}>
-            <Text style={styles.statusTitle}>{friendlyStage(status)}</Text>
+            <Text style={styles.statusTitle}>{experienceLabel}</Text>
             <Text style={styles.statusMeta}>This updates automatically. You can leave and come back.</Text>
           </View>
         </AnimatedCard>
@@ -239,13 +266,33 @@ export default function CheckedPaperStatusScreen() {
         <AnimatedCard style={styles.blockedCard}>
           <View style={styles.blockedHeader}>
             <Ionicons name="warning-outline" size={19} color={colors.danger} />
-            <Text style={styles.blockedTitle}>Needs your attention</Text>
+            <Text style={styles.blockedTitle}>Needs your input</Text>
           </View>
           {blockers.length ? (
             blockers.map((blocker) => <BlockerRow key={blocker.issue_id} blocker={blocker} />)
           ) : (
-            <Text style={styles.statusMeta}>{friendlyStage(status)}</Text>
+            <Text style={styles.statusMeta}>Eduraa checked everything it could. Review only the item shown here.</Text>
           )}
+
+          {data.grading_results?.length ? (
+            <View style={styles.confirmBlock}>
+              <Text style={styles.statusMeta}>Provisional score</Text>
+              <Text style={styles.completedScore}>{data.total_score ?? '-'} / {data.max_score ?? '-'}</Text>
+              <AnimatedButton label="Review highlighted items" onPress={openFullReport} />
+              {canConfirmReviewedMarks ? (
+                <>
+                  <Text style={styles.statusMeta}>If the current marks are correct, confirm them here. You can still open any question to change its marks first.</Text>
+                  <AnimatedButton
+                    label="Confirm reviewed marks"
+                    variant="secondary"
+                    loading={pendingAction === 'confirm-review'}
+                    disabled={Boolean(pendingAction)}
+                    onPress={confirmReviewedMarks}
+                  />
+                </>
+              ) : null}
+            </View>
+          ) : null}
 
           {showContinueAsException ? (
             <View style={styles.confirmBlock}>
@@ -264,36 +311,17 @@ export default function CheckedPaperStatusScreen() {
             </View>
           ) : null}
 
-          {showRetryEvidence ? (
-            <AnimatedButton
-              label="Retry answer reading"
-              loading={pendingAction === 'retry-evidence'}
-              disabled={Boolean(pendingAction)}
-              variant="secondary"
-              onPress={retryEvidence}
-            />
-          ) : null}
-
-          {showRetryGrading ? (
-            <AnimatedButton
-              label="Retry marks checking"
-              loading={pendingAction === 'retry-grading'}
-              disabled={Boolean(pendingAction)}
-              variant="secondary"
-              onPress={retryGrading}
-            />
-          ) : null}
-
-          <AnimatedButton label="Re-upload correct sheet" variant="ghost" onPress={reUpload} />
+          {status.startsWith('integrity') ? <AnimatedButton label="Replace paper" variant="ghost" onPress={reUpload} /> : null}
         </AnimatedCard>
       ) : null}
 
       {completed ? (
         <AnimatedCard style={styles.completedCard}>
+          <Text style={styles.statusMeta}>{data.needs_review ? 'Provisional score' : 'Score'}</Text>
           <Text style={styles.completedScore}>
             {data.total_score ?? '-'} / {data.max_score ?? '-'}
           </Text>
-          <Text style={styles.statusMeta}>{friendlyStage(status)}</Text>
+          <Text style={styles.statusMeta}>{experienceLabel}</Text>
           <AnimatedButton label="View full report" onPress={openFullReport} />
 
           {data.can_approve ? (
@@ -343,8 +371,8 @@ export default function CheckedPaperStatusScreen() {
       {!active && !blocked && !completed ? (
         <AnimatedCard style={styles.statusCard}>
           <View style={styles.statusCopy}>
-            <Text style={styles.statusTitle}>{friendlyStage(status)}</Text>
-            <Text style={styles.statusMeta}>This status is not actively updating. Refresh to check again.</Text>
+            <Text style={styles.statusTitle}>{experienceLabel}</Text>
+            <Text style={styles.statusMeta}>Open this paper again if you need to review its latest state.</Text>
           </View>
         </AnimatedCard>
       ) : null}

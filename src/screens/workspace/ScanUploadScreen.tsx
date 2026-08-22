@@ -4,15 +4,23 @@ import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
 import * as Sharing from 'expo-sharing'
 import { Ionicons } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectField, SelectableChip } from '../../components/ui'
-import { scanUploadApi, ScanUploadFile } from '../../api/scanUpload'
+import { SCAN_UPLOAD_OPTIONS_QUERY_KEY, scanUploadApi, ScanUploadFile } from '../../api/scanUpload'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import type { Role } from '../../types'
-import { friendlyUploadError, matchesStandardDivision } from './checkedPaperPipelineModel'
+import type { ScanUploadParams } from '../../navigation'
+import {
+  friendlyUploadError,
+  isPaperAvailableForUploadMode,
+  matchesStandardDivision,
+  resolveScanUploadLink,
+  resolveScanUploadStudentId,
+  type StaffScanUploadMode,
+} from './checkedPaperPipelineModel'
 
 const MAX_SCAN_FILES = 20
 
@@ -44,7 +52,15 @@ function fileSizeLabel(size?: number | null) {
 }
 
 function extractDetail(error: unknown, fallback: string) {
-  return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || fallback
+  const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object') {
+    const code = (detail as { code?: unknown }).code
+    const message = (detail as { message?: unknown }).message
+    if (typeof code === 'string') return code
+    if (typeof message === 'string') return message
+  }
+  return fallback
 }
 
 function routeNames(nav: any): string[] {
@@ -92,18 +108,23 @@ function FileCard({
 }
 
 export default function ScanUploadScreen() {
+  const route = useRoute<RouteProp<{ ScanUpload: ScanUploadParams }, 'ScanUpload'>>()
+  const initial = route.params
   const navigation = useNavigation<any>()
-  const role = useAuthStore((state) => state.user?.role)
-  const [selectedPaperId, setSelectedPaperId] = useState('')
-  const [selectedExamId, setSelectedExamId] = useState('')
-  const [selectedSubjectId, setSelectedSubjectId] = useState('')
-  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
+  const role = user?.role
+  const [staffUploadMode, setStaffUploadMode] = useState<StaffScanUploadMode>('ai_generation_system')
+  const [selectedPaperId, setSelectedPaperId] = useState(initial?.initialPaperId ?? '')
+  const [selectedExamId, setSelectedExamId] = useState(initial?.initialExamId ?? '')
+  const [selectedSubjectId, setSelectedSubjectId] = useState(initial?.initialSubjectId ?? '')
+  const [selectedStudentId, setSelectedStudentId] = useState(initial?.initialStudentId ?? '')
   const [files, setFiles] = useState<ScanUploadFile[]>([])
   const [previewFile, setPreviewFile] = useState<ScanUploadFile | null>(null)
   const insets = useSafeAreaInsets()
 
   const optionsQuery = useQuery({
-    queryKey: ['scan-upload', 'options'],
+    queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY,
     queryFn: scanUploadApi.getOptions,
   })
 
@@ -111,11 +132,9 @@ export default function ScanUploadScreen() {
   const selectedPaper = options?.papers.find((paper) => paper.id === selectedPaperId)
   const selectedExam = options?.exams.find((exam) => exam.id === selectedExamId)
   const effectiveSubjectId = selectedPaper?.subject_id || selectedSubjectId || selectedExam?.subject_id || null
-  const paperMode = selectedPaper?.source_type || null
   const staff = isStaffRole(role)
-  // This V2 pipeline grades the original page images directly and has no OCR
-  // identification, so the teacher must always pick the student explicitly —
-  // narrow the picker to the standard/division of whatever paper/exam is selected.
+  // The roster selection is authoritative for staff uploads. Narrow the picker
+  // to the standard/division of the selected paper or exam.
   const standardDivisionTarget = selectedPaper
     ? { standard: selectedPaper.standard, division: selectedPaper.division }
     : selectedExam
@@ -124,11 +143,13 @@ export default function ScanUploadScreen() {
 
   const paperOptions = useMemo(
     () =>
-      (options?.papers ?? []).map((paper) => ({
-        value: paper.id,
-        label: optionLabel([paper.title, paper.subject_name, paper.standard, paper.division, paper.source_type]),
-      })),
-    [options?.papers],
+      (options?.papers ?? [])
+        .filter((paper) => !staff || isPaperAvailableForUploadMode(paper.source_type, staffUploadMode))
+        .map((paper) => ({
+          value: paper.id,
+          label: optionLabel([paper.title, paper.subject_name, paper.standard, paper.division]),
+        })),
+    [options?.papers, staff, staffUploadMode],
   )
 
   const examOptions = useMemo(
@@ -160,18 +181,51 @@ export default function ScanUploadScreen() {
     [options?.students, standardDivisionTarget],
   )
 
+  // A blocked status can send the teacher back with the original roster and
+  // paper context. Resolve the mode from authoritative options instead of
+  // asking the teacher to repeat every selection.
+  useEffect(() => {
+    if (!staff || !options || !initial?.initialPaperId) return
+    const initialPaper = options.papers.find((paper) => paper.id === initial.initialPaperId)
+    if (initialPaper?.source_type === 'custom_paper') {
+      setStaffUploadMode('custom_paper')
+      setSelectedPaperId(initialPaper.id)
+      if (initialPaper.subject_id) setSelectedSubjectId(initialPaper.subject_id)
+    }
+  }, [initial?.initialPaperId, options, staff])
+
   const canSubmit = useMemo(() => {
     if (!files.length) return false
-    if (isStudentRole(role)) return Boolean(selectedPaperId)
+    if (isStudentRole(role)) return Boolean(selectedPaperId && user?.id)
     if (!selectedStudentId) return false
-    if (selectedPaperId) return true
+    if (staffUploadMode === 'custom_paper') return Boolean(selectedPaperId && effectiveSubjectId)
     return Boolean(selectedExamId && effectiveSubjectId)
-  }, [effectiveSubjectId, files.length, role, selectedExamId, selectedPaperId, selectedStudentId])
+  }, [effectiveSubjectId, files.length, role, selectedExamId, selectedPaperId, selectedStudentId, staffUploadMode, user?.id])
 
-  // Send a canonical upload_mode so the backend never has to guess: a picked
-  // custom paper is "custom_paper", everything else (a picked AI-generated
-  // paper, or exam+subject mode with no paper) is "ai_generation_system".
-  const uploadMode = staff ? (paperMode === 'custom_paper' ? 'custom_paper' : 'ai_generation_system') : null
+  const uploadLink = resolveScanUploadLink({
+    isStaff: staff,
+    mode: staffUploadMode,
+    selectedPaperId,
+    selectedExamId,
+  })
+
+  useEffect(() => {
+    if (!staff || !options) return
+
+    if (staffUploadMode === 'ai_generation_system') {
+      const exam = options.exams.find((item) => item.id === selectedExamId) ?? options.exams[0]
+      if (!exam) return
+      if (exam.id !== selectedExamId) setSelectedExamId(exam.id)
+      if (exam.subject_id && exam.subject_id !== selectedSubjectId) setSelectedSubjectId(exam.subject_id)
+      return
+    }
+
+    const customPapers = options.papers.filter((paper) => isPaperAvailableForUploadMode(paper.source_type, 'custom_paper'))
+    const paper = customPapers.find((item) => item.id === selectedPaperId) ?? customPapers[0]
+    if (!paper) return
+    if (paper.id !== selectedPaperId) setSelectedPaperId(paper.id)
+    if (paper.subject_id && paper.subject_id !== selectedSubjectId) setSelectedSubjectId(paper.subject_id)
+  }, [options, selectedExamId, selectedPaperId, selectedSubjectId, staff, staffUploadMode])
 
   useEffect(() => {
     if (!staff || !selectedStudentId) return
@@ -182,14 +236,23 @@ export default function ScanUploadScreen() {
   const uploadMutation = useMutation({
     mutationFn: () =>
       scanUploadApi.upload({
-        paperId: selectedPaperId || null,
-        examId: selectedPaperId ? null : selectedExamId || null,
+        paperId: uploadLink.paperId,
+        examId: uploadLink.examId,
         subjectId: effectiveSubjectId,
-        studentId: staff ? selectedStudentId || null : null,
-        uploadMode,
+        studentId: resolveScanUploadStudentId({
+          isStaff: staff,
+          selectedStudentId,
+          authenticatedUserId: user?.id,
+        }),
+        uploadMode: uploadLink.uploadMode,
         files,
       }),
     onSuccess: (checkedPaper) => {
+      // Replacement uploads can reuse the same checked-paper id. Seed the
+      // authoritative upload response before navigating so an old blocker is
+      // never shown while the next pipeline run starts.
+      queryClient.setQueryData(['checked-paper', checkedPaper.id], checkedPaper)
+      void queryClient.invalidateQueries({ queryKey: ['checked-papers'] })
       Alert.alert('Upload received', 'The scan was saved and grading has started.', [
         {
           text: 'View status',
@@ -208,9 +271,7 @@ export default function ScanUploadScreen() {
               return
             }
 
-            // Teachers land on the pipeline/status screen first — that's
-            // where blockers get surfaced and resolved — rather than the
-            // student-facing performance report.
+            // Teachers land on status first so any required input is clear.
             const parent = navigation.getParent?.()
             if (routeNames(navigation).includes('CheckedPaperStatus')) {
               navigation.navigate('CheckedPaperStatus', { checkedPaperId: checkedPaper.id })
@@ -350,7 +411,9 @@ export default function ScanUploadScreen() {
     if (!files.length) return 'Add at least one PDF or image.'
     if (isStudentRole(role) && !selectedPaperId) return 'Select a generated paper.'
     if (staff && !selectedStudentId) return 'Select the student.'
-    if (staff && !selectedPaperId && !(selectedExamId && effectiveSubjectId)) return 'Select a paper or exam and subject.'
+    if (staff && staffUploadMode === 'custom_paper' && !selectedPaperId) return 'Select a confirmed custom paper.'
+    if (staff && staffUploadMode === 'ai_generation_system' && !selectedExamId) return 'Select an exam.'
+    if (staff && !effectiveSubjectId) return 'Select a subject.'
     return 'Ready to upload.'
   })()
 
@@ -388,6 +451,40 @@ export default function ScanUploadScreen() {
 
       <AnimatedCard style={styles.formCard}>
         {staff ? (
+          <View style={styles.modeField}>
+            <Text style={styles.modeLabel}>Checking source</Text>
+            <View style={styles.modeRow}>
+              <SelectableChip
+                label="AI generated exam"
+                selected={staffUploadMode === 'ai_generation_system'}
+                onPress={() => {
+                  setStaffUploadMode('ai_generation_system')
+                  setSelectedPaperId('')
+                  const exam = options.exams.find((item) => item.id === selectedExamId) ?? options.exams[0]
+                  setSelectedExamId(exam?.id || '')
+                  setSelectedSubjectId(exam?.subject_id || '')
+                }}
+              />
+              <SelectableChip
+                label="Custom paper"
+                selected={staffUploadMode === 'custom_paper'}
+                onPress={() => {
+                  setStaffUploadMode('custom_paper')
+                  setSelectedExamId('')
+                  setSelectedPaperId('')
+                  setSelectedSubjectId('')
+                }}
+              />
+            </View>
+            <Text style={styles.modeHint}>
+              {staffUploadMode === 'custom_paper'
+                ? 'Choose a confirmed custom paper with its answer key.'
+                : 'Choose the exam whose answer sheet you are uploading.'}
+            </Text>
+          </View>
+        ) : null}
+
+        {staff ? (
           <View style={styles.studentField}>
             <SelectField
               label="Student"
@@ -397,33 +494,28 @@ export default function ScanUploadScreen() {
               onChange={setSelectedStudentId}
             />
             <Text style={styles.studentHint}>
-              Select the student before uploading. This pipeline grades the original page images
-              directly and does not use OCR identification.
+              Select the student before uploading. This roster selection stays attached to the paper.
             </Text>
           </View>
         ) : null}
 
-        <SelectField
-          label={isStudentRole(role) ? 'Generated paper' : 'Paper'}
-          value={selectedPaperId}
-          placeholder={paperOptions.length ? 'Select paper' : 'No generated papers yet'}
-          options={paperOptions}
-          onChange={(value) => {
-            setSelectedPaperId(value)
-            const paper = options.papers.find((item) => item.id === value)
-            setSelectedSubjectId(paper?.subject_id || '')
-            if (paper) setSelectedExamId('')
-          }}
-          disabled={paperOptions.length === 0}
-        />
+        {!staff || staffUploadMode === 'custom_paper' ? (
+          <SelectField
+            label={isStudentRole(role) ? 'Generated paper' : 'Confirmed custom paper'}
+            value={selectedPaperId}
+            placeholder={paperOptions.length ? 'Select paper' : staff ? 'No confirmed custom papers' : 'No generated papers yet'}
+            options={paperOptions}
+            onChange={(value) => {
+              setSelectedPaperId(value)
+              const paper = options.papers.find((item) => item.id === value)
+              setSelectedSubjectId(paper?.subject_id || '')
+            }}
+            disabled={paperOptions.length === 0}
+          />
+        ) : null}
 
-        {staff ? (
+        {staff && staffUploadMode === 'ai_generation_system' ? (
           <>
-            <View style={styles.orRow}>
-              <View style={styles.orLine} />
-              <Text style={styles.orText}>or use exam mode</Text>
-              <View style={styles.orLine} />
-            </View>
             <SelectField
               label="Exam"
               value={selectedExamId}
@@ -431,7 +523,6 @@ export default function ScanUploadScreen() {
               options={examOptions}
               onChange={(value) => {
                 setSelectedExamId(value)
-                setSelectedPaperId('')
                 const exam = options.exams.find((item) => item.id === value)
                 setSelectedSubjectId(exam?.subject_id || selectedSubjectId)
               }}
@@ -446,7 +537,7 @@ export default function ScanUploadScreen() {
               disabled={subjectOptions.length === 0 || Boolean(selectedPaper?.subject_id)}
             />
           </>
-        ) : selectedPaper ? (
+        ) : !staff && selectedPaper ? (
           <View style={styles.paperInfo}>
             <Text style={styles.paperInfoTitle}>{selectedPaper.subject_name || 'Subject selected'}</Text>
             <Text style={styles.paperInfoMeta}>{optionLabel([selectedPaper.standard, selectedPaper.division, selectedPaper.source_type]) || 'Generated paper'}</Text>
@@ -587,27 +678,30 @@ const styles = StyleSheet.create({
   studentField: {
     gap: spacing[1],
   },
-  studentHint: {
+  modeField: {
+    gap: spacing[2],
+  },
+  modeLabel: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  modeHint: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 11,
     lineHeight: 15,
   },
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  orLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.borderSubtle,
-  },
-  orText: {
-    color: colors.textSoft,
-    fontFamily: typography.fonts.bodyBold,
+  studentHint: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
     fontSize: 11,
-    textTransform: 'uppercase',
+    lineHeight: 15,
   },
   paperInfo: {
     borderRadius: radius.lg,

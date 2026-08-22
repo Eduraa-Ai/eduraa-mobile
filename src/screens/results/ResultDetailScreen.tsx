@@ -34,6 +34,7 @@ import {
   unreadQuestionReviewResponseItems,
 } from './checkedPaperDetailModel'
 import { loadSeenReviewResponseKeys } from './reviewNotificationState'
+import { CHECKED_PAPER_EXPERIENCE_LABELS, checkedPaperExperienceStatus } from '../workspace/checkedPaperPipelineModel'
 
 type Route = RouteProp<ResultsStackParamList, 'ResultDetail'>
 type Nav = NativeStackNavigationProp<ResultsStackParamList, 'ResultDetail'>
@@ -318,8 +319,8 @@ export default function ResultDetailScreen() {
       <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
         <View style={styles.stateSurface}>
           <ResultState
-            title="Checking needs another try"
-            message="Your submitted paper is safe, but checking did not finish. Return to Checked papers and open it again after checking is retried."
+            title="Needs your input"
+            message="Your paper is safe. Open it from Checked papers to review the specific item that needs you."
             action="Back to checked papers"
             onAction={() => navigation.navigate('ResultsList')}
           />
@@ -349,16 +350,11 @@ export default function ResultDetailScreen() {
       questionIndex: target.index,
     })
   }
-  const rawStatusLabel = (data.status || 'graded').replace(/_/g, ' ')
   const statusLabel = pollingIssue
-    ? 'retrying'
+    ? 'Checking'
     : isChecking && checkingProgressEstimated && checkingEstimate.isOverdue
-      ? 'still checking'
-      : isChecking
-        ? 'checking'
-        : rawStatusLabel.includes('pending') && rawStatusLabel.includes('review')
-          ? 'review pending'
-          : rawStatusLabel
+      ? 'Checking'
+      : CHECKED_PAPER_EXPERIENCE_LABELS[checkedPaperExperienceStatus(data)]
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
@@ -425,7 +421,7 @@ export default function ResultDetailScreen() {
                 checkingPaused={pollingIssue}
               />
               <View style={styles.scoreContext}>
-                <Text style={styles.scoreContextLabel}>{isChecking ? checkingContextLabel : 'Score signal'}</Text>
+                <Text style={styles.scoreContextLabel}>{isChecking ? checkingContextLabel : report.provisional ? 'Provisional score' : 'Score signal'}</Text>
                 <Text style={styles.scoreContextValue}>{isChecking ? checkingContextValue : report.percent != null && report.percent >= 65 ? 'Strong foundation' : 'Focused repair'}</Text>
                 {!isChecking ? (
                   <View style={styles.signalPill}>
