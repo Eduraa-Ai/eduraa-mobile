@@ -16,8 +16,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { PapersStackParamList } from "../../navigation";
 import { papersApi } from "../../api/papers";
+import { examsApi } from "../../api/exams";
 import { useAuthStore } from "../../stores/authStore";
-import type { PaperListItem } from "../../types";
+import type { PaperListItem, StudentExamRead } from "../../types";
 import { colors } from "../../theme/colors";
 import { fonts } from "../../theme/fonts";
 import { gradients } from "../../theme/gradients";
@@ -184,7 +185,7 @@ function PaperTile({
     : "Practice";
   const subject = resolvePaperSubject(item);
   const meta = `${subject.label} - ${item.total_marks} marks - ${duration}`;
-  const attemptLabel = item.is_submitted_by_me ? 'Attempted' : item.status;
+  const attemptLabel = item.is_submitted_by_me ? "Attempted" : item.status;
 
   return (
     <TouchableOpacity
@@ -272,32 +273,7 @@ function PaperTile({
   );
 }
 
-function PaperEmpty({
-  onPress,
-  assigned,
-}: {
-  onPress: () => void;
-  assigned?: boolean;
-}) {
-  if (assigned) {
-    return (
-      <View style={styles.emptyCard}>
-        <View style={styles.emptyIcon}>
-          <Ionicons
-            name="school-outline"
-            size={22}
-            color={colors.accentStrong}
-          />
-        </View>
-        <Text style={styles.emptyTitle}>Nothing assigned yet</Text>
-        <Text style={styles.emptyBody}>
-          Papers your teacher publishes for your class will appear here. Until
-          then, build your own under My practice.
-        </Text>
-      </View>
-    );
-  }
-
+function PaperEmpty({ onPress }: { onPress: () => void }) {
   return (
     <View style={styles.emptyCard}>
       <View style={styles.emptyIcon}>
@@ -323,14 +299,93 @@ function PaperEmpty({
   );
 }
 
+function ExamEmpty() {
+  return (
+    <View style={styles.emptyCard}>
+      <View style={styles.emptyIcon}>
+        <Ionicons name="school-outline" size={22} color={colors.accentStrong} />
+      </View>
+      <Text style={styles.emptyTitle}>No exams yet</Text>
+      <Text style={styles.emptyBody}>
+        When your teacher schedules an exam it appears here with the papers to
+        attempt. Until then, build your own under My practice.
+      </Text>
+    </View>
+  );
+}
+
+function ExamTile({
+  exam,
+  onOpenPaper,
+}: {
+  exam: StudentExamRead;
+  onOpenPaper: (paperId: string) => void;
+}) {
+  const scheduled = exam.exam_date
+    ? formatDate(exam.exam_date)
+    : "Date pending";
+
+  return (
+    <View style={styles.examCard}>
+      <View style={styles.examHeader}>
+        <View style={styles.examIcon}>
+          <Ionicons name="school" size={18} color={colors.accentStrong} />
+        </View>
+        <View style={styles.examHeaderCopy}>
+          <Text style={styles.examTitle} numberOfLines={2}>
+            {exam.name}
+          </Text>
+          <Text style={styles.examMeta} numberOfLines={1}>
+            {[exam.subject_name, exam.teacher_name, scheduled]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+        </View>
+      </View>
+      {exam.papers.map((paper) => (
+        <TouchableOpacity
+          key={paper.id}
+          activeOpacity={0.88}
+          onPress={() => onOpenPaper(paper.id)}
+          style={styles.examPaperRow}
+          accessibilityRole="button"
+          accessibilityLabel={`Attempt ${paper.title}`}
+        >
+          <View style={styles.examPaperCopy}>
+            <Text style={styles.examPaperTitle} numberOfLines={2}>
+              {paper.title}
+            </Text>
+            <Text style={styles.examPaperMeta}>
+              {paper.total_marks} marks
+              {paper.is_submitted_by_me ? " · Attempted" : ""}
+            </Text>
+          </View>
+          <Ionicons
+            name={
+              paper.is_submitted_by_me
+                ? "checkmark-circle"
+                : "arrow-forward-circle"
+            }
+            size={22}
+            color={
+              paper.is_submitted_by_me ? colors.success : colors.accentStrong
+            }
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
 export default function PapersScreen() {
   const navigation = useNavigation<Nav>();
   const role = useAuthStore((state) => state.user?.role);
-  // Only school students get two lists: the backend serves them their class's
-  // published papers by default and their own drafts under `scope=mine`.
-  const hasAssignedPapers = role === "student";
+  // A published paper is not yet assigned work: it only reaches a class once the
+  // teacher rolls it into an exam. School students therefore see exams here,
+  // never the raw published-paper feed, which would leak unreleased papers.
+  const hasExams = role === "student";
   const [scopeTab, setScopeTab] = useState<PaperScopeTab>("assigned");
-  const scope = hasAssignedPapers && scopeTab === "mine" ? "mine" : undefined;
+  const showingExams = hasExams && scopeTab === "assigned";
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -338,12 +393,26 @@ export default function PapersScreen() {
     });
   }, [navigation]);
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["papers", scope ?? "default"],
-    queryFn: () => papersApi.list({ skip: 0, limit: 50, scope }),
+  const papersQuery = useQuery({
+    queryKey: ["papers", hasExams ? "mine" : "default"],
+    queryFn: () =>
+      papersApi.list({
+        skip: 0,
+        limit: 50,
+        scope: hasExams ? "mine" : undefined,
+      }),
+    enabled: !showingExams,
   });
 
-  const papers = data?.items ?? [];
+  const examsQuery = useQuery({
+    queryKey: ["exams", "student"],
+    queryFn: examsApi.listStudentExams,
+    enabled: showingExams,
+  });
+
+  const activeQuery = showingExams ? examsQuery : papersQuery;
+  const papers = papersQuery.data?.items ?? [];
+  const exams = examsQuery.data ?? [];
   const openGenerate = () => navigation.navigate("GeneratePaper");
 
   return (
@@ -352,11 +421,11 @@ export default function PapersScreen() {
       <Screen contentStyle={styles.screenContent}>
         <GeneratePanel onPress={openGenerate} />
 
-        {hasAssignedPapers ? (
+        {hasExams ? (
           <View style={styles.scopeTabs}>
             {(
               [
-                { key: "assigned", label: "From my teacher" },
+                { key: "assigned", label: "Exams" },
                 { key: "mine", label: "My practice" },
               ] as const
             ).map((tab) => {
@@ -384,34 +453,65 @@ export default function PapersScreen() {
           </View>
         ) : null}
 
-        {isLoading ? (
+        {activeQuery.isLoading ? (
           <View style={styles.loading}>
             <ActivityIndicator color={colors.accentStrong} />
-            <Text style={styles.loadingText}>Loading papers</Text>
+            <Text style={styles.loadingText}>
+              {showingExams ? "Loading exams" : "Loading papers"}
+            </Text>
           </View>
-        ) : isError ? (
+        ) : activeQuery.isError ? (
           <View style={styles.errorCard}>
-            <Text style={styles.errorTitle}>Could not load papers</Text>
+            <Text style={styles.errorTitle}>
+              {showingExams ? "Could not load exams" : "Could not load papers"}
+            </Text>
             <Text style={styles.errorBody}>
               Refresh the library and try again.
             </Text>
             <TouchableOpacity
               activeOpacity={0.88}
-              onPress={() => refetch()}
+              onPress={() => activeQuery.refetch()}
               style={styles.retryButton}
             >
               <Text style={styles.retry}>Try again</Text>
             </TouchableOpacity>
           </View>
+        ) : showingExams ? (
+          <View style={styles.listBlock}>
+            {exams.length > 0 ? (
+              <View style={styles.listHeader}>
+                <Text style={styles.listEyebrow}>Assigned exams</Text>
+                <Text style={styles.listCount}>
+                  {exams.length} exam{exams.length === 1 ? "" : "s"}
+                </Text>
+              </View>
+            ) : null}
+            <FlatList
+              data={exams}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <ExamTile
+                  exam={item}
+                  onOpenPaper={(paperId) =>
+                    navigation.navigate("AttemptPaper", {
+                      paperId,
+                      examId: item.id,
+                    })
+                  }
+                />
+              )}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: spacing[4] }} />
+              )}
+              scrollEnabled={false}
+              ListEmptyComponent={<ExamEmpty />}
+            />
+          </View>
         ) : (
           <View style={styles.listBlock}>
             {papers.length > 0 ? (
               <View style={styles.listHeader}>
-                <Text style={styles.listEyebrow}>
-                  {scope === undefined && hasAssignedPapers
-                    ? "Assigned"
-                    : "Library"}
-                </Text>
+                <Text style={styles.listEyebrow}>Library</Text>
                 <Text style={styles.listCount}>{papers.length} saved</Text>
               </View>
             ) : null}
@@ -430,12 +530,7 @@ export default function PapersScreen() {
                 <View style={{ height: spacing[4] }} />
               )}
               scrollEnabled={false}
-              ListEmptyComponent={
-                <PaperEmpty
-                  onPress={openGenerate}
-                  assigned={hasAssignedPapers && scopeTab === "assigned"}
-                />
-              }
+              ListEmptyComponent={<PaperEmpty onPress={openGenerate} />}
             />
           </View>
         )}
@@ -479,6 +574,67 @@ const styles = StyleSheet.create({
   scopeTabTextActive: {
     fontFamily: fonts.displaySemibold,
     color: colors.accentStrong,
+  },
+  examCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing[4],
+    gap: spacing[3],
+    ...shadows.sm,
+  },
+  examHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+  },
+  examIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accentSoft,
+  },
+  examHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  examTitle: {
+    fontFamily: fonts.displaySemibold,
+    fontSize: 16,
+    color: colors.text,
+  },
+  examMeta: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  examPaperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[3],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  examPaperCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  examPaperTitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.text,
+  },
+  examPaperMeta: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textMuted,
   },
   navTitleWrap: {
     gap: 1,

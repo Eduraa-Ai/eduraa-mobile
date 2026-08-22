@@ -510,6 +510,57 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
   return { questions, totalScore, maxScore, percent, correct, wrong, missed, pending, firstRepair, recoverableMarks, repairCount, headline, diagnosisTitle, diagnosisBody }
 }
 
+export function pendingQuestionReviewItems(paper: CheckedPaper) {
+  return (paper.grading_results ?? [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => Boolean(item.manual_review_requested && !item.manual_review_completed))
+}
+
+export function teacherReviewResponseNotification(item: GradingResultItem, index: number) {
+  const thread = item.question_review_thread ?? []
+  let latestStudentIndex = -1
+  thread.forEach((entry, entryIndex) => {
+    if (entry.author_role === 'student') latestStudentIndex = entryIndex
+  })
+  if (latestStudentIndex < 0) return null
+
+  let teacherEntryIndex = -1
+  for (let entryIndex = latestStudentIndex + 1; entryIndex < thread.length; entryIndex += 1) {
+    if (thread[entryIndex]?.author_role === 'teacher') teacherEntryIndex = entryIndex
+  }
+  if (teacherEntryIndex < 0) return null
+  const entry = thread[teacherEntryIndex]
+  if (entry.student_notification_pending === false) return null
+  const resultKey = item.result_id || item.question_id || `index-${index}`
+  const eventKey = entry.created_at || `${entry.event_type || 'teacher-response'}-${teacherEntryIndex}`
+  return { entry, keyPart: `${resultKey}:${eventKey}` }
+}
+
+export function reviewResponseNotificationKey(paperId: string, item: GradingResultItem, index: number) {
+  const notification = teacherReviewResponseNotification(item, index)
+  return notification ? `${paperId}:${notification.keyPart}` : null
+}
+
+export function hasUnreadTeacherReviewResponse(
+  item: GradingResultItem,
+  index = 0,
+  paperId = '',
+  seenKeys: ReadonlySet<string> = new Set(),
+) {
+  const key = reviewResponseNotificationKey(paperId, item, index)
+  return Boolean(key && !seenKeys.has(key))
+}
+
+export function unreadQuestionReviewResponseItems(paper: CheckedPaper, seenKeys: ReadonlySet<string> = new Set()) {
+  return (paper.grading_results ?? [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item, index }) => hasUnreadTeacherReviewResponse(item, index, paper.id, seenKeys))
+}
+
+export function questionReviewLabel(item: GradingResultItem, index: number) {
+  return `Question ${item.question_number ?? index + 1}`
+}
+
 export function findEvidenceQuestion(paper: CheckedPaper, questionId?: string, questionIndex?: number) {
   const questions = paper.grading_results ?? []
   if (questionId) {

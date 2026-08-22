@@ -162,7 +162,8 @@ export interface QuestionInPaper {
 export interface Paper {
   id: string;
   school_id: string;
-  created_by: string;
+  // Absent from GET /papers/{id}, which exposes only `created_by_name`.
+  created_by?: string;
   subject_id?: string;
   title: string;
   subtitle?: string;
@@ -446,6 +447,8 @@ export interface GradingResultItem {
     author_id?: string | null;
     message?: string | null;
     created_at?: string | null;
+    student_notification_pending?: boolean | null;
+    student_seen_at?: string | null;
   }> | null;
 }
 

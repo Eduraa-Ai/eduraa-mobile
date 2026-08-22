@@ -24,11 +24,16 @@ import {
   CHECKED_PAPER_POLL_INTERVAL_MS,
   checkedPaperTitle,
   formatReportDate,
+  hasUnreadTeacherReviewResponse,
   isCheckedPaperCheckFailed,
   isCheckedPaperChecking,
+  pendingQuestionReviewItems,
   questionStatus,
+  questionReviewLabel,
   questionTypeLabel,
+  unreadQuestionReviewResponseItems,
 } from './checkedPaperDetailModel'
+import { loadSeenReviewResponseKeys } from './reviewNotificationState'
 
 type Route = RouteProp<ResultsStackParamList, 'ResultDetail'>
 type Nav = NativeStackNavigationProp<ResultsStackParamList, 'ResultDetail'>
@@ -118,7 +123,7 @@ function DistributionMetric({ label, value, tone }: { label: string; value: numb
   )
 }
 
-function ReportQuestionRow({ item, index, onPress }: { item: GradingResultItem; index: number; onPress: () => void }) {
+function ReportQuestionRow({ item, index, teacherReplied, onPress }: { item: GradingResultItem; index: number; teacherReplied: boolean; onPress: () => void }) {
   const status = questionStatus(item)
   const meta = STATUS_META[status]
   const number = item.question_number ?? index + 1
@@ -130,6 +135,7 @@ function ReportQuestionRow({ item, index, onPress }: { item: GradingResultItem; 
   const preview = String(detail)
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
+  const reviewPending = Boolean(item.manual_review_requested && !item.manual_review_completed)
   return (
     <Pressable
       accessibilityRole="button"
@@ -141,6 +147,14 @@ function ReportQuestionRow({ item, index, onPress }: { item: GradingResultItem; 
         <Text style={[styles.questionIndexText, { color: meta.tone }]}>{String(number).padStart(2, '0')}</Text>
       </View>
       <View style={styles.questionCopy}>
+        {teacherReplied || reviewPending ? (
+          <View style={styles.questionReviewChip}>
+            <Ionicons name={teacherReplied ? 'notifications-outline' : 'chatbox-ellipses-outline'} size={12} color={colors.accentStrong} />
+            <Text style={styles.questionReviewChipText}>
+              {teacherReplied ? `Teacher replied${reviewPending ? ' · review open' : ''}` : 'Review pending'}
+            </Text>
+          </View>
+        ) : null}
         <MathText style={styles.questionTitle} value={title} />
         <MathText style={styles.questionDetail} value={preview} />
       </View>
@@ -178,6 +192,8 @@ export default function ResultDetailScreen() {
   const [manualRefreshing, setManualRefreshing] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [seenReviewResponseKeys, setSeenReviewResponseKeys] = useState<Set<string>>(new Set())
+  const [seenReviewResponseKeysLoaded, setSeenReviewResponseKeysLoaded] = useState(false)
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['checked-paper', id],
     queryFn: () => checkedPapersApi.getById(id),
@@ -193,7 +209,16 @@ export default function ResultDetailScreen() {
   useFocusEffect(useCallback(() => {
     if (focusedOnce.current && id) void refetch()
     focusedOnce.current = true
-  }, [id, refetch]))
+    if (!isStaff && user?.id) {
+      setSeenReviewResponseKeysLoaded(false)
+      void loadSeenReviewResponseKeys(user.id).then((keys) => {
+        setSeenReviewResponseKeys(keys)
+        setSeenReviewResponseKeysLoaded(true)
+      })
+    } else {
+      setSeenReviewResponseKeysLoaded(true)
+    }
+  }, [id, isStaff, refetch, user?.id]))
 
   const report = useMemo(() => data ? buildCheckedPaperReport(data) : null, [data])
   const isChecking = Boolean(data && isCheckedPaperChecking(data))
@@ -304,6 +329,26 @@ export default function ResultDetailScreen() {
   }
 
   const title = checkedPaperTitle(data)
+  const pendingReviews = pendingQuestionReviewItems(data)
+  const pendingReviewPreview = pendingReviews.slice(0, 3).map(({ item, index }) => questionReviewLabel(item, index)).join(', ')
+  const pendingReviewTitle = `${pendingReviews.length} question review${pendingReviews.length === 1 ? '' : 's'} pending`
+  const unreadResponses = isStaff || !seenReviewResponseKeysLoaded ? [] : unreadQuestionReviewResponseItems(data, seenReviewResponseKeys)
+  const unreadResponsePreview = unreadResponses.slice(0, 3).map(({ item, index }) => questionReviewLabel(item, index)).join(', ')
+  const unreadResponseTitle = `${unreadResponses.length} teacher response${unreadResponses.length === 1 ? '' : 's'}`
+  const reviewNotificationItems = unreadResponses.length ? unreadResponses : pendingReviews
+  const reviewNotificationTitle = unreadResponses.length ? unreadResponseTitle : pendingReviewTitle
+  const reviewNotificationPreview = unreadResponses.length
+    ? `${unreadResponsePreview}${pendingReviews.length ? ` · ${pendingReviews.length} review${pendingReviews.length === 1 ? '' : 's'} still pending` : ''}`
+    : pendingReviewPreview
+  const openFirstReviewNotification = () => {
+    const target = reviewNotificationItems[0]
+    if (!target) return
+    navigation.navigate('QuestionEvidence', {
+      checkedPaperId: id,
+      questionId: target.item.question_id || undefined,
+      questionIndex: target.index,
+    })
+  }
   const rawStatusLabel = (data.status || 'graded').replace(/_/g, ' ')
   const statusLabel = pollingIssue
     ? 'retrying'
@@ -430,6 +475,28 @@ export default function ResultDetailScreen() {
               </Pressable>
             ) : null}
 
+            {reviewNotificationItems.length ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${reviewNotificationTitle}. ${reviewNotificationPreview}`}
+                accessibilityHint="Opens the related review question."
+                onPress={openFirstReviewNotification}
+                style={({ pressed }) => [styles.reviewBanner, pressed && styles.pressed]}
+              >
+                <View style={styles.reviewBannerIcon}>
+                  <Ionicons name="notifications-outline" size={17} color={colors.accentStrong} />
+                </View>
+                <View style={styles.reviewBannerCopy}>
+                  <Text style={styles.reviewBannerTitle}>
+                    {reviewNotificationTitle}
+                  </Text>
+                  <Text style={styles.reviewBannerText} numberOfLines={2}>
+                    {reviewNotificationPreview || 'Open the related question review.'}
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+
             <View style={styles.breakdownHeader}>
               <View>
                 <Text style={styles.breakdownTitle}>Question breakdown</Text>
@@ -446,7 +513,15 @@ export default function ResultDetailScreen() {
 
             {report.questions.length ? (
               <View style={styles.questionList}>
-                {report.questions.map((item, index) => <ReportQuestionRow key={item.question_id || String(index)} item={item} index={index} onPress={() => openQuestion(item, index)} />)}
+                {report.questions.map((item, index) => (
+                  <ReportQuestionRow
+                    key={item.question_id || String(index)}
+                    item={item}
+                    index={index}
+                    teacherReplied={!isStaff && seenReviewResponseKeysLoaded && hasUnreadTeacherReviewResponse(item, index, data.id, seenReviewResponseKeys)}
+                    onPress={() => openQuestion(item, index)}
+                  />
+                ))}
               </View>
             ) : (
               <View style={styles.emptyQuestions}><Text style={styles.stateMessage}>Question evidence will appear when detailed grading is available.</Text></View>
@@ -506,6 +581,11 @@ const styles = StyleSheet.create({
   distributionLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 0.7, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
   primaryAction: { minHeight: 44, borderRadius: 14, backgroundColor: '#07152d', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   primaryActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
+  reviewBanner: { minHeight: 58, borderRadius: 16, borderWidth: 1, borderColor: '#f8c979', backgroundColor: '#fff8e7', paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  reviewBannerIcon: { width: 34, height: 34, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff0cf' },
+  reviewBannerCopy: { flex: 1, minWidth: 0 },
+  reviewBannerTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 16 },
+  reviewBannerText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 13, marginTop: 2 },
   breakdownHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing[3], marginTop: spacing[1] },
   breakdownTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
   breakdownHint: { maxWidth: 250, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 12, marginTop: 1 },
@@ -515,6 +595,8 @@ const styles = StyleSheet.create({
   questionIndex: { width: 38, height: 38, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   questionIndexText: { fontFamily: typography.fonts.bodyBold, fontSize: 10 },
   questionCopy: { flex: 1, minWidth: 0 },
+  questionReviewChip: { alignSelf: 'flex-start', minHeight: 22, borderRadius: radius.full, paddingHorizontal: spacing[2], flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff0cf', borderWidth: 1, borderColor: '#f8c979', marginBottom: spacing[1] },
+  questionReviewChipText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8 },
   questionTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 12 },
   questionDetail: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, marginTop: 3 },
   questionScore: { flexDirection: 'row', alignItems: 'center', gap: 3 },

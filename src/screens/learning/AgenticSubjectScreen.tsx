@@ -1,8 +1,8 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
-import { useQuery } from '@tanstack/react-query'
-import { agenticLearningApi, AgenticLearningSubtopicCard } from '../../api/agenticLearning'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { agenticLearningApi, AgenticLearningSubtopicCard, warmTopicLessons } from '../../api/agenticLearning'
 import { AppScreen, ErrorState, MathText } from '../../components/ui'
 import { colors, radius, spacing, typography } from '../../theme'
 import { AgenticHeader, AgenticIntro, AgenticSurface } from './AgenticLearningFrame'
@@ -74,6 +74,15 @@ export default function AgenticSubjectScreen() {
 
   const subject = subjectsQuery.data?.find((item) => item.subject_id === subjectId)
   const topics = subtopicsQuery.data ?? []
+
+  // Warm the lessons a learner is most likely to open. Without this the first
+  // tap waits 15-20s for the LLM to build the lesson.
+  const queryClient = useQueryClient()
+  const warmKey = topics.slice(0, 3).map((topic) => topic.topic_id).join(',')
+  useEffect(() => {
+    if (!warmKey) return
+    void warmTopicLessons(queryClient, warmKey.split(','), 3)
+  }, [queryClient, warmKey])
   const subjectName = subject?.subject_name || 'Subject'
   const tracked = subject?.total_subtopics ?? topics.length
   const mastery = clampPercent(subject?.average_mastery)

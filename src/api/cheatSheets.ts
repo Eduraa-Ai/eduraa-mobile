@@ -65,6 +65,38 @@ export interface CheatSheetList {
   total: number
 }
 
+export interface CheatSheetSyllabus {
+  id: string
+  teacher_id: string
+  teacher_name?: string | null
+  school_id?: string | null
+  subject_id?: string | null
+  subject_name?: string | null
+  exam_id: string
+  exam_name?: string | null
+  exam_date?: string | null
+  paper_id?: string | null
+  paper_title?: string | null
+  title: string
+  status: string
+  standard?: string | null
+  division?: string | null
+  book_ids: string[]
+  chapter_ids: string[]
+  topic_ids: string[]
+  subtopic_names: string[]
+  scope: Record<string, unknown>
+  source_meta: Record<string, unknown>
+  shared_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CheatSheetSyllabusList {
+  items: CheatSheetSyllabus[]
+  total: number
+}
+
 export function resolveCheatSheetPdfUrl(sheetId: string) {
   return `${API_BASE_URL}/api/v1/cheat-sheets/${sheetId}/pdf`
 }
@@ -72,6 +104,19 @@ export function resolveCheatSheetPdfUrl(sheetId: string) {
 export const cheatSheetsApi = {
   async list(status?: string) {
     const response = await apiClient.get<CheatSheetList>('/cheat-sheets', { params: { status } })
+    return response.data
+  },
+
+  async listSharedSyllabi() {
+    const response = await apiClient.get<CheatSheetSyllabusList>('/cheat-sheets/teacher/syllabi')
+    return response.data
+  },
+
+  async shareSyllabus(examId: string, paperId?: string | null) {
+    const response = await apiClient.post<CheatSheetSyllabus>('/cheat-sheets/teacher/syllabi/share', {
+      exam_id: examId,
+      paper_id: paperId ?? null,
+    })
     return response.data
   },
 }

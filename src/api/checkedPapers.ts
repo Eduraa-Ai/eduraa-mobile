@@ -53,6 +53,11 @@ export interface QuestionReviewCommentPayload {
   resolve?: boolean
 }
 
+export interface QuestionReviewSeenPayload {
+  question_id?: string | null
+  result_id?: string | null
+}
+
 export interface TeacherReviewResultPayload {
   result_id?: string | null
   question_id?: string | null
@@ -121,6 +126,13 @@ export const checkedPapersApi = {
       payload,
     )
     return response.data
+  },
+
+  markQuestionReviewSeen: async (
+    id: string,
+    payload: QuestionReviewSeenPayload,
+  ): Promise<void> => {
+    await apiClient.post(`/checked-papers/${id}/question-review-seen`, payload)
   },
 
   updateTeacherReview: async (
