@@ -163,7 +163,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && path === '/api/v1/auth/login') {
     const payload = await body(request)
     activeRole = roleFromIdentifier(String(payload.identifier || ''))
-    if (activeRole === 'student' && String(payload.identifier).includes('pending')) return json(response, 403, { detail: 'Your school account is waiting for approval.' })
+    if (activeRole === 'student' && String(payload.identifier).includes('pending')) return json(response, 403, { detail: 'Student account is pending approval.' })
     return json(response, 200, { access_token: `synthetic-${activeRole}`, refresh_token: `refresh-${activeRole}`, token_type: 'bearer', user: userForRole(activeRole) })
   }
   if (request.method === 'GET' && path === '/api/v1/auth/me') return json(response, 200, userForRole(activeRole))
