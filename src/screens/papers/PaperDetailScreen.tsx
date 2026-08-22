@@ -192,7 +192,12 @@ export default function PaperDetailScreen() {
     onMutate: () => setActionError(null),
     onSuccess: async (published) => {
       queryClient.setQueryData(["paper", params.paperId], published);
-      await queryClient.invalidateQueries({ queryKey: ["papers"] });
+      // The exam picker keeps its own published-paper list, which a `papers`
+      // prefix never reaches.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["papers"] }),
+        queryClient.invalidateQueries({ queryKey: ["exams", "papers"] }),
+      ]);
     },
     onError: (error: any) => {
       const detail = error?.response?.data?.detail;
@@ -212,6 +217,7 @@ export default function PaperDetailScreen() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["paper", params.paperId] }),
         queryClient.invalidateQueries({ queryKey: ["papers"] }),
+        queryClient.invalidateQueries({ queryKey: ["exams", "papers"] }),
       ]);
     },
     onError: (error: any) => {
@@ -233,6 +239,7 @@ export default function PaperDetailScreen() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["papers"] }),
         queryClient.invalidateQueries({ queryKey: ["exams", "practice"] }),
+        queryClient.invalidateQueries({ queryKey: ["exams", "papers"] }),
       ]);
       queryClient.removeQueries({ queryKey: ["paper", params.paperId] });
       queryClient.removeQueries({
