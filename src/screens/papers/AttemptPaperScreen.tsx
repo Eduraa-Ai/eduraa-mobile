@@ -39,12 +39,15 @@ import { spacing, radius, shadows } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import type {
   AnswerEntry,
-  MatchColumnsOptions,
   MCQOption,
   QuestionInPaper,
 } from "../../types";
 import { ErrorState, LatexText, QuestionVisual } from "../../components/ui";
 import { latexToPlainText } from "../../utils/latex";
+import {
+  buildMatchColumnsRows,
+  isMatchColumnsOptions,
+} from "../../utils/matchColumns";
 import { prefetchProtectedImages } from "../../utils/protectedImageCache";
 import {
   planQuestionVisualPrefetch,
@@ -100,17 +103,6 @@ function formatQuestionType(value: QuestionInPaper["question_type"]) {
   return "Match columns";
 }
 
-function isMatchColumnsOptions(
-  options: QuestionInPaper["options"],
-): options is MatchColumnsOptions {
-  return Boolean(
-    options &&
-      !Array.isArray(options) &&
-      "left" in options &&
-      "right" in options,
-  );
-}
-
 const StandardQuestionCard = React.memo(function StandardQuestionCard({
   question,
   index,
@@ -159,6 +151,12 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
     showImmediateSelection(value)
     onSelectAnswer(question.id, value)
   }, [onSelectAnswer, question.id, showImmediateSelection])
+
+  const matchRows =
+    question.question_type === "match_columns" &&
+    isMatchColumnsOptions(question.options)
+      ? buildMatchColumnsRows(question.options)
+      : null
 
   return (
     <View
@@ -318,27 +316,30 @@ const StandardQuestionCard = React.memo(function StandardQuestionCard({
         />
       )}
 
-      {question.question_type === "match_columns" &&
-      isMatchColumnsOptions(question.options) ? (
+      {matchRows ? (
         <View style={styles.matchBox}>
-          <View style={styles.matchColumn}>
-            <Text style={styles.matchLabel}>Column A</Text>
-            {question.options.left.map((item, itemIndex) => (
-              <MemoLatexText
-                key={`${item}-${itemIndex}`}
-                value={`${itemIndex + 1}. ${item}`}
-                style={styles.matchItem}
-              />
-            ))}
-          </View>
-          <View style={styles.matchColumn}>
-            <Text style={styles.matchLabel}>Column B</Text>
-            {question.options.right.map((item, itemIndex) => (
-              <MemoLatexText
-                key={`${item}-${itemIndex}`}
-                value={`${String.fromCharCode(65 + itemIndex)}. ${item}`}
-                style={styles.matchItem}
-              />
+          <View style={styles.matchColumns}>
+            {(
+              [
+                { label: "Column A", items: matchRows.left },
+                { label: "Column B", items: matchRows.right },
+              ] as const
+            ).map((column) => (
+              <View key={column.label} style={styles.matchColumn}>
+                <Text style={styles.matchLabel}>{column.label}</Text>
+                {column.items.map((row) => (
+                  <View key={row.key} style={styles.matchItemRow}>
+                    <View style={styles.matchKeyBadge}>
+                      <Text style={styles.matchKeyText}>{row.key}</Text>
+                    </View>
+                    <MemoLatexText
+                      value={row.label}
+                      style={styles.matchItem}
+                      containerStyle={styles.matchItemTextContainer}
+                    />
+                  </View>
+                ))}
+              </View>
             ))}
           </View>
           <TextInput
@@ -1654,7 +1655,12 @@ const styles = StyleSheet.create({
   matchBox: {
     gap: spacing[3],
   },
+  matchColumns: {
+    flexDirection: "row",
+    gap: spacing[2],
+  },
   matchColumn: {
+    flex: 1,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -1668,6 +1674,30 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 0.9,
     textTransform: "uppercase",
+  },
+  matchItemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[2],
+  },
+  matchKeyBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface1,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 4,
+  },
+  matchKeyText: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 10,
+  },
+  matchItemTextContainer: {
+    flex: 1,
   },
   matchItem: {
     color: colors.text,

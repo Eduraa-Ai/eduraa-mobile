@@ -28,6 +28,7 @@ const models = [
   'src/utils/latex.ts',
   'src/utils/aiResponseContent.ts',
   'src/utils/questionVisual.ts',
+  'src/utils/matchColumns.ts',
   'src/utils/bookPaperGeneration.ts',
   'src/auth/queryCacheScope.ts',
   'src/auth/roles.ts',
@@ -154,6 +155,10 @@ const suites = [
   {
     file: 'scripts/book-paper-generation.test.cjs',
     env: { BOOK_PAPER_GENERATION_MODEL_PATH: path.join(outDir, 'utils/bookPaperGeneration.js') },
+  },
+  {
+    file: 'scripts/match-columns.test.cjs',
+    env: { MATCH_COLUMNS_MODEL_PATH: path.join(outDir, 'utils/matchColumns.js') },
   },
 ]
 
