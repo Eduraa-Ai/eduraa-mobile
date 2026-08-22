@@ -10,6 +10,14 @@ export const CHECKED_PAPERS_POLL_INTERVAL_MS = 4000
 const checkingStatuses = new Set(['submitted', 'checking', 'processing', 'uploaded'])
 const failedStatuses = new Set(['failed', 'error', 'grading_failed', 'checking_failed'])
 
+// V2 manifest pipeline stages report a blocked state via a "_failed" or
+// "_needs_review" suffix (e.g. "integrity_failed", "evidence_needs_review").
+// Matching that substring keeps this shared list in sync with those stages
+// without having to enumerate every one here.
+function isBlockedStatus(status: string) {
+  return failedStatuses.has(status) || status.includes('needs_review') || status.includes('failed')
+}
+
 export function normalize(value?: string | null) {
   return String(value ?? '').trim().toLowerCase()
 }
@@ -88,7 +96,7 @@ export function scoreLabel(paper: CheckedPaper) {
 
 export function isPaperChecking(paper: CheckedPaper) {
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
-  if (failedStatuses.has(status)) return false
+  if (isBlockedStatus(status)) return false
   if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review' || status === 'needs_review') {
     return false
   }
@@ -112,7 +120,7 @@ export function formatPaperCount(count: number) {
 export function isNeedsAttention(paper: CheckedPaper) {
   const percent = scorePercent(paper)
   const status = normalize(paper.status).replace(/[\s-]+/g, '_')
-  if (failedStatuses.has(status)) return true
+  if (isBlockedStatus(status)) return true
   if (getQuestionReviewCount(paper) > 0) return true
   if (paper.manual_review_requested || paper.needs_review || paper.status === 'pending_manual_review') return true
   if (checkingStatuses.has(status)) return true
@@ -131,7 +139,7 @@ export function paperStatusLabel(paper: CheckedPaper) {
   if (questionReviewCount > 0) return `${questionReviewCount} question review${questionReviewCount === 1 ? '' : 's'}`
   if (paper.manual_review_requested) return 'Manual review requested'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'Needs review'
-  if (failedStatuses.has(status)) return 'Checking failed'
+  if (isBlockedStatus(status)) return 'Checking failed'
   if (checkingStatuses.has(status)) return 'Checking in progress'
   if (isStrong(paper)) return 'Strong'
   if (scorePercent(paper) != null) return 'Needs attention'
@@ -148,7 +156,7 @@ export function paperInsight(paper: CheckedPaper) {
   }
   if (paper.manual_review_requested) return 'Awaiting a manual review.'
   if (paper.needs_review || paper.status === 'pending_manual_review') return 'The reviewer needs to look at this paper.'
-  if (failedStatuses.has(status)) return 'Checking did not finish. Open this paper for a safe recovery path.'
+  if (isBlockedStatus(status)) return 'Checking did not finish. Open this paper for a safe recovery path.'
   if (checkingStatuses.has(status)) return 'Eduraa is still checking this result.'
   if (percent == null) return 'Score will appear after checking completes.'
   if (percent >= STRONG_PERCENT) return 'Strong performance with a clear next step.'

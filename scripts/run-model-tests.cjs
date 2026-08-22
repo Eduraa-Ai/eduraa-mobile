@@ -20,6 +20,7 @@ const models = [
   'src/screens/papers/paperAttemptModel.ts',
   'src/screens/papers/paperDetailModel.ts',
   'src/screens/workspace/examWorkspaceModel.ts',
+  'src/screens/workspace/checkedPaperPipelineModel.ts',
   'src/navigation/paperResultsNavigation.ts',
   'src/utils/mathText.ts',
   'src/utils/mathContent.ts',
@@ -78,6 +79,10 @@ const suites = [
   {
     file: 'scripts/exam-workspace-model.test.cjs',
     env: { EXAM_WORKSPACE_MODEL_PATH: path.join(outDir, 'screens/workspace/examWorkspaceModel.js') },
+  },
+  {
+    file: 'scripts/checked-paper-pipeline-model.test.cjs',
+    env: { CHECKED_PAPER_PIPELINE_MODEL_PATH: path.join(outDir, 'screens/workspace/checkedPaperPipelineModel.js') },
   },
   {
     file: 'scripts/exam-workspace-contract.test.cjs',
