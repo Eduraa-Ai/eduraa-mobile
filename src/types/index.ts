@@ -351,7 +351,8 @@ export interface StudentExamRead extends Exam {
 
 // ─── Checked Papers ───────────────────────────────────────────────────────────
 
-// Backend returns: "graded" | "pending_manual_review" for B2C submissions
+// Backend returns either the legacy status set ("graded" | "pending_manual_review" | ...)
+// or, for the V2 manifest pipeline, one of the pipeline stage statuses below.
 export type CheckedPaperStatus =
   | "graded"
   | "pending_manual_review"
@@ -359,7 +360,45 @@ export type CheckedPaperStatus =
   | "processing"
   | "completed"
   | "needs_review"
+  // V2 manifest pipeline
+  | "pending"
+  | "integrity_pending"
+  | "integrity_running"
+  | "integrity_verified"
+  | "integrity_needs_review"
+  | "integrity_failed"
+  | "evidence_pending"
+  | "evidence_inventory"
+  | "evidence_grouping"
+  | "attempt_grouping"
+  | "evidence_ready"
+  | "evidence_needs_review"
+  | "evidence_failed"
+  | "mapping_pending"
+  | "blind_mapping"
+  | "mapping_ready"
+  | "mapping_needs_review"
+  | "mapping_failed"
+  | "grading_pending"
+  | "grading"
+  | "rubric_grading"
+  | "policy_ready"
+  | "grading_needs_review"
+  | "grading_failed"
+  | "release_evaluation_pending"
+  | "completeness_challenge"
+  | "release_evaluation_failed"
+  | "auto_assessed"
+  | "pending_question_review"
   | string; // allow any future status values
+
+export interface CheckedPaperProcessingBlocker {
+  issue_id: string;
+  code: string;
+  message: string;
+  stage: string;
+  resolvable_by_teacher: boolean;
+}
 
 export interface GradingResultItem {
   result_id?: string | null;
@@ -418,6 +457,7 @@ export interface CheckedPaper {
   student_id: string;
   teacher_id: string;
   exam_id: string | null;
+  paper_id?: string | null;
   subject_id?: string | null;
   scanned_pdf_url?: string | null;
   annotated_pdf_url?: string | null;
@@ -433,19 +473,52 @@ export interface CheckedPaper {
   grading_confidence?: number | null;
   is_teacher_override: boolean;
   teacher_reviewed_at?: string | null;
+  teacher_reviewed_by?: string | null;
   manual_review_requested: boolean;
   manual_review_note?: string | null;
+  manual_review_requested_at?: string | null;
+  manual_review_requested_by?: string | null;
   manual_review_completed?: boolean | null;
+  manual_review_completed_at?: string | null;
+  manual_review_completed_by?: string | null;
   pending_question_review_count?: number;
   pending_question_review_labels?: string[];
   unread_question_review_response_count?: number;
   unread_question_review_response_labels?: string[];
   // enriched fields from backend list/detail endpoints
   student_name?: string | null;
+  student_standard?: string | null;
+  student_division?: string | null;
   exam_name?: string | null;
   subject_name?: string | null;
   created_at: string;
   updated_at: string;
+  // V2 manifest pipeline fields — optional so the legacy DTO shape stays valid.
+  row_version?: number;
+  active_script_version_id?: string | null;
+  active_integrity_run_id?: string | null;
+  active_evidence_run_id?: string | null;
+  active_mapping_run_id?: string | null;
+  active_grading_run_id?: string | null;
+  active_release_evaluation_run_id?: string | null;
+  auto_grade_enabled?: boolean;
+  results_published?: boolean;
+  results_visible_to_student?: boolean;
+  approval_status?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  release_status?: string | null;
+  published_at?: string | null;
+  published_by?: string | null;
+  processing_stage?: string | null;
+  processing_blockers?: CheckedPaperProcessingBlocker[];
+  release_evaluation_status?: string | null;
+  identity_resolved?: boolean;
+  can_save_review?: boolean;
+  can_approve?: boolean;
+  can_publish?: boolean;
+  legacy_read_only?: boolean;
+  vlm_streaming_enabled?: boolean;
 }
 
 // ─── Subjects & Chapters ──────────────────────────────────────────────────────

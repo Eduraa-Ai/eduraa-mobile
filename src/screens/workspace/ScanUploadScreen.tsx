@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
@@ -12,6 +12,9 @@ import { scanUploadApi, ScanUploadFile } from '../../api/scanUpload'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import type { Role } from '../../types'
+import { friendlyUploadError, matchesStandardDivision } from './checkedPaperPipelineModel'
+
+const MAX_SCAN_FILES = 20
 
 function isStudentRole(role?: Role) {
   return role === 'student' || role === 'b2c_student'
@@ -110,6 +113,14 @@ export default function ScanUploadScreen() {
   const effectiveSubjectId = selectedPaper?.subject_id || selectedSubjectId || selectedExam?.subject_id || null
   const paperMode = selectedPaper?.source_type || null
   const staff = isStaffRole(role)
+  // This V2 pipeline grades the original page images directly and has no OCR
+  // identification, so the teacher must always pick the student explicitly —
+  // narrow the picker to the standard/division of whatever paper/exam is selected.
+  const standardDivisionTarget = selectedPaper
+    ? { standard: selectedPaper.standard, division: selectedPaper.division }
+    : selectedExam
+      ? { standard: selectedExam.standard, division: selectedExam.division }
+      : null
 
   const paperOptions = useMemo(
     () =>
@@ -140,11 +151,13 @@ export default function ScanUploadScreen() {
 
   const studentOptions = useMemo(
     () =>
-      (options?.students ?? []).map((student) => ({
-        value: student.id,
-        label: optionLabel([`${student.first_name} ${student.last_name}`, student.student_id, student.standard, student.division]),
-      })),
-    [options?.students],
+      (options?.students ?? [])
+        .filter((student) => !standardDivisionTarget || matchesStandardDivision(student, standardDivisionTarget))
+        .map((student) => ({
+          value: student.id,
+          label: optionLabel([`${student.first_name} ${student.last_name}`, student.student_id, student.standard, student.division]),
+        })),
+    [options?.students, standardDivisionTarget],
   )
 
   const canSubmit = useMemo(() => {
@@ -155,6 +168,17 @@ export default function ScanUploadScreen() {
     return Boolean(selectedExamId && effectiveSubjectId)
   }, [effectiveSubjectId, files.length, role, selectedExamId, selectedPaperId, selectedStudentId])
 
+  // Send a canonical upload_mode so the backend never has to guess: a picked
+  // custom paper is "custom_paper", everything else (a picked AI-generated
+  // paper, or exam+subject mode with no paper) is "ai_generation_system".
+  const uploadMode = staff ? (paperMode === 'custom_paper' ? 'custom_paper' : 'ai_generation_system') : null
+
+  useEffect(() => {
+    if (!staff || !selectedStudentId) return
+    if (studentOptions.some((option) => option.value === selectedStudentId)) return
+    setSelectedStudentId('')
+  }, [staff, selectedStudentId, studentOptions])
+
   const uploadMutation = useMutation({
     mutationFn: () =>
       scanUploadApi.upload({
@@ -162,44 +186,59 @@ export default function ScanUploadScreen() {
         examId: selectedPaperId ? null : selectedExamId || null,
         subjectId: effectiveSubjectId,
         studentId: staff ? selectedStudentId || null : null,
-        uploadMode: paperMode,
+        uploadMode,
         files,
       }),
     onSuccess: (checkedPaper) => {
       Alert.alert('Upload received', 'The scan was saved and grading has started.', [
         {
-          text: 'View result',
+          text: 'View status',
           onPress: () => {
+            if (!staff) {
+              const parent = navigation.getParent?.()
+              if (routeNames(navigation).includes('Results')) {
+                navigation.navigate('Results', { screen: 'ResultDetail', params: { checkedPaperId: checkedPaper.id } })
+                return
+              }
+              if (routeNames(parent).includes('Results')) {
+                parent.navigate('Results', { screen: 'ResultDetail', params: { checkedPaperId: checkedPaper.id } })
+                return
+              }
+              navigation.navigate('ResultDetail', { checkedPaperId: checkedPaper.id })
+              return
+            }
+
+            // Teachers land on the pipeline/status screen first — that's
+            // where blockers get surfaced and resolved — rather than the
+            // student-facing performance report.
             const parent = navigation.getParent?.()
-            if (routeNames(navigation).includes('Results')) {
-              navigation.navigate('Results', { screen: 'ResultDetail', params: { checkedPaperId: checkedPaper.id } })
+            if (routeNames(navigation).includes('CheckedPaperStatus')) {
+              navigation.navigate('CheckedPaperStatus', { checkedPaperId: checkedPaper.id })
               return
             }
-            if (routeNames(parent).includes('Results')) {
-              parent.navigate('Results', { screen: 'ResultDetail', params: { checkedPaperId: checkedPaper.id } })
+            // Reached from the bare "StaffScanUpload" tab, which has no
+            // nested stack of its own — hop into the StaffHome tab's stack.
+            if (routeNames(navigation).includes('StaffHome')) {
+              navigation.navigate('StaffHome', { screen: 'CheckedPaperStatus', params: { checkedPaperId: checkedPaper.id } })
               return
             }
-            if (routeNames(navigation).includes('StaffResults')) {
-              navigation.navigate('StaffResults', { screen: 'ResultDetail', params: { checkedPaperId: checkedPaper.id } })
+            if (routeNames(parent).includes('StaffHome')) {
+              parent.navigate('StaffHome', { screen: 'CheckedPaperStatus', params: { checkedPaperId: checkedPaper.id } })
               return
             }
-            if (routeNames(parent).includes('StaffResults')) {
-              parent.navigate('StaffResults', { screen: 'ResultDetail', params: { checkedPaperId: checkedPaper.id } })
-              return
-            }
-            navigation.navigate('ResultDetail', { checkedPaperId: checkedPaper.id })
+            navigation.navigate('CheckedPaperStatus', { checkedPaperId: checkedPaper.id })
           },
         },
       ])
       setFiles([])
     },
     onError: (error) => {
-      Alert.alert('Upload failed', extractDetail(error, 'Unable to upload this scan.'))
+      Alert.alert('Upload failed', friendlyUploadError(extractDetail(error, ''), 'Unable to upload this scan.'))
     },
   })
 
   const addFiles = (items: ScanUploadFile[]) => {
-    setFiles((current) => [...current, ...items].slice(0, 12))
+    setFiles((current) => [...current, ...items].slice(0, MAX_SCAN_FILES))
   }
 
   const previewFileItem = async (file: ScanUploadFile) => {
@@ -254,7 +293,7 @@ export default function ScanUploadScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
-      selectionLimit: 12,
+      selectionLimit: MAX_SCAN_FILES,
       quality: 0.85,
     })
     if (result.canceled || !result.assets?.length) return
@@ -349,13 +388,19 @@ export default function ScanUploadScreen() {
 
       <AnimatedCard style={styles.formCard}>
         {staff ? (
-          <SelectField
-            label="Student"
-            value={selectedStudentId}
-            placeholder="Select student"
-            options={studentOptions}
-            onChange={setSelectedStudentId}
-          />
+          <View style={styles.studentField}>
+            <SelectField
+              label="Student"
+              value={selectedStudentId}
+              placeholder="Select student"
+              options={studentOptions}
+              onChange={setSelectedStudentId}
+            />
+            <Text style={styles.studentHint}>
+              Select the student before uploading. This pipeline grades the original page images
+              directly and does not use OCR identification.
+            </Text>
+          </View>
         ) : null}
 
         <SelectField
@@ -538,6 +583,15 @@ const styles = StyleSheet.create({
   },
   formCard: {
     gap: spacing[4],
+  },
+  studentField: {
+    gap: spacing[1],
+  },
+  studentHint: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 11,
+    lineHeight: 15,
   },
   orRow: {
     flexDirection: 'row',
