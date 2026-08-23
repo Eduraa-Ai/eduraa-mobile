@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -26,6 +27,7 @@ import type { CheckedPaper } from '../../types'
 import { downloadCheckedPaperPdf } from '../../utils/openProtectedDocument'
 import {
   buildAssessmentModel,
+  buildOptionList,
   buildSubjectOptions,
   canOpenPaper,
   CHECKED_PAPERS_POLL_INTERVAL_MS,
@@ -37,23 +39,18 @@ import {
   getQuestionReviewLabels,
   getUnreadReviewResponseCount,
   getUnreadReviewResponseLabels,
+  matchesFilters,
   matchesSearch,
-  matchesTab,
   normalize,
   isPaperChecking,
   paperAccessibilityLabel,
   paperInsight,
+  paperStatusLabel,
   scorePercent,
   sortByRecency,
 } from './checkedPapersLibraryModel'
-import type { CheckedPaperTab } from './checkedPapersLibraryModel'
+import type { CheckedPaperOption, CheckedPapersFilterValue, CheckedPaperStateFilter } from './checkedPapersLibraryModel'
 import { loadSeenReviewResponseKeys } from './reviewNotificationState'
-
-const TAB_CONFIG: Array<{ key: CheckedPaperTab; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { key: 'all', label: 'All papers', icon: 'layers-outline' },
-  { key: 'needs_attention', label: 'Needs attention', icon: 'alert-circle-outline' },
-  { key: 'strong', label: 'Strong', icon: 'checkmark-done-outline' },
-]
 
 function formatDate(value?: string | null) {
   if (!value) return 'Date pending'
@@ -350,69 +347,271 @@ function StateCard({
   )
 }
 
+const EMPTY_FILTERS: CheckedPapersFilterValue = {
+  subject: null,
+  status: null,
+  exam: null,
+  student: null,
+  standard: null,
+  division: null,
+  dateFrom: '',
+  dateTo: '',
+  scoreMin: '',
+  scoreMax: '',
+  paperState: 'all',
+}
+
+const STAFF_STATE_FILTERS: Array<{ key: CheckedPaperStateFilter; label: string }> = [
+  { key: 'all', label: 'All papers' },
+  { key: 'manual_review_requested', label: 'Manual review requested' },
+  { key: 'unchecked_submissions', label: 'Unchecked submissions' },
+  { key: 'manual_review_completed', label: 'Manual review completed' },
+]
+
+const STUDENT_STATE_FILTERS: Array<{ key: CheckedPaperStateFilter; label: string }> = [
+  { key: 'all', label: 'All papers' },
+  { key: 'pending_review', label: 'Pending review' },
+  { key: 'reviewed', label: 'Reviewed' },
+  { key: 'results_hidden', label: 'Results hidden' },
+]
+
+type PickerKey = 'subject' | 'status' | 'exam' | 'student' | 'standard' | 'division'
+
+function FilterSelectButton({
+  label,
+  placeholder,
+  value,
+  disabled,
+  onPress,
+}: {
+  label: string
+  placeholder: string
+  value: string | null
+  disabled?: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, ${value ?? placeholder}`}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.filterField, pressed && !disabled && styles.filterFieldPressed, disabled && styles.filterFieldDisabled]}
+    >
+      <Text style={styles.filterFieldLabel}>{label}</Text>
+      <View style={styles.filterFieldControl}>
+        <Text style={[styles.filterFieldValue, !value && styles.filterFieldPlaceholder]} numberOfLines={1}>
+          {value ?? placeholder}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+      </View>
+    </Pressable>
+  )
+}
+
+function FilterTextField({
+  label,
+  value,
+  placeholder,
+  keyboardType = 'default',
+  icon,
+  onChangeText,
+}: {
+  label: string
+  value: string
+  placeholder: string
+  keyboardType?: 'default' | 'numeric'
+  icon?: keyof typeof Ionicons.glyphMap
+  onChangeText: (value: string) => void
+}) {
+  return (
+    <View style={styles.filterField}>
+      <Text style={styles.filterFieldLabel}>{label}</Text>
+      <View style={styles.filterFieldControl}>
+        {icon ? <Ionicons name={icon} size={15} color={colors.textMuted} /> : null}
+        <TextInput
+          accessibilityLabel={label}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textSoft}
+          keyboardType={keyboardType}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.filterTextInput}
+        />
+      </View>
+    </View>
+  )
+}
+
 function FilterSheet({
   visible,
-  subjects,
-  selectedSubject,
-  onSelectSubject,
+  filters,
+  options,
+  activeCount,
+  visibleCount,
+  totalCount,
+  isStaff,
+  onChange,
   onClear,
   onClose,
 }: {
   visible: boolean
-  subjects: Array<{ label: string; count: number }>
-  selectedSubject: string | null
-  onSelectSubject: (subject: string | null) => void
+  filters: CheckedPapersFilterValue
+  options: Record<PickerKey, CheckedPaperOption[]>
+  activeCount: number
+  visibleCount: number
+  totalCount: number
+  isStaff: boolean
+  onChange: (filters: CheckedPapersFilterValue) => void
   onClear: () => void
   onClose: () => void
 }) {
+  const [picker, setPicker] = useState<PickerKey | null>(null)
+  const stateFilters = isStaff ? STAFF_STATE_FILTERS : STUDENT_STATE_FILTERS
+  const pickerConfig = picker
+    ? {
+        subject: { label: 'Subject', allLabel: 'All subjects' },
+        status: { label: 'Status', allLabel: 'All statuses' },
+        exam: { label: 'Exam', allLabel: 'All exams' },
+        student: { label: 'Student', allLabel: 'All students' },
+        standard: { label: 'Standard', allLabel: 'All standards' },
+        division: { label: 'Division', allLabel: 'All divisions' },
+      }[picker]
+    : null
+  const setFilter = <Key extends keyof CheckedPapersFilterValue>(key: Key, value: CheckedPapersFilterValue[Key]) => {
+    onChange({ ...filters, [key]: value })
+  }
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+      <View style={styles.sheetBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet} accessibilityLabel="Filter checked papers">
           <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>Filter checked papers</Text>
-          <Text style={styles.sheetBody}>Limit the inbox to a subject while keeping search and status tabs active.</Text>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: selectedSubject == null }}
-            onPress={() => onSelectSubject(null)}
-            style={({ pressed }) => [styles.sheetOption, pressed && styles.sheetOptionPressed, selectedSubject == null && styles.sheetOptionSelected]}
-          >
-            <View>
-              <Text style={styles.sheetOptionTitle}>All subjects</Text>
-              <Text style={styles.sheetOptionMeta}>Show every checked paper</Text>
-            </View>
-            <Ionicons name={selectedSubject == null ? 'radio-button-on' : 'ellipse-outline'} size={18} color={selectedSubject == null ? colors.accent : colors.textSoft} />
-          </Pressable>
-
-          {subjects.map((subject) => {
-            const active = selectedSubject === subject.label
-            return (
-              <Pressable
-                key={subject.label}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => onSelectSubject(subject.label)}
-                style={({ pressed }) => [styles.sheetOption, pressed && styles.sheetOptionPressed, active && styles.sheetOptionSelected]}
-              >
-                <View style={styles.sheetOptionCopy}>
-                  <Text style={styles.sheetOptionTitle}>{subject.label}</Text>
-                  <Text style={styles.sheetOptionMeta}>{subject.count} paper{subject.count === 1 ? '' : 's'}</Text>
+          {picker && pickerConfig ? (
+            <>
+              <View style={styles.sheetTitleRow}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Back to filters" onPress={() => setPicker(null)} style={styles.sheetIconButton}>
+                  <Ionicons name="chevron-back" size={18} color={colors.text} />
+                </Pressable>
+                <Text style={styles.sheetTitle}>{pickerConfig.label}</Text>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.optionList}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: filters[picker] == null }}
+                  onPress={() => {
+                    setFilter(picker, null)
+                    setPicker(null)
+                  }}
+                  style={({ pressed }) => [styles.sheetOption, pressed && styles.sheetOptionPressed, filters[picker] == null && styles.sheetOptionSelected]}
+                >
+                  <View>
+                    <Text style={styles.sheetOptionTitle}>{pickerConfig.allLabel}</Text>
+                    <Text style={styles.sheetOptionMeta}>Show every checked paper</Text>
+                  </View>
+                  <Ionicons name={filters[picker] == null ? 'radio-button-on' : 'ellipse-outline'} size={18} color={filters[picker] == null ? colors.accent : colors.textSoft} />
+                </Pressable>
+                {options[picker].map((option) => {
+                  const active = filters[picker] === option.value
+                  return (
+                    <Pressable
+                      key={option.value}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => {
+                        setFilter(picker, option.value)
+                        setPicker(null)
+                      }}
+                      style={({ pressed }) => [styles.sheetOption, pressed && styles.sheetOptionPressed, active && styles.sheetOptionSelected]}
+                    >
+                      <View style={styles.sheetOptionCopy}>
+                        <Text style={styles.sheetOptionTitle}>{option.label}</Text>
+                        <Text style={styles.sheetOptionMeta}>{option.count} paper{option.count === 1 ? '' : 's'}</Text>
+                      </View>
+                      <Ionicons name={active ? 'radio-button-on' : 'ellipse-outline'} size={18} color={active ? colors.accent : colors.textSoft} />
+                    </Pressable>
+                  )
+                })}
+              </ScrollView>
+            </>
+          ) : (
+            <>
+              <View style={styles.sheetTitleRow}>
+                <View style={styles.sheetTitleCopy}>
+                  <Text style={styles.sheetTitle}>Filters</Text>
+                  <Text style={styles.sheetBody}>{visibleCount} of {totalCount} papers</Text>
                 </View>
-                <Ionicons name={active ? 'radio-button-on' : 'ellipse-outline'} size={18} color={active ? colors.accent : colors.textSoft} />
-              </Pressable>
-            )
-          })}
+                <Pressable accessibilityRole="button" accessibilityLabel="Close filters" onPress={onClose} style={styles.sheetIconButton}>
+                  <Ionicons name="close" size={18} color={colors.text} />
+                </Pressable>
+              </View>
 
-          <View style={styles.sheetActions}>
-            <AnimatedButton label="Clear filters" variant="ghost" onPress={onClear} style={styles.sheetButton} />
-            <AnimatedButton label="Done" variant="primary" onPress={onClose} style={styles.sheetButton} />
-          </View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.filterContent}>
+                <View style={styles.filterGrid}>
+                  <FilterSelectButton label="Subject" placeholder="All subjects" value={filters.subject} disabled={options.subject.length === 0} onPress={() => setPicker('subject')} />
+                  <FilterSelectButton label="Status" placeholder="All statuses" value={filters.status} disabled={options.status.length === 0} onPress={() => setPicker('status')} />
+                  <FilterSelectButton label="Exam" placeholder="All exams" value={filters.exam} disabled={options.exam.length === 0} onPress={() => setPicker('exam')} />
+                  <FilterSelectButton label="Student" placeholder="All students" value={filters.student} disabled={options.student.length === 0} onPress={() => setPicker('student')} />
+                  <FilterSelectButton label="Standard" placeholder="All standards" value={filters.standard} disabled={options.standard.length === 0} onPress={() => setPicker('standard')} />
+                  <FilterSelectButton label="Division" placeholder="All divisions" value={filters.division} disabled={options.division.length === 0} onPress={() => setPicker('division')} />
+                  <FilterTextField label="Date from" placeholder="YYYY-MM-DD" value={filters.dateFrom} icon="calendar-outline" onChangeText={(value) => setFilter('dateFrom', value)} />
+                  <FilterTextField label="Date to" placeholder="YYYY-MM-DD" value={filters.dateTo} icon="calendar-outline" onChangeText={(value) => setFilter('dateTo', value)} />
+                  <FilterTextField label="Score % min" placeholder="0" value={filters.scoreMin} keyboardType="numeric" onChangeText={(value) => setFilter('scoreMin', value.replace(/[^0-9.]/g, ''))} />
+                  <FilterTextField label="Score % max" placeholder="100" value={filters.scoreMax} keyboardType="numeric" onChangeText={(value) => setFilter('scoreMax', value.replace(/[^0-9.]/g, ''))} />
+                </View>
+
+                <View style={styles.paperStateBlock}>
+                  <Text style={styles.paperStateTitle}>Paper state</Text>
+                  <View style={styles.paperStateChips}>
+                    {stateFilters.map((state) => {
+                      const selected = filters.paperState === state.key
+                      return (
+                        <Pressable
+                          key={state.key}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                          onPress={() => setFilter('paperState', state.key)}
+                          style={({ pressed }) => [styles.paperStateChip, selected && styles.paperStateChipSelected, pressed && styles.paperStateChipPressed]}
+                        >
+                          <Text style={[styles.paperStateChipText, selected && styles.paperStateChipTextSelected]}>{state.label}</Text>
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                </View>
+              </ScrollView>
+            </>
+          )}
+
+          {!picker ? (
+            <View style={styles.sheetActions}>
+              <AnimatedButton label={activeCount > 0 ? `Clear ${activeCount}` : 'Clear filters'} variant="ghost" onPress={onClear} style={styles.sheetButton} />
+              <AnimatedButton label="Done" variant="primary" onPress={onClose} style={styles.sheetButton} />
+            </View>
+          ) : null}
         </View>
-      </Pressable>
+      </View>
     </Modal>
   )
+}
+
+function countActiveFilters(filters: CheckedPapersFilterValue) {
+  return [
+    filters.subject,
+    filters.status,
+    filters.exam,
+    filters.student,
+    filters.standard,
+    filters.division,
+    filters.dateFrom.trim(),
+    filters.dateTo.trim(),
+    filters.scoreMin.trim(),
+    filters.scoreMax.trim(),
+    filters.paperState !== 'all' ? filters.paperState : null,
+  ].filter(Boolean).length
 }
 
 export default function CheckedPapersLibraryScreen() {
@@ -422,8 +621,7 @@ export default function CheckedPapersLibraryScreen() {
   const { width } = useWindowDimensions()
   const compact = width < 380
   const [query, setQuery] = useState('')
-  const [activeTab, setActiveTab] = useState<CheckedPaperTab>('all')
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null)
+  const [filters, setFilters] = useState<CheckedPapersFilterValue>(EMPTY_FILTERS)
   const [filterVisible, setFilterVisible] = useState(false)
   const [openingPaperId, setOpeningPaperId] = useState<string | null>(null)
   const [downloadingPaperId, setDownloadingPaperId] = useState<string | null>(null)
@@ -496,6 +694,14 @@ export default function CheckedPapersLibraryScreen() {
     [notificationPaperById, papers],
   )
   const subjectOptions = useMemo(() => buildSubjectOptions(papers), [papers])
+  const filterOptions = useMemo<Record<PickerKey, CheckedPaperOption[]>>(() => ({
+    subject: subjectOptions,
+    status: buildOptionList(papers, paperStatusLabel),
+    exam: buildOptionList(papers, (paper) => paper.exam_name),
+    student: buildOptionList(papers, (paper) => paper.student_name),
+    standard: buildOptionList(papers, (paper) => paper.student_standard),
+    division: buildOptionList(papers, (paper) => paper.student_division),
+  }), [papers, subjectOptions])
   const assessment = useMemo(() => buildAssessmentModel(papers), [papers])
   const questionReviewPapers = useMemo(
     () => notificationPapersSource.filter((paper) => getQuestionReviewCount(paper) > 0),
@@ -540,11 +746,12 @@ export default function CheckedPapersLibraryScreen() {
 
   const visiblePapers = useMemo(() => {
     const term = normalize(query)
-    return papers.filter((paper) => matchesTab(paper, activeTab) && matchesSearch(paper, term) && (!selectedSubject || getPaperSubject(paper) === selectedSubject))
-  }, [activeTab, papers, query, selectedSubject])
+    return papers.filter((paper) => matchesSearch(paper, term) && matchesFilters(paper, filters))
+  }, [filters, papers, query])
 
   const visibleCount = visiblePapers.length
   const totalCount = papers.length
+  const activeFilterCount = countActiveFilters(filters)
   const scorePercentValue = assessment.latest ? scorePercent(assessment.latest) : assessment.average
   const isSearchEmpty = totalCount > 0 && visibleCount === 0
   const hasCacheAndError = isError && totalCount > 0
@@ -581,8 +788,7 @@ export default function CheckedPapersLibraryScreen() {
   const clearSearch = () => setQuery('')
   const clearFilters = () => {
     setQuery('')
-    setSelectedSubject(null)
-    setActiveTab('all')
+    setFilters(EMPTY_FILTERS)
   }
 
   const header = (
@@ -668,32 +874,13 @@ export default function CheckedPapersLibraryScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open filters"
-          accessibilityState={{ selected: Boolean(selectedSubject) }}
+          accessibilityState={{ selected: activeFilterCount > 0 }}
           onPress={() => setFilterVisible(true)}
-          style={({ pressed }) => [styles.filterButton, pressed && styles.filterButtonPressed, selectedSubject && styles.filterButtonActive]}
+          style={({ pressed }) => [styles.filterButton, pressed && styles.filterButtonPressed, activeFilterCount > 0 && styles.filterButtonActive]}
         >
-          <Ionicons name="funnel-outline" size={16} color={selectedSubject ? colors.accentStrong : colors.textSecondary} />
-          {selectedSubject ? <View style={styles.filterBadge}><Text style={styles.filterBadgeText}>1</Text></View> : null}
+          <Ionicons name="funnel-outline" size={16} color={activeFilterCount > 0 ? colors.accentStrong : colors.textSecondary} />
+          {activeFilterCount > 0 ? <View style={styles.filterBadge}><Text style={styles.filterBadgeText}>{activeFilterCount}</Text></View> : null}
         </Pressable>
-      </View>
-
-      <View style={styles.tabsRow}>
-        {TAB_CONFIG.map((tab) => {
-          const selected = activeTab === tab.key
-          return (
-            <Pressable
-              key={tab.key}
-              accessibilityRole="tab"
-              accessibilityLabel={tab.label}
-              accessibilityState={{ selected }}
-              hitSlop={6}
-              onPress={() => setActiveTab(tab.key)}
-              style={({ pressed }) => [styles.tabPill, selected && styles.tabPillSelected, pressed && styles.tabPillPressed]}
-            >
-              <Text style={[styles.tabText, selected && styles.tabTextSelected]}>{tab.label}</Text>
-            </Pressable>
-          )
-        })}
       </View>
 
       {notificationTotal > 0 ? (
@@ -770,15 +957,15 @@ export default function CheckedPapersLibraryScreen() {
     }
 
     return (
-      <StateCard
-        icon="search-outline"
-        title="No papers match this view"
-        body={selectedSubject ? `Nothing under ${selectedSubject} matches your current search and status filters.` : 'Try a different search term or switch the status tab.'}
-        actionLabel={query ? 'Clear search' : 'Clear filters'}
-        onAction={query ? clearSearch : clearFilters}
-      />
-    )
-  }
+        <StateCard
+          icon="search-outline"
+          title="No papers match this view"
+          body="Try a different search term, status, class, date, score range, or paper state."
+          actionLabel={query && activeFilterCount === 0 ? 'Clear search' : 'Clear filters'}
+          onAction={query && activeFilterCount === 0 ? clearSearch : clearFilters}
+        />
+      )
+    }
 
   if (isLoading && totalCount === 0) {
     return (
@@ -802,15 +989,15 @@ export default function CheckedPapersLibraryScreen() {
     <AppScreen scroll={false} padded={false} contentStyle={styles.screenRoot}>
       <FilterSheet
         visible={filterVisible}
-        subjects={subjectOptions}
-        selectedSubject={selectedSubject}
-        onSelectSubject={(subject) => {
-          setSelectedSubject(subject)
-          setFilterVisible(false)
-        }}
+        filters={filters}
+        options={filterOptions}
+        activeCount={activeFilterCount}
+        visibleCount={visibleCount}
+        totalCount={totalCount}
+        isStaff={isStaff}
+        onChange={setFilters}
         onClear={() => {
           clearFilters()
-          setFilterVisible(false)
         }}
         onClose={() => setFilterVisible(false)}
       />
@@ -1780,6 +1967,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(2, 6, 23, 0.42)',
   },
   sheet: {
+    maxHeight: '88%',
     gap: spacing[3],
     padding: spacing[5],
     borderTopLeftRadius: radius['2xl'],
@@ -1796,7 +1984,29 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     backgroundColor: colors.cardMuted,
   },
+  sheetTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[3],
+  },
+  sheetTitleCopy: {
+    flex: 1,
+    gap: 1,
+    minWidth: 0,
+  },
+  sheetIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundMuted,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
   sheetTitle: {
+    flex: 1,
     color: colors.text,
     fontFamily: typography.fonts.headingSemibold,
     fontSize: 18,
@@ -1807,6 +2017,98 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 13,
     lineHeight: 19,
+  },
+  filterContent: {
+    gap: spacing[4],
+    paddingBottom: spacing[1],
+  },
+  filterGrid: {
+    gap: spacing[3],
+  },
+  filterField: {
+    gap: spacing[2],
+  },
+  filterFieldPressed: {
+    opacity: 0.82,
+  },
+  filterFieldDisabled: {
+    opacity: 0.56,
+  },
+  filterFieldLabel: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  filterFieldControl: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[3],
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.xs,
+  },
+  filterFieldValue: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 13,
+  },
+  filterFieldPlaceholder: {
+    color: colors.textSecondary,
+  },
+  filterTextInput: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 13,
+    paddingVertical: spacing[2],
+  },
+  paperStateBlock: {
+    gap: spacing[2],
+  },
+  paperStateTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+  },
+  paperStateChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  paperStateChip: {
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.full,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+  },
+  paperStateChipSelected: {
+    backgroundColor: colors.accentStrong,
+    borderColor: colors.accentStrong,
+  },
+  paperStateChipPressed: {
+    opacity: 0.82,
+  },
+  paperStateChipText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  paperStateChipTextSelected: {
+    color: colors.textOnDark,
+  },
+  optionList: {
+    gap: spacing[2],
+    paddingBottom: spacing[1],
   },
   sheetOption: {
     minHeight: 56,
