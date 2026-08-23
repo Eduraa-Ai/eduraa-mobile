@@ -3,6 +3,34 @@ import { hasUnreadTeacherReviewResponse } from './checkedPaperDetailModel'
 import { CHECKED_PAPER_EXPERIENCE_LABELS, checkedPaperExperienceStatus } from '../workspace/checkedPaperPipelineModel'
 
 export type CheckedPaperTab = 'all' | 'needs_attention' | 'strong'
+export type CheckedPaperStateFilter =
+  | 'all'
+  | 'manual_review_requested'
+  | 'unchecked_submissions'
+  | 'manual_review_completed'
+  | 'pending_review'
+  | 'reviewed'
+  | 'results_hidden'
+
+export type CheckedPapersFilterValue = {
+  subject: string | null
+  status: string | null
+  exam: string | null
+  student: string | null
+  standard: string | null
+  division: string | null
+  dateFrom: string
+  dateTo: string
+  scoreMin: string
+  scoreMax: string
+  paperState: CheckedPaperStateFilter
+}
+
+export type CheckedPaperOption = {
+  label: string
+  value: string
+  count: number
+}
 
 // Presentation-only band shared with ResultDetailScreen. This never changes
 // persisted scores, grading outcomes, submission state, or API semantics.
@@ -231,6 +259,64 @@ export function matchesSearch(paper: CheckedPaper, term: string) {
     .some((value) => String(value).toLowerCase().includes(term))
 }
 
+function sameOptionalValue(value: string | null | undefined, selected: string | null) {
+  if (!selected) return true
+  return normalize(value) === normalize(selected)
+}
+
+function paperTime(paper: CheckedPaper) {
+  const parsed = new Date(paper.updated_at || paper.created_at).getTime()
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function dateBoundary(value: string, endOfDay = false) {
+  if (!value.trim()) return null
+  const parsed = new Date(`${value.trim()}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime()
+}
+
+function numericBoundary(value: string) {
+  if (!value.trim()) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export function matchesPaperState(paper: CheckedPaper, state: CheckedPaperStateFilter) {
+  const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  if (state === 'all') return true
+  if (state === 'manual_review_requested') return getQuestionReviewCount(paper) > 0 || Boolean(paper.manual_review_requested)
+  if (state === 'manual_review_completed') return Boolean(paper.manual_review_completed)
+  if (state === 'unchecked_submissions') return isPaperChecking(paper) || scorePercent(paper) == null
+  if (state === 'pending_review') return isNeedsAttention(paper)
+  if (state === 'reviewed') {
+    return paper.results_visible_to_student !== false
+      && Boolean(paper.teacher_reviewed_at || paper.manual_review_completed || status === 'graded' || status === 'completed' || status === 'auto_assessed')
+  }
+  if (state === 'results_hidden') return paper.results_visible_to_student === false
+  return true
+}
+
+export function matchesFilters(paper: CheckedPaper, filters: CheckedPapersFilterValue) {
+  const percent = scorePercent(paper)
+  const time = paperTime(paper)
+  const from = dateBoundary(filters.dateFrom)
+  const to = dateBoundary(filters.dateTo, true)
+  const scoreMin = numericBoundary(filters.scoreMin)
+  const scoreMax = numericBoundary(filters.scoreMax)
+
+  if (!sameOptionalValue(getPaperSubject(paper), filters.subject)) return false
+  if (!sameOptionalValue(paperStatusLabel(paper), filters.status)) return false
+  if (!sameOptionalValue(paper.exam_name, filters.exam)) return false
+  if (!sameOptionalValue(paper.student_name, filters.student)) return false
+  if (!sameOptionalValue(paper.student_standard, filters.standard)) return false
+  if (!sameOptionalValue(paper.student_division, filters.division)) return false
+  if (from != null && (time == null || time < from)) return false
+  if (to != null && (time == null || time > to)) return false
+  if (scoreMin != null && (percent == null || percent < scoreMin)) return false
+  if (scoreMax != null && (percent == null || percent > scoreMax)) return false
+  return matchesPaperState(paper, filters.paperState)
+}
+
 export function matchesTab(paper: CheckedPaper, tab: CheckedPaperTab) {
   if (tab === 'all') return true
   if (tab === 'needs_attention') return isNeedsAttention(paper)
@@ -238,13 +324,18 @@ export function matchesTab(paper: CheckedPaper, tab: CheckedPaperTab) {
 }
 
 export function buildSubjectOptions(papers: CheckedPaper[]) {
+  return buildOptionList(papers, getPaperSubject)
+}
+
+export function buildOptionList(papers: CheckedPaper[], getValue: (paper: CheckedPaper) => string | null | undefined) {
   const counts = new Map<string, number>()
   papers.forEach((paper) => {
-    const subject = getPaperSubject(paper)
-    counts.set(subject, (counts.get(subject) ?? 0) + 1)
+    const value = String(getValue(paper) ?? '').trim()
+    if (!value) return
+    counts.set(value, (counts.get(value) ?? 0) + 1)
   })
 
   return Array.from(counts.entries())
-    .map(([label, count]) => ({ label, count }))
+    .map(([label, count]) => ({ label, value: label, count }))
     .sort((a, b) => a.label.localeCompare(b.label))
 }
