@@ -376,7 +376,8 @@ function buildBlueprintSections(
 }
 
 function defaultPaperName(subjectName?: string, standard?: string) {
-  return [subjectName, standard ? `Std ${standard}` : "", "Paper"]
+  const normalizedStandard = normalizeStandard(standard);
+  return [subjectName, normalizedStandard ? `Std ${normalizedStandard}` : "", "Paper"]
     .filter(Boolean)
     .join(" ");
 }
@@ -1755,7 +1756,6 @@ export default function GeneratePaperScreen() {
           index={3}
           title="Settings & generate"
           active={stage === 2}
-          locked={!topicDone || !questionsDone}
           onPress={() => {
             setMaxStageReached((current) => Math.max(current, 2));
             setStage(2);
@@ -1856,7 +1856,8 @@ export default function GeneratePaperScreen() {
             <Text style={styles.generateTitle}>{effectivePaperName}</Text>
             <Text style={styles.generateBody}>
               {selectedSubject?.name ?? "Subject"} - {chapterIds.length}{" "}
-              chapters - {totals.questions} questions - {totals.marks} marks
+              {chapterIds.length === 1 ? "chapter" : "chapters"} -{" "}
+              {totals.questions} questions - {totals.marks} marks
             </Text>
           </View>
           {generationError ? (
@@ -1938,6 +1939,11 @@ export default function GeneratePaperScreen() {
             disabled={!topicDone || !questionsDone || isGenerating}
             onPress={handleGenerate}
           />
+          {!topicDone || !questionsDone ? (
+            <Text style={styles.fieldHelper}>
+              Complete Topic and Questions to generate.
+            </Text>
+          ) : null}
         </StageCard>
       </Screen>
     </KeyboardAvoidingView>

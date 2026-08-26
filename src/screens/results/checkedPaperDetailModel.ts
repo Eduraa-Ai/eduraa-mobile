@@ -1,12 +1,12 @@
 import type { CheckedPaper, GradingResultItem } from '../../types'
 import { normalizeMathContent } from '../../utils/mathContent'
+import { hasCheckedPaperReviewPayload } from '../workspace/checkedPaperPipelineModel'
 
 export type QuestionEvidenceTab = 'feedback' | 'details' | 'review'
 export type CheckedPaperQuestionStatus = 'correct' | 'wrong' | 'missed' | 'pending'
 export type QuestionOptionContextStatus = 'not_applicable' | 'complete' | 'partial' | 'unavailable'
 
 export const CHECKED_PAPER_POLL_INTERVAL_MS = 3000
-export const CHECKING_ESTIMATE_MS = 60 * 1000
 
 export interface QuestionReviewOption {
   key: string
@@ -230,33 +230,17 @@ function isBlockedStatus(status: string) {
 export function isCheckedPaperChecking(paper: CheckedPaper) {
   const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
   if (isBlockedStatus(status)) return false
+  if (paper.results_published || paper.release_status === 'published') return false
   if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review') {
     return false
   }
   return ['submitted', 'checking', 'processing', 'uploaded'].includes(status)
-    || paper.total_score == null
-    || paper.max_score == null
-    || paper.max_score <= 0
+    || !hasCheckedPaperReviewPayload(paper)
 }
 
 export function isCheckedPaperCheckFailed(paper: CheckedPaper) {
   const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
   return status.includes('failed') && !(paper.grading_results?.length)
-}
-
-export function buildCheckingEstimate(createdAt?: string | null, now = Date.now()) {
-  const createdTime = createdAt ? new Date(createdAt).getTime() : now
-  const elapsedMs = Number.isFinite(createdTime) ? Math.max(0, now - createdTime) : 0
-  const rawProgress = (elapsedMs / CHECKING_ESTIMATE_MS) * 100
-  const percent = Math.max(10, Math.min(94, Math.round(10 + rawProgress * 0.84)))
-  const remainingSeconds = Math.max(0, Math.ceil((CHECKING_ESTIMATE_MS - elapsedMs) / 1000))
-  const isOverdue = remainingSeconds <= 0
-  const timeLabel = remainingSeconds <= 0
-    ? 'Finishing up'
-    : remainingSeconds < 60
-      ? `≈ ${remainingSeconds}s left`
-      : `≈ ${Math.ceil(remainingSeconds / 60)}m left`
-  return { percent, remainingSeconds, timeLabel, isOverdue }
 }
 
 export function questionStatus(item: GradingResultItem): CheckedPaperQuestionStatus {
@@ -499,9 +483,16 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
 
   const published = Boolean(paper.results_published || paper.release_status === 'published')
   const hasUnresolvedBlocker = Boolean(paper.processing_blockers?.some((blocker) => !blocker.resolved_by_teacher))
+  const needsInput = Boolean(
+    paper.needs_review
+    || hasUnresolvedBlocker
+    || normalizedToken(paper.status).replace(/[\s-]+/g, '_').includes('needs_review'),
+  )
   const provisional = !published && Boolean(paper.needs_review || hasUnresolvedBlocker || paper.status === 'pending_question_review')
   const headline = percent == null
-    ? 'Your diagnosis will appear when checking finishes.'
+    ? needsInput
+      ? 'Checking paused.\nReview one issue to continue.'
+      : 'Your diagnosis will appear when checking finishes.'
     : percent >= 85
       ? 'You own the core ideas.\nNow protect the final details.'
       : percent >= 65
@@ -512,13 +503,18 @@ export function buildCheckedPaperReport(paper: CheckedPaper) {
 
   const repairCount = wrong + missed
   const diagnosisTitle = percent == null
-    ? 'No need to refresh.'
+    ? needsInput
+      ? 'Your paper needs a quick check.'
+      : 'No need to refresh.'
     : repairCount > 0
       ? `Repair the setup in ${repairCount} question${repairCount === 1 ? '' : 's'}.`
       : 'Keep the method precise.'
   const diagnosisBody = readableMathText(
     percent == null
-      ? 'This report updates automatically. You can leave and come back later.'
+      ? needsInput
+        ? paper.processing_blockers?.find((blocker) => !blocker.resolved_by_teacher)?.message
+          || 'Open the paper status to review the issue and continue checking.'
+        : 'This report updates automatically. You can leave and come back later.'
       : firstRepair?.recommendation || firstRepair?.feedback || paper.grading_feedback || 'Review each question and carry the strongest method into your next attempt.',
   )
 

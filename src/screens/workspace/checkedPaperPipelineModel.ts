@@ -1,4 +1,4 @@
-import type { CheckedPaperProcessingBlocker } from '../../types'
+import type { CheckedPaper, CheckedPaperProcessingBlocker } from '../../types'
 
 export type StaffScanUploadMode = 'ai_generation_system' | 'custom_paper'
 
@@ -125,6 +125,36 @@ export function checkedPaperExperienceStatus(paper: {
   return 'ready_for_review'
 }
 
+export function hasCheckedPaperReviewPayload(paper: {
+  grading_results?: readonly unknown[] | null
+  total_score?: number | null
+  max_score?: number | null
+}) {
+  return Boolean(
+    paper.grading_results?.length
+    && typeof paper.total_score === 'number'
+    && Number.isFinite(paper.total_score)
+    && typeof paper.max_score === 'number'
+    && Number.isFinite(paper.max_score)
+    && paper.max_score > 0,
+  )
+}
+
+export function checkedPaperReviewExperienceStatus(paper: {
+  status?: string | null
+  release_status?: string | null
+  results_published?: boolean | null
+  needs_review?: boolean | null
+  manual_review_requested?: boolean | null
+  grading_results?: readonly unknown[] | null
+  total_score?: number | null
+  max_score?: number | null
+}): CheckedPaperExperienceStatus {
+  const status = checkedPaperExperienceStatus(paper)
+  if (status === 'ready_for_review' && !hasCheckedPaperReviewPayload(paper)) return 'checking'
+  return status
+}
+
 export const CHECKED_PAPER_EXPERIENCE_LABELS: Record<CheckedPaperExperienceStatus, string> = {
   checking: 'Checking',
   ready_for_review: 'Ready for review',
@@ -138,6 +168,142 @@ export function friendlyStage(status?: string | null) {
 
 export function canContinueAsException(blockers: CheckedPaperProcessingBlocker[]) {
   return blockers.length > 0 && blockers.every((blocker) => blocker.resolvable_by_teacher)
+}
+
+export function checkedPaperBlockerMessage(blocker: CheckedPaperProcessingBlocker) {
+  if (blocker.code === 'no_candidate_response_detected') {
+    return 'Eduraa could not detect answer regions on the uploaded pages. Review the scan and set the final marks; a zero is not automatic.'
+  }
+  if (blocker.code === 'subject_identity_missing') {
+    return 'Eduraa could not verify the subject for automatic release. Review the suggested marks and confirm the result.'
+  }
+  if (blocker.code === 'question_type_missing') {
+    return 'Eduraa could not verify a question type for automatic release. Review the suggested marks and confirm the result.'
+  }
+  if (blocker.code === 'slice_not_calibrated') {
+    return 'This question type needs teacher confirmation before release. Its suggested marks are ready to review.'
+  }
+  if (blocker.message?.trim()) return blocker.message.trim()
+  return 'Eduraa needs a teacher to review this flag before the result can be approved.'
+}
+
+export function isReleaseConfidenceBlocker(blocker: CheckedPaperProcessingBlocker) {
+  return [
+    'subject_identity_missing',
+    'question_type_missing',
+    'slice_not_calibrated',
+  ].includes(blocker.code)
+}
+
+export function uniqueCheckedPaperBlockers(
+  blockers: CheckedPaperProcessingBlocker[] | null | undefined,
+) {
+  const seen = new Set<string>()
+  return (blockers ?? []).filter((blocker) => {
+    if (blocker.code === 'language_identity_missing') return false
+    const key = blocker.issue_id || [
+      blocker.code,
+      checkedPaperBlockerMessage(blocker).toLocaleLowerCase(),
+      ...(blocker.page_ids ?? []),
+      ...(blocker.page_numbers ?? []),
+      ...(blocker.occurrence_ids ?? []),
+      ...(blocker.question_ids ?? []),
+      ...(blocker.attempt_ids ?? []),
+    ].join(':')
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+export function checkingStageLabel(status?: string | null, processingStage?: string | null) {
+  const token = String(processingStage || status || '').toLocaleLowerCase().replace(/[\s-]+/g, '_')
+  if (token.includes('integrity')) return 'Checking page integrity'
+  if (token.includes('evidence') || token.includes('inventory') || token.includes('grouping')) return 'Reading answer evidence'
+  if (token.includes('mapping')) return 'Matching answers to questions'
+  if (token.includes('grading') || token.includes('rubric') || token.includes('policy')) return 'Applying the marking rubric'
+  if (token.includes('release') || token.includes('completeness')) return 'Running final checks'
+  if (token.includes('uploaded') || token.includes('pending') || token.includes('queued')) return 'Queued for checking'
+  return 'Checking the paper'
+}
+
+export function studentResponseSummaryFromFeedback(value: unknown) {
+  const feedback = typeof value === 'string' ? value : ''
+  const section = feedback.match(
+    /\*\*Student response\*\*\s*([\s\S]*?)\s*\*\*Rubric evaluation\*\*/i,
+  )?.[1]
+  if (!section) return null
+  const bullets = Array.from(section.matchAll(/^\s*[-*]\s+(.+?)\s*$/gm))
+    .map((match) => match[1].replace(/`([^`]*)`/g, '$1').trim())
+    .filter(Boolean)
+  return bullets.length ? bullets.join('\n') : null
+}
+
+export type TeacherPaperDecision = {
+  issueCount: number
+  statusLabel: string
+  title: string
+  body: string
+  actionLabel: string
+  hasSuggestedResult: boolean
+}
+
+export function buildTeacherPaperDecision(
+  paper: Pick<
+    CheckedPaper,
+    'status' | 'needs_review' | 'processing_blockers' | 'grading_results' | 'total_score' | 'max_score' | 'can_save_review'
+  >,
+): TeacherPaperDecision {
+  const issues = uniqueCheckedPaperBlockers(paper.processing_blockers)
+  const issueCount = issues.length
+  const effectiveIssueCount = issueCount || 1
+  const questionCount = paper.grading_results?.length ?? 0
+  const hasSuggestedResult = questionCount > 0
+    && typeof paper.total_score === 'number'
+    && typeof paper.max_score === 'number'
+  const issueLabel = `${effectiveIssueCount} check${effectiveIssueCount === 1 ? '' : 's'}`
+
+  if (hasSuggestedResult && paper.needs_review && paper.can_save_review) {
+    return {
+      issueCount,
+      statusLabel: issueLabel,
+      title: `${issueLabel} need${effectiveIssueCount === 1 ? 's' : ''} confirmation`,
+      body: `Eduraa graded all ${questionCount} questions and suggests ${paper.total_score}/${paper.max_score}. Review the checks, change any mark if needed, then confirm your result.`,
+      actionLabel: issueCount ? `Review ${issueLabel}` : 'Review suggested result',
+      hasSuggestedResult,
+    }
+  }
+
+  if (String(paper.status).includes('failed')) {
+    return {
+      issueCount,
+      statusLabel: 'Check failed',
+      title: 'Checking could not finish',
+      body: 'Your upload is safe. Open the scan issue to see what failed and the available recovery action.',
+      actionLabel: 'Review scan issue',
+      hasSuggestedResult,
+    }
+  }
+
+  if (paper.needs_review) {
+    return {
+      issueCount,
+      statusLabel: issueLabel,
+      title: issueCount ? `${issueLabel} need${effectiveIssueCount === 1 ? 's' : ''} confirmation` : 'Check the uploaded script',
+      body: 'Eduraa needs a teacher to verify the highlighted scan evidence before checking can continue.',
+      actionLabel: 'Review scan issue',
+      hasSuggestedResult,
+    }
+  }
+
+  return {
+    issueCount,
+    statusLabel: 'Ready for review',
+    title: 'Suggested result is ready',
+    body: 'Review the suggested marks, make any corrections, then approve when the result reflects your decision.',
+    actionLabel: 'Review suggested result',
+    hasSuggestedResult,
+  }
 }
 
 export function normalizeStandard(value?: string | number | null) {

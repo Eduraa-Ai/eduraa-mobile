@@ -1,6 +1,8 @@
 type NavigationLike = {
+  canGoBack?: () => boolean
   getParent?: () => NavigationLike | undefined
   getState?: () => { routeNames?: string[] }
+  goBack?: () => void
   navigate?: (...args: any[]) => void
 }
 
@@ -36,4 +38,13 @@ export function navigateToCheckedPapers(
   }
 
   return false
+}
+
+export function returnToCheckedPapers(navigation: NavigationLike) {
+  if (navigation.canGoBack?.() && navigation.goBack) {
+    navigation.goBack()
+    return true
+  }
+
+  return navigateToCheckedPapers(navigation)
 }

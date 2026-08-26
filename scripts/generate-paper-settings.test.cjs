@@ -89,6 +89,16 @@ test('keeps flat lists when the role has no section assignments', () => {
   })
 })
 
+test('defaults flat teacher options to a valid standard and division', () => {
+  const scope = resolvePaperScope(
+    { standards: ['Std 10', 'Std 5'], divisions: ['B', 'A'], subjects: [maths], sections: [] },
+    { standard: '', division: '', subjectId: '' },
+  )
+
+  assert.equal(scope.selection.standard, 'Std 5')
+  assert.equal(scope.selection.division, 'A')
+})
+
 test('narrows divisions and subjects to the selected standard', () => {
   const scope = resolvePaperScope(teacherOptions, {
     standard: 'Std 9',

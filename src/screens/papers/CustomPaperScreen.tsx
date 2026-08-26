@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -23,14 +23,19 @@ import {
 } from '../../api/paperManifests'
 import { PrimaryButton } from '../../components/ui/PrimaryButton'
 import { Screen } from '../../components/ui/Screen'
+import { SelectField } from '../../components/ui/SelectField'
 import { TextInputField } from '../../components/ui/TextInputField'
 import type { PapersStackParamList } from '../../navigation'
 import { colors } from '../../theme/colors'
 import { fonts } from '../../theme/fonts'
 import { layout, radius, spacing } from '../../theme/spacing'
 import {
+  customPaperDraftFingerprint,
+  customPaperFilesMatch,
   createIdempotencyKey,
   describeManifest,
+  formatCustomPaperFileSize,
+  validateCustomPaperFile,
 } from './customPaperModel'
 import { resolvePaperScope } from './generatePaperSettingsModel'
 
@@ -38,10 +43,25 @@ type Nav = NativeStackNavigationProp<PapersStackParamList, 'CustomPaper'>
 
 const POLL_INTERVAL_MS = 2500
 
+type FileRole = 'questionPaper' | 'answerKey'
+
+function formatStandardLabel(value: string) {
+  const normalized = value.replace(/^std\.?\s*/i, '').trim()
+  return /^\d+$/.test(normalized) ? `Std ${normalized}` : value
+}
+
 function extractDetail(error: unknown, fallback: string) {
   const detail = (error as { response?: { data?: { detail?: unknown } } })?.response
     ?.data?.detail
   if (typeof detail === 'string') return detail
+  if (
+    detail &&
+    typeof detail === 'object' &&
+    'message' in detail &&
+    typeof detail.message === 'string'
+  ) {
+    return detail.message
+  }
   if (Array.isArray(detail)) {
     return detail.map((item: any) => item?.msg ?? String(item)).join('\n')
   }
@@ -52,20 +72,24 @@ function FilePicker({
   label,
   hint,
   file,
+  error,
   onPick,
 }: {
   label: string
   hint: string
   file: CustomPaperFile | null
+  error?: string
   onPick: () => void
 }) {
   return (
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={`Choose ${label}`}
+      accessibilityHint={file ? 'Replaces the currently selected PDF' : hint}
+      accessibilityState={{ selected: Boolean(file) }}
       activeOpacity={0.88}
       onPress={onPick}
-      style={[styles.fileRow, file && styles.fileRowFilled]}
+      style={[styles.fileRow, file && styles.fileRowFilled, error && styles.fileRowError]}
     >
       <View style={[styles.fileIcon, file && styles.fileIconFilled]}>
         <Ionicons
@@ -77,7 +101,7 @@ function FilePicker({
       <View style={styles.fileCopy}>
         <Text style={styles.fileLabel}>{label}</Text>
         <Text style={styles.fileHint} numberOfLines={1}>
-          {file ? file.name : hint}
+          {file ? `${file.name} · ${formatCustomPaperFileSize(file.size)}` : hint}
         </Text>
       </View>
       <Text style={styles.fileAction}>{file ? 'Change' : 'Choose'}</Text>
@@ -96,50 +120,96 @@ export default function CustomPaperScreen() {
   const [subjectId, setSubjectId] = useState('')
   const [questionPaper, setQuestionPaper] = useState<CustomPaperFile | null>(null)
   const [answerKey, setAnswerKey] = useState<CustomPaperFile | null>(null)
+  const [fileErrors, setFileErrors] = useState<Partial<Record<FileRole, string>>>({})
   const [manifest, setManifest] = useState<PaperManifestVersion | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pollingError, setPollingError] = useState<string | null>(null)
 
-  // Reused across retries so a repeated upload never creates a second draft.
-  const uploadKeyRef = useRef(createIdempotencyKey())
+  // Reuse the key for a retry of the same draft, but rotate it whenever the
+  // teacher changes the class, subject, title, or either source file.
+  const uploadRequestRef = useRef<{ fingerprint: string; key: string } | null>(null)
   const paperIdRef = useRef<string | null>(null)
 
-  const { data: options } = useQuery({
+  const optionsQuery = useQuery({
     queryKey: ['paper-options'],
     queryFn: papersApi.getOptions,
   })
+  const options = optionsQuery.data
 
-  const scope = resolvePaperScope(options ?? {}, {
-    standard,
-    division,
-    subjectId,
-  })
+  const scope = useMemo(
+    () => resolvePaperScope(options ?? {}, { standard, division, subjectId }),
+    [division, options, standard, subjectId],
+  )
 
   useEffect(() => {
     if (!options) return
     if (scope.selection.standard !== standard) setStandard(scope.selection.standard)
     if (scope.selection.division !== division) setDivision(scope.selection.division)
     if (scope.selection.subjectId !== subjectId) setSubjectId(scope.selection.subjectId)
-  }, [division, options, scope, standard, subjectId])
+  }, [
+    division,
+    options,
+    scope.selection.division,
+    scope.selection.standard,
+    scope.selection.subjectId,
+    standard,
+    subjectId,
+  ])
 
   const review = describeManifest(manifest)
 
   const pickPdf = useCallback(
-    async (onPicked: (file: CustomPaperFile) => void) => {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-      })
-      if (result.canceled || !result.assets?.length) return
-      const asset = result.assets[0]
-      onPicked({
-        uri: asset.uri,
-        name: asset.name || `paper-${Date.now()}.pdf`,
-        type: asset.mimeType || 'application/pdf',
-        file: asset.file,
-      })
+    async (role: FileRole) => {
+      const label = role === 'questionPaper' ? 'Question paper' : 'Answer key'
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: 'application/pdf',
+          copyToCacheDirectory: true,
+        })
+        if (result.canceled || !result.assets?.length) return
+        const asset = result.assets[0]
+        const picked: CustomPaperFile = {
+          uri: asset.uri,
+          name: asset.name || `paper-${Date.now()}.pdf`,
+          type: asset.mimeType || 'application/pdf',
+          size: asset.size,
+          lastModified: asset.lastModified,
+          file: asset.file,
+        }
+        const otherFile = role === 'questionPaper' ? answerKey : questionPaper
+        const existingFile = role === 'questionPaper' ? questionPaper : answerKey
+        const fileError =
+          validateCustomPaperFile(picked, label) ??
+          (otherFile && customPaperFilesMatch(picked, otherFile)
+            ? 'Question paper and answer key must be different PDF files.'
+            : null)
+        if (fileError) {
+          if (existingFile) {
+            setFileErrors((current) => ({ ...current, [role]: undefined }))
+            setError(`${fileError} Your previous ${label.toLowerCase()} is still selected.`)
+          } else {
+            setFileErrors((current) => ({ ...current, [role]: fileError }))
+          }
+          return
+        }
+        setFileErrors((current) => ({ ...current, [role]: undefined }))
+        if (role === 'questionPaper') setQuestionPaper(picked)
+        else setAnswerKey(picked)
+        setError(null)
+      } catch {
+        const existingFile = role === 'questionPaper' ? questionPaper : answerKey
+        if (existingFile) {
+          setError(`The file picker could not open. Your previous ${label.toLowerCase()} is still selected.`)
+        } else {
+          setFileErrors((current) => ({
+            ...current,
+            [role]: 'The file picker could not open. Please try again.',
+          }))
+        }
+      }
     },
-    [],
+    [answerKey, questionPaper],
   )
 
   // The worker keeps extracting after the request returns, so the draft is
@@ -152,9 +222,16 @@ export default function CustomPaperScreen() {
       if (!paperId) return
       try {
         const latest = await paperManifestsApi.get(paperId)
-        if (!cancelled) setManifest(latest)
+        if (!cancelled) {
+          setPollingError(null)
+          setManifest((current) =>
+            !current || latest.revision >= current.revision ? latest : current,
+          )
+        }
       } catch {
-        // A dropped poll is recoverable; the next tick retries.
+        if (!cancelled) {
+          setPollingError('Progress could not refresh yet. Eduraa will keep trying.')
+        }
       }
     }, POLL_INTERVAL_MS)
     return () => {
@@ -163,25 +240,44 @@ export default function CustomPaperScreen() {
     }
   }, [review.isPolling])
 
-  const detailsDone = Boolean(titleLine1.trim() && subjectId)
-  const filesDone = Boolean(questionPaper && answerKey)
+  const detailsDone = Boolean(
+    titleLine1.trim() && standard.trim() && division.trim() && subjectId.trim(),
+  )
+  const filesDone = Boolean(
+    questionPaper && answerKey && !fileErrors.questionPaper && !fileErrors.answerKey,
+  )
 
   const handleUpload = async () => {
     if (!detailsDone || !filesDone || !questionPaper || !answerKey) return
     setBusy(true)
     setError(null)
     try {
+      const fingerprint = customPaperDraftFingerprint({
+        titleLine1,
+        standard,
+        division,
+        subjectId,
+        questionPaper,
+        answerKey,
+      })
+      if (
+        !uploadRequestRef.current ||
+        uploadRequestRef.current.fingerprint !== fingerprint
+      ) {
+        uploadRequestRef.current = { fingerprint, key: createIdempotencyKey() }
+      }
       const created = await paperManifestsApi.createDraft({
         subjectId,
         titleLine1: titleLine1.trim(),
-        idempotencyKey: uploadKeyRef.current,
-        standard: standard || undefined,
-        division: division || undefined,
+        idempotencyKey: uploadRequestRef.current.key,
+        standard: standard.trim(),
+        division: division.trim(),
         questionPaper,
         answerKey,
       })
       paperIdRef.current = created.paper_id
       setManifest(created)
+      void queryClient.invalidateQueries({ queryKey: ['papers'] })
     } catch (uploadError) {
       setError(
         extractDetail(
@@ -217,7 +313,11 @@ export default function CustomPaperScreen() {
         createIdempotencyKey(),
       )
       setManifest(confirmed)
-      await queryClient.invalidateQueries({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['papers'] }),
+        queryClient.invalidateQueries({ queryKey: ['exams', 'papers'] }),
+      ])
       Alert.alert(
         'Paper ready',
         'The question map is confirmed. You can now publish it or attach student work.',
@@ -244,6 +344,7 @@ export default function CustomPaperScreen() {
   return (
     <View style={styles.root}>
       <Screen
+        keyboardShouldPersistTaps="handled"
         contentStyle={{
           ...styles.content,
           paddingBottom: layout.bottomTabHeight + insets.bottom + spacing[10],
@@ -364,41 +465,115 @@ export default function CustomPaperScreen() {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Paper details</Text>
               <TextInputField
-                label="Title"
+                label="Title *"
                 value={titleLine1}
-                onChangeText={setTitleLine1}
+                onChangeText={(value) => {
+                  setTitleLine1(value)
+                  setError(null)
+                }}
                 placeholder="Class Test (Std 10 A)"
+                maxLength={200}
+                returnKeyType="done"
+              />
+              <View style={styles.classFields}>
+                <SelectField
+                  label="Standard *"
+                  value={standard}
+                  placeholder={optionsQuery.isLoading ? 'Loading standards' : 'Choose standard'}
+                  loading={optionsQuery.isLoading}
+                  disabled={optionsQuery.isError || scope.standards.length === 0}
+                  searchable={scope.standards.length > 8}
+                  options={scope.standards.map((item) => ({
+                    value: item,
+                    label: formatStandardLabel(item),
+                  }))}
+                  onChange={(value) => {
+                    setStandard(value)
+                    setDivision('')
+                    setSubjectId('')
+                    setError(null)
+                  }}
+                />
+                <SelectField
+                  label="Division *"
+                  value={division}
+                  placeholder={standard ? 'Choose division' : 'Choose standard first'}
+                  loading={optionsQuery.isLoading}
+                  disabled={
+                    optionsQuery.isError || !standard || scope.divisions.length === 0
+                  }
+                  searchable={scope.divisions.length > 8}
+                  options={scope.divisions.map((item) => ({
+                    value: item,
+                    label: `Division ${item}`,
+                  }))}
+                  onChange={(value) => {
+                    setDivision(value)
+                    setSubjectId('')
+                    setError(null)
+                  }}
+                />
+              </View>
+              <SelectField
+                label="Subject *"
+                value={subjectId}
+                placeholder={division ? 'Choose subject' : 'Choose class first'}
+                loading={optionsQuery.isLoading}
+                disabled={
+                  optionsQuery.isError ||
+                  !standard ||
+                  !division ||
+                  scope.subjects.length === 0
+                }
+                searchable={scope.subjects.length > 8}
+                options={scope.subjects.map((subject) => ({
+                  value: subject.id,
+                  label: subject.name,
+                }))}
+                onChange={(value) => {
+                  setSubjectId(value)
+                  setError(null)
+                }}
               />
               <Text style={styles.cardHint}>
-                {scope.selection.standard || 'Standard'} ·{' '}
-                {scope.selection.division || 'Division'} ·{' '}
-                {scope.subjects.find((item) => item.id === subjectId)?.name ??
-                  'Select a subject'}
+                Only classes and subjects assigned to you are shown. The paper will be saved to this class.
               </Text>
-              <View style={styles.subjectRow}>
-                {scope.subjects.map((subject) => {
-                  const active = subject.id === subjectId
-                  return (
+              {optionsQuery.isError ? (
+                <View accessibilityLiveRegion="polite" style={styles.scopeState}>
+                  <Ionicons name="cloud-offline-outline" size={18} color={colors.danger} />
+                  <View style={styles.scopeStateCopy}>
+                    <Text style={styles.scopeStateTitle}>Class options could not load</Text>
+                    <Text style={styles.scopeStateBody}>Your title is still here. Check the connection and retry.</Text>
                     <TouchableOpacity
-                      key={subject.id}
                       accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      activeOpacity={0.88}
-                      onPress={() => setSubjectId(subject.id)}
-                      style={[styles.subjectChip, active && styles.subjectChipOn]}
+                      activeOpacity={0.84}
+                      disabled={optionsQuery.isFetching}
+                      onPress={() => void optionsQuery.refetch()}
+                      style={styles.retryButton}
                     >
-                      <Text
-                        style={[
-                          styles.subjectChipText,
-                          active && styles.subjectChipTextOn,
-                        ]}
-                      >
-                        {subject.name}
-                      </Text>
+                      {optionsQuery.isFetching ? (
+                        <ActivityIndicator size="small" color={colors.white} />
+                      ) : (
+                        <Ionicons name="refresh" size={14} color={colors.white} />
+                      )}
+                      <Text style={styles.retryButtonText}>Try again</Text>
                     </TouchableOpacity>
-                  )
-                })}
-              </View>
+                  </View>
+                </View>
+              ) : !optionsQuery.isLoading &&
+                (!scope.standards.length ||
+                  !scope.divisions.length ||
+                  !scope.subjects.length) ? (
+                <View accessibilityLiveRegion="polite" style={styles.scopeState}>
+                  <Ionicons name="school-outline" size={18} color={colors.warning} />
+                  <View style={styles.scopeStateCopy}>
+                    <Text style={styles.scopeStateTitle}>Teaching scope needs attention</Text>
+                    <Text style={styles.scopeStateBody}>
+                      Ask your school administrator to assign a standard, division, and subject before creating this paper.
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.card}>
@@ -407,14 +582,26 @@ export default function CustomPaperScreen() {
                 label="Question paper PDF"
                 hint="The paper students will answer"
                 file={questionPaper}
-                onPick={() => void pickPdf(setQuestionPaper)}
+                error={fileErrors.questionPaper}
+                onPick={() => void pickPdf('questionPaper')}
               />
+              {fileErrors.questionPaper ? (
+                <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
+                  {fileErrors.questionPaper}
+                </Text>
+              ) : null}
               <FilePicker
                 label="Answer key PDF"
                 hint="Official answers and marking key"
                 file={answerKey}
-                onPick={() => void pickPdf(setAnswerKey)}
+                error={fileErrors.answerKey}
+                onPick={() => void pickPdf('answerKey')}
               />
+              {fileErrors.answerKey ? (
+                <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
+                  {fileErrors.answerKey}
+                </Text>
+              ) : null}
               <Text style={styles.note}>
                 A simple school answer key is enough. Eduraa understands sections,
                 sub-parts, internal choices, and descriptive answers.
@@ -429,6 +616,19 @@ export default function CustomPaperScreen() {
           </View>
         ) : null}
 
+        {pollingError ? (
+          <View accessibilityLiveRegion="polite" style={styles.pollingNotice}>
+            <Ionicons name="cloud-offline-outline" size={17} color={colors.warning} />
+            <Text style={styles.pollingNoticeText}>{pollingError}</Text>
+          </View>
+        ) : null}
+
+        {!manifest && !detailsDone && !optionsQuery.isLoading && !optionsQuery.isError ? (
+          <Text style={styles.readinessHint}>
+            Choose the paper title, standard, division, and subject to continue.
+          </Text>
+        ) : null}
+
         {review.phase === 'confirmed' ? null : manifest ? (
           <PrimaryButton
             label={
@@ -436,11 +636,15 @@ export default function CustomPaperScreen() {
                 ? 'Retry extraction'
                 : review.isPolling
                   ? 'Reading PDFs…'
-                  : 'Confirm question map'
+                  : review.canRetry
+                    ? 'Retry from saved PDFs'
+                    : 'Confirm question map'
             }
             loading={busy || review.isPolling}
-            disabled={busy || review.isPolling}
-            onPress={review.phase === 'failed' ? handleRetry : handleConfirm}
+            disabled={
+              busy || review.isPolling || (!review.canConfirm && !review.canRetry)
+            }
+            onPress={review.canRetry ? handleRetry : handleConfirm}
           />
         ) : (
           <PrimaryButton
@@ -486,20 +690,41 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   cardHint: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
-  subjectRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  subjectChip: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
+  classFields: { gap: spacing[3] },
+  scopeState: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+    padding: spacing[3],
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.backgroundTint,
   },
-  subjectChipOn: {
-    borderColor: colors.accentStrong,
-    backgroundColor: colors.accentSoft,
+  scopeStateCopy: { flex: 1, gap: spacing[1], alignItems: 'flex-start' },
+  scopeStateTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.text,
   },
-  subjectChipText: { fontFamily: fonts.medium, fontSize: 13, color: colors.textMuted },
-  subjectChipTextOn: { color: colors.accentStrong },
+  scopeStateBody: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textMuted,
+  },
+  retryButton: {
+    minHeight: 44,
+    marginTop: spacing[2],
+    paddingHorizontal: spacing[4],
+    borderRadius: radius.full,
+    backgroundColor: colors.accentStrong,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+  },
+  retryButtonText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.white },
   fileRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -511,6 +736,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   fileRowFilled: { borderColor: colors.success },
+  fileRowError: { borderColor: colors.danger, backgroundColor: colors.dangerSurface },
   fileIcon: {
     width: 36,
     height: 36,
@@ -527,6 +753,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 13,
     color: colors.accentStrong,
+  },
+  fieldError: {
+    marginTop: -spacing[2],
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.danger,
   },
   note: {
     fontFamily: fonts.regular,
@@ -592,4 +824,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   errorText: { fontFamily: fonts.regular, fontSize: 13, color: colors.danger },
+  pollingNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    padding: spacing[3],
+    borderRadius: radius.lg,
+    backgroundColor: colors.warningSurface,
+  },
+  pollingNoticeText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.warning,
+  },
+  readinessHint: {
+    marginTop: -spacing[1],
+    textAlign: 'center',
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.textMuted,
+  },
 })

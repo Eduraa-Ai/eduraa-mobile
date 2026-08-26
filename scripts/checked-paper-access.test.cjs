@@ -78,6 +78,14 @@ test('builds a safe authenticated checked-paper PDF download request', () => {
   assert.equal(documents.safeDocumentFileStem('***'), 'checked-paper')
 })
 
+test('opens checked-paper scans through the canonical protected endpoint', () => {
+  assert.equal(
+    documents.checkedPaperScanPath('paper id/synthetic'),
+    '/api/v1/checked-papers/paper%20id%2Fsynthetic/scanned',
+  )
+  assert.throws(() => documents.checkedPaperScanPath('  '))
+})
+
 test('names cached protected images stably and per source URL', () => {
   const first = 'https://api.example.test/api/v1/documents/visuals/chapter2_q105.png'
   const second = 'https://api.example.test/api/v1/documents/visuals/book-b/chapter2_q105.png'

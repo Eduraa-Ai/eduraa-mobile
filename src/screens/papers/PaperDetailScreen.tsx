@@ -147,7 +147,7 @@ export default function PaperDetailScreen() {
   });
   const paper = paperQuery.data;
 
-  const isTeacherReference = params.presentation === 'teacher_reference'
+  const isTeacherReference = params.presentation === "teacher_reference";
 
   const attemptsQuery = useQuery({
     queryKey: ["paper-attempts-detail", params.paperId],
@@ -170,29 +170,42 @@ export default function PaperDetailScreen() {
   );
 
   const ownedPapersQuery = useQuery({
-    queryKey: ['papers', 'mine', user?.id],
-    queryFn: () => papersApi.list({ skip: 0, limit: 100, scope: 'mine' }),
-    enabled: Boolean(paper && user?.role === 'student'),
-  })
-  const canDelete = !isTeacherReference && (
-    user?.role === 'b2c_student'
-    || Boolean(ownedPapersQuery.data?.items.some((item) => item.id === params.paperId))
-    || Boolean(paper?.created_by && paper.created_by === user?.id)
-  )
+    queryKey: ["papers", "mine", user?.id],
+    queryFn: () => papersApi.list({ skip: 0, limit: 100, scope: "mine" }),
+    enabled: Boolean(paper && user?.role === "student"),
+  });
+  const ownsPaper =
+    user?.role === "b2c_student" ||
+    Boolean(
+      ownedPapersQuery.data?.items.some((item) => item.id === params.paperId),
+    ) ||
+    Boolean(paper?.created_by && paper.created_by === user?.id);
+  const canDelete = !isTeacherReference && ownsPaper;
   const isTeacher = user?.role === "teacher";
   const isPublished = paper?.status === "published";
   const canPublish = isTeacher && Boolean(paper) && !isPublished;
   const canRename = isTeacher || canDelete;
+  // The export endpoint only releases answers to the paper's creator; admins and
+  // principals read across their school.
+  const canDownloadAnswerKey =
+    isTeacher ||
+    user?.role === "admin" ||
+    user?.role === "principal" ||
+    ownsPaper;
 
   const downloadMutation = useMutation({
-    mutationFn: async () => {
-      const pdf = await papersApi.downloadPdf(params.paperId);
+    mutationFn: async (includeAnswers: boolean) => {
+      const pdf = await papersApi.downloadPdf(params.paperId, {
+        includeAnswers,
+      });
       await presentPdf(pdf);
     },
     onMutate: () => setActionError(null),
-    onError: () =>
+    onError: (_error, includeAnswers) =>
       setActionError(
-        "Could not download this paper. Check your connection and try again.",
+        includeAnswers
+          ? "Could not download the answer key. Check your connection and try again."
+          : "Could not download this paper. Check your connection and try again.",
       ),
   });
 
@@ -230,7 +243,9 @@ export default function PaperDetailScreen() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["papers"] }),
         queryClient.invalidateQueries({ queryKey: ["exams", "papers"] }),
-        queryClient.invalidateQueries({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY }),
+        queryClient.invalidateQueries({
+          queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY,
+        }),
       ]);
     },
     onError: (error: any) => {
@@ -290,21 +305,29 @@ export default function PaperDetailScreen() {
   });
 
   useEffect(() => {
-    if (!isFocused) return
-    resultOpeningRef.current = false
-    setIsOpeningResult(false)
-    void paperQuery.refetch()
-    if (paper && !isTeacherReference) void attemptsQuery.refetch()
-  }, [isFocused, isTeacherReference, params.paperId])
+    if (!isFocused) return;
+    resultOpeningRef.current = false;
+    setIsOpeningResult(false);
+    void paperQuery.refetch();
+    if (paper && !isTeacherReference) void attemptsQuery.refetch();
+  }, [isFocused, isTeacherReference, params.paperId]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <HeaderAction
-          label={isTeacherReference ? 'Download paper PDF' : 'Paper actions'}
-          icon={isTeacherReference ? 'download-outline' : 'ellipsis-horizontal'}
-          busy={downloadMutation.isPending || retestMutation.isPending || deleteMutation.isPending}
-          onPress={isTeacherReference ? () => downloadMutation.mutate() : () => setActionMenuOpen(true)}
+          label={isTeacherReference ? "Download paper PDF" : "Paper actions"}
+          icon={isTeacherReference ? "download-outline" : "ellipsis-horizontal"}
+          busy={
+            downloadMutation.isPending ||
+            retestMutation.isPending ||
+            deleteMutation.isPending
+          }
+          onPress={
+            isTeacherReference
+              ? () => downloadMutation.mutate(false)
+              : () => setActionMenuOpen(true)
+          }
         />
       ),
     });
@@ -465,24 +488,68 @@ export default function PaperDetailScreen() {
 
         <View style={styles.actions}>
           {isTeacherReference ? (
-            <TouchableOpacity
-              style={[styles.downloadBtn, downloadMutation.isPending && styles.primaryBtnDisabled]}
-              onPress={() => downloadMutation.mutate()}
-              activeOpacity={0.82}
-              disabled={downloadMutation.isPending}
-              accessibilityRole="button"
-              accessibilityLabel="Download teacher reference PDF"
-            >
-              {downloadMutation.isPending ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <Ionicons name="download-outline" size={24} color={colors.accent} />
-              )}
-              <View style={styles.downloadCopy}>
-                <Text style={styles.downloadTitle}>Download teacher reference PDF</Text>
-                <Text style={styles.downloadMeta}>Save the question paper without answers.</Text>
-              </View>
-            </TouchableOpacity>
+            <View style={styles.downloadStack}>
+              <TouchableOpacity
+                style={[
+                  styles.downloadBtn,
+                  downloadMutation.isPending && styles.primaryBtnDisabled,
+                ]}
+                onPress={() => downloadMutation.mutate(false)}
+                activeOpacity={0.82}
+                disabled={downloadMutation.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Download teacher reference PDF"
+              >
+                {downloadMutation.isPending && !downloadMutation.variables ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <Ionicons
+                    name="download-outline"
+                    size={24}
+                    color={colors.accent}
+                  />
+                )}
+                <View style={styles.downloadCopy}>
+                  <Text style={styles.downloadTitle}>
+                    Download teacher reference PDF
+                  </Text>
+                  <Text style={styles.downloadMeta}>
+                    Save the question paper without answers.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              {canDownloadAnswerKey ? (
+                <TouchableOpacity
+                  style={[
+                    styles.downloadBtn,
+                    downloadMutation.isPending && styles.primaryBtnDisabled,
+                  ]}
+                  onPress={() => downloadMutation.mutate(true)}
+                  activeOpacity={0.82}
+                  disabled={downloadMutation.isPending}
+                  accessibilityRole="button"
+                  accessibilityLabel="Download PDF with answer key"
+                >
+                  {downloadMutation.isPending && downloadMutation.variables ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : (
+                    <Ionicons
+                      name="key-outline"
+                      size={24}
+                      color={colors.accent}
+                    />
+                  )}
+                  <View style={styles.downloadCopy}>
+                    <Text style={styles.downloadTitle}>
+                      Download PDF with answer key
+                    </Text>
+                    <Text style={styles.downloadMeta}>
+                      Same paper with every answer printed after its question.
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ) : canPublish ? (
             <TouchableOpacity
               style={[
@@ -811,7 +878,7 @@ export default function PaperDetailScreen() {
               accessibilityLabel="Download paper PDF"
               onPress={() => {
                 setActionMenuOpen(false);
-                downloadMutation.mutate();
+                downloadMutation.mutate(false);
               }}
               style={({ pressed }) => [
                 styles.actionMenuItem,
@@ -832,6 +899,36 @@ export default function PaperDetailScreen() {
                 </Text>
               </View>
             </Pressable>
+            {canDownloadAnswerKey ? (
+              <Pressable
+                accessibilityRole="menuitem"
+                accessibilityLabel="Download PDF with answer key"
+                onPress={() => {
+                  setActionMenuOpen(false);
+                  downloadMutation.mutate(true);
+                }}
+                style={({ pressed }) => [
+                  styles.actionMenuItem,
+                  pressed && styles.headerActionPressed,
+                ]}
+              >
+                <View style={styles.actionMenuIcon}>
+                  <Ionicons
+                    name="key-outline"
+                    size={20}
+                    color={colors.accentStrong}
+                  />
+                </View>
+                <View style={styles.actionMenuCopy}>
+                  <Text style={styles.actionMenuTitle}>
+                    Download PDF with answer key
+                  </Text>
+                  <Text style={styles.actionMenuBody}>
+                    Same paper with every answer printed after its question.
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
             {canDelete ? (
               <Pressable
                 accessibilityRole="menuitem"
@@ -1190,6 +1287,10 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   secondaryBtnText: { color: colors.accent, fontWeight: "700", fontSize: 14 },
+  downloadStack: {
+    flex: 1,
+    gap: spacing[3],
+  },
   downloadBtn: {
     minHeight: 58,
     borderRadius: radius.lg,

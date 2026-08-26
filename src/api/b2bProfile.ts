@@ -63,6 +63,11 @@ export interface TeacherSubjectMapping {
   assignment_type: string
 }
 
+export interface TeacherProfileSubjectOption {
+  id: string
+  name: string
+}
+
 export interface TeacherMasterProfile {
   profile: TeacherProfileCore
   assignment_status?: string | null
@@ -157,6 +162,11 @@ export const b2bProfileApi = {
       payload,
     )
     return response.data
+  },
+
+  listTeacherProfileSubjects: async (): Promise<TeacherProfileSubjectOption[]> => {
+    const response = await apiClient.get<TeacherProfileSubjectOption[]>('/subjects')
+    return (response.data ?? []).map((subject) => ({ id: subject.id, name: subject.name }))
   },
 
   getPrincipalProfile: async (): Promise<PrincipalProfile> => {

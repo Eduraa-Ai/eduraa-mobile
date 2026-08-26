@@ -30,6 +30,14 @@ test('only teacher approval is exposed as a B2B profile mutation', () => {
   assert.doesNotMatch(apiSource, /submitStudent|updateStudent|submitPrincipal|updatePrincipal/)
 })
 
+test('teacher editor loads canonical web-parity dropdown data', () => {
+  assert.match(apiSource, /listTeacherProfileSubjects[\s\S]*'\/subjects'/)
+  assert.match(screenSource, /authApi\.listOfferings/)
+  assert.match(screenSource, /<MultiSelectField[\s\S]*label="Standards"/)
+  assert.match(screenSource, /<MultiSelectField[\s\S]*label="Divisions"/)
+  assert.match(screenSource, /<MultiSelectField[\s\S]*label="Subjects"/)
+})
+
 test('B2C profile behavior is retained behind the existing role branch', () => {
   assert.match(wrapperSource, /role !== 'b2c_student'[\s\S]*<B2BProfileScreen/)
   assert.match(wrapperSource, /<B2CProfileScreen \{\.\.\.props\}/)

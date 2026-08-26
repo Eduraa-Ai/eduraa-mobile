@@ -189,6 +189,7 @@ export interface PaperListItem {
   subject_name?: string;
   standard?: string | null;
   division?: string | null;
+  semester?: string | null;
   category?: string | null;
   total_marks: number;
   duration_minutes?: number | null;
@@ -202,6 +203,7 @@ export interface PaperGenerateRequest {
   subject_id: string;
   chapter_ids: string[];
   difficulty: Difficulty;
+  language?: string;
   title_line_1: string;
   title_line_2?: string;
   semester?: string;
@@ -395,13 +397,21 @@ export type CheckedPaperStatus =
 export interface CheckedPaperProcessingBlocker {
   issue_id: string;
   code: string;
-  message: string;
+  message?: string;
   stage: string;
   resolvable_by_teacher: boolean;
+  resolution?: string;
   page_ids?: string[];
   page_numbers?: number[];
   occurrence_ids?: string[];
+  question_ids?: string[];
   attempt_ids?: string[];
+  category?: 'upload' | 'integrity' | 'evidence' | 'mapping' | 'grading' | 'release' | string;
+  scope?: 'paper' | 'pages' | 'questions' | string;
+  title?: string;
+  recommended_action?: string;
+  blocks_confirmation?: boolean;
+  blocks_publication?: boolean;
   resolved_by_teacher?: boolean;
 }
 
@@ -417,6 +427,7 @@ export interface GradingResultItem {
   question_type?: string | null;
   response?: unknown;
   student_answer?: unknown;
+  student_answer_summary?: string | null;
   selected_answer?: unknown;
   expected_answer?: unknown;
   options?: unknown;
@@ -431,6 +442,9 @@ export interface GradingResultItem {
   selected?: boolean | null;
   attempt_ids?: string[] | null;
   evidence_citations?: unknown[] | null;
+  highlight_region?: unknown;
+  highlight_regions?: unknown[] | null;
+  answer_image_bbox?: unknown;
   score?: number | null;
   max_score?: number | null;
   feedback?: string | null;

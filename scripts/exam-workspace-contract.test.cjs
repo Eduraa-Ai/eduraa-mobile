@@ -53,12 +53,13 @@ test('scan options refresh when an exam or eligible paper changes', () => {
   const examsScreen = read('src/screens/workspace/ExamsScreen.tsx')
   const customPaperScreen = read('src/screens/papers/CustomPaperScreen.tsx')
   const paperDetailScreen = read('src/screens/papers/PaperDetailScreen.tsx')
+  const invalidatesScanOptions = /invalidateQueries\(\{\s*queryKey:\s*SCAN_UPLOAD_OPTIONS_QUERY_KEY,?\s*\}\)/
 
   assert.match(scanApi, /SCAN_UPLOAD_OPTIONS_QUERY_KEY = \['scan-upload', 'options'\] as const/)
   assert.match(scanScreen, /queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY/)
-  assert.match(examsScreen, /invalidateQueries\(\{ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY \}\)/)
-  assert.match(customPaperScreen, /invalidateQueries\(\{ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY \}\)/)
-  assert.match(paperDetailScreen, /invalidateQueries\(\{ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY \}\)/)
+  assert.match(examsScreen, invalidatesScanOptions)
+  assert.match(customPaperScreen, invalidatesScanOptions)
+  assert.match(paperDetailScreen, invalidatesScanOptions)
 })
 
 test('native scan uploads use Expo file-backed multipart while web keeps Axios', () => {
@@ -85,16 +86,76 @@ test('replace-paper recovery preserves the original roster and paper context', (
   assert.match(statusScreen, /initialPaperId: data\?\.paper_id/)
   assert.match(statusScreen, /initialStudentId: data\?\.student_id/)
   assert.match(scanScreen, /useState\(initial\?\.initialStudentId \?\? ''\)/)
-  assert.match(scanScreen, /initialPaper\?\.source_type === 'custom_paper'/)
+  assert.match(scanScreen, /initial\.initialPaperId\)\?\.source_type === 'custom_paper'/)
 })
 
 test('replacement upload state is refreshed and completed AI marks have a single audited confirmation action', () => {
   const scanScreen = read('src/screens/workspace/ScanUploadScreen.tsx')
   const statusScreen = read('src/screens/workspace/CheckedPaperStatusScreen.tsx')
 
-  assert.match(scanScreen, /setQueryData\(\['checked-paper', checkedPaper\.id\], checkedPaper\)/)
+  assert.match(scanScreen, /setQueryData\(\['checked-paper', paper\.id\], paper\)/)
   assert.match(statusScreen, /data\?\.can_save_review/)
   assert.match(statusScreen, /label="Confirm reviewed marks"/)
   assert.match(statusScreen, /checkedPapersApi\.updateTeacherReview/)
+  assert.match(statusScreen, /label="View scan evidence"/)
+  assert.match(statusScreen, /Use suggested/)
+  assert.match(statusScreen, /Inspect or edit \$\{reviewResults\.length\} marks/)
+  assert.match(statusScreen, /This is optional\. Inspect only the question marks you want to verify or change\./)
+  assert.match(statusScreen, /student_answer_summary/)
   assert.doesNotMatch(statusScreen, /Re-grade|Re-run AI grading/)
+})
+
+test('exam setup cascades teacher, subject, class, and paper context', () => {
+  const examsApi = read('src/api/exams.ts')
+  const screen = read('src/screens/workspace/ExamsScreen.tsx')
+
+  assert.match(examsApi, /subject_id: subjectId \|\| undefined/)
+  assert.match(screen, /handleTeacherChange/)
+  assert.match(screen, /handleSubjectChange/)
+  assert.match(screen, /handleStandardChange/)
+  assert.match(screen, /handleDivisionChange/)
+  assert.match(screen, /applyPaperDefaults/)
+  assert.match(screen, /Select teacher first/)
+  assert.match(screen, /Select subject first/)
+})
+
+test('exam setup follows the restrained scan-upload composition', () => {
+  const screen = read('src/screens/workspace/ExamsScreen.tsx')
+
+  assert.match(screen, /EXAM SETUP/)
+  assert.match(screen, /Choose class and subject/)
+  assert.match(screen, /Choose paper and name/)
+  assert.match(screen, /Student experience/)
+  assert.match(screen, /style=\{styles\.workflowSurface\}/)
+  assert.match(screen, /styles\.submitSurface, formReady && styles\.submitSurfaceReady/)
+  assert.match(screen, /tone="auth"/)
+  assert.match(screen, /ambient=\{false\}/)
+  assert.match(screen, /accessibilityRole="switch"/)
+  assert.doesNotMatch(screen, /<GradientHeroCard/)
+})
+
+test('existing staff exams render as compact operational records', () => {
+  const screen = read('src/screens/workspace/ExamsScreen.tsx')
+
+  assert.match(screen, /styles\.staffExamRecord/)
+  assert.match(screen, /Manage schedules, papers, and student visibility\./)
+  assert.match(screen, /\{exams\.length\} total/)
+  assert.match(screen, /No time limit/)
+  assert.match(screen, /Not published/)
+  assert.match(screen, /label="Edit exam"/)
+  assert.match(screen, /visiblePapers = linkedPapers\.slice\(0, 2\)/)
+  assert.doesNotMatch(screen, /<MetricTile/)
+})
+
+test('teacher result routes use issue-specific decisions instead of a generic blocker label', () => {
+  const resultDetail = read('src/screens/results/ResultDetailScreen.tsx')
+  const statusScreen = read('src/screens/workspace/CheckedPaperStatusScreen.tsx')
+  const libraryScreen = read('src/screens/results/CheckedPapersLibraryScreen.tsx')
+
+  assert.match(resultDetail, /buildTeacherPaperDecision/)
+  assert.match(resultDetail, /teacherDecision\.actionLabel/)
+  assert.doesNotMatch(resultDetail, /Review paper issue/)
+  assert.match(statusScreen, /teacherDecision\?\.title/)
+  assert.match(statusScreen, /publication remains a separate action/)
+  assert.match(libraryScreen, /Platform\.OS === 'web' \? undefined : 'button'/)
 })

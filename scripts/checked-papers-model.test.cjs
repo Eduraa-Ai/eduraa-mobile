@@ -80,6 +80,34 @@ test('pending scores keep the checked-paper inbox polling until a real result ar
   })), false)
 })
 
+test('blocked papers expose recovery without offering an unfinished PDF', () => {
+  const blocked = paper({
+    status: 'integrity_needs_review',
+    needs_review: true,
+    total_score: null,
+    max_score: null,
+  })
+
+  assert.equal(model.paperNeedsInput(blocked), true)
+  assert.equal(model.paperNeedsRecovery(blocked), true)
+  assert.equal(model.isPaperChecking(blocked), false)
+  assert.equal(model.canDownloadPaperReport(blocked), false)
+  assert.equal(model.paperInsight(blocked), 'Checking paused. Review the paper issue to continue.')
+  assert.match(model.paperAccessibilityLabel(blocked, 'Aug 23, 2026', true), /Opens the paper issue for review/)
+})
+
+test('completed scored papers retain report download eligibility', () => {
+  assert.equal(model.paperNeedsInput(paper()), false)
+  assert.equal(model.paperNeedsRecovery(paper()), false)
+  assert.equal(model.canDownloadPaperReport(paper()), true)
+})
+
+test('question review remains a report workflow instead of integrity recovery', () => {
+  const questionReview = paper({ status: 'pending_question_review', needs_review: true })
+  assert.equal(model.paperNeedsInput(questionReview), true)
+  assert.equal(model.paperNeedsRecovery(questionReview), false)
+})
+
 test('paper opening rejects missing ids and an already claimed navigation', () => {
   assert.equal(model.canOpenPaper('', null), false)
   assert.equal(model.canOpenPaper(undefined, null), false)
@@ -98,10 +126,10 @@ test('score accessibility label includes non-color score, status, and missing me
   assert.match(label, /Opens the checked paper report/)
 })
 
-test('library exposes only the four teacher-facing states and labels partial scores', () => {
+test('library replaces vague input states with the exact teacher action', () => {
   assert.equal(model.paperStatusLabel(paper({ status: 'rubric_grading', total_score: null, max_score: null })), 'Checking')
-  assert.equal(model.paperStatusLabel(paper({ status: 'grading_failed' })), 'Needs your input')
-  assert.equal(model.paperStatusLabel(paper({ status: 'pending_question_review', needs_review: true })), 'Needs your input')
+  assert.equal(model.paperStatusLabel(paper({ status: 'grading_failed' })), 'Action required')
+  assert.equal(model.paperStatusLabel(paper({ status: 'pending_question_review', needs_review: true, manual_review_requested: true })), '1 answer to confirm')
   assert.equal(model.paperStatusLabel(paper({ release_status: 'published', results_published: true })), 'Published')
   assert.equal(model.scoreLabel(paper({ status: 'pending_question_review', needs_review: true, total_score: 7 })), 'Provisional 7/100')
 })

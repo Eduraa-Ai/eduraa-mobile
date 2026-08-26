@@ -41,6 +41,19 @@ export function checkedPaperDownloadEndpoint(checkedPaperId: string) {
   return `/checked-papers/${encodeURIComponent(normalizedId)}/download`
 }
 
+export function checkedPaperScanPath(checkedPaperId: string) {
+  const normalizedId = checkedPaperId.trim()
+  if (!normalizedId) throw new Error('Choose a checked paper before opening its scan.')
+  return `/api/v1/checked-papers/${encodeURIComponent(normalizedId)}/scanned`
+}
+
+export function checkedPaperScanPagePath(checkedPaperId: string, pageNumber: number) {
+  const normalizedId = checkedPaperId.trim()
+  if (!normalizedId) throw new Error('Choose a checked paper before opening its scan.')
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) throw new Error('Choose a valid scanned page.')
+  return `/api/v1/checked-papers/${encodeURIComponent(normalizedId)}/scanned/pages/${pageNumber}`
+}
+
 export function safeDocumentFileStem(value: string, fallback = 'checked-paper') {
   return value.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || fallback
 }

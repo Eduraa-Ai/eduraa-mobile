@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Modal, Platform, Pressable, RefreshControl, S
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, DateField, ErrorState, GradientHeroCard, MultiSelectField, SelectField, SelectableChip, SkeletonCard, TextInputField } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, DateField, ErrorState, MultiSelectField, SelectField, SkeletonCard, TextInputField } from '../../components/ui'
 import { examsApi, ExamPayload } from '../../api/exams'
 import { cheatSheetsApi, CheatSheetSyllabus, CheatSheetSyllabusList } from '../../api/cheatSheets'
 import { checkedPapersApi } from '../../api/checkedPapers'
@@ -14,6 +14,10 @@ import { colors, radius, shadows, spacing, typography } from '../../theme'
 import type { Exam, PaperListItem, Role, StudentExamRead, StudentExamPaper } from '../../types'
 import { presentPdf } from '../../utils/pdfDownload'
 import {
+  applyPaperDefaults,
+  deriveExamSetupOptions,
+  filterSubjectsForTeacher,
+  keepOrSelectOnly,
   selectNewestDownloadableAttempt,
   selectNewestRetestableAttempt,
 } from './examWorkspaceModel'
@@ -109,15 +113,6 @@ function resolveSubjectVisual(value: string): SubjectVisual {
 
 function routeNames(nav: any): string[] {
   return nav?.getState?.().routeNames ?? []
-}
-
-function MetricTile({ value, label, tone = colors.text }: { value: ReactNode; label: string; tone?: string }) {
-  return (
-    <View style={styles.metricTile}>
-      <Text style={[styles.metricValue, { color: tone }]}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-    </View>
-  )
 }
 
 function LibraryStat({ value, label, tone = colors.text }: { value: ReactNode; label: string; tone?: string }) {
@@ -985,17 +980,19 @@ function formFromExam(exam: Exam): ExamFormState {
 function StaffCardActionButton({
   label,
   icon,
+  primary = false,
   disabled,
   loading,
   onPress,
 }: {
   label: string
   icon: keyof typeof Ionicons.glyphMap
+  primary?: boolean
   disabled?: boolean
   loading?: boolean
   onPress: () => void
 }) {
-  const tintColor = colors.accent
+  const tintColor = primary ? colors.textOnBrand : colors.text
 
   return (
     <Pressable
@@ -1006,7 +1003,7 @@ function StaffCardActionButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.staffCardActionButton,
-        styles.staffCardActionButtonShare,
+        primary ? styles.staffCardActionButtonPrimary : styles.staffCardActionButtonSecondary,
         disabled && styles.staffCardActionButtonDisabled,
         pressed && !disabled && styles.pressed,
       ]}
@@ -1040,45 +1037,70 @@ function StaffExamCard({
   onPress: () => void
   onShareSyllabus: () => void
 }) {
+  const paperCount = exam.paper_ids?.length ?? 0
+  const durationLabel = exam.duration_minutes ? `${exam.duration_minutes} min` : 'No time limit'
+  const classLabel = compact([exam.standard, exam.division])
+  const visiblePapers = linkedPapers.slice(0, 2)
+  const remainingPaperCount = Math.max(0, linkedPapers.length - visiblePapers.length)
+
   return (
-    <AnimatedCard style={selected ? styles.cardSelected : styles.card}>
+    <AnimatedCard style={selected ? styles.staffExamRecordSelected : styles.staffExamRecord}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Edit ${exam.name}`}
         onPress={onPress}
-        style={({ pressed }) => pressed && styles.pressed}
+        style={({ pressed }) => [styles.staffExamMain, pressed && styles.pressed]}
       >
-        <View style={styles.cardTop}>
-          <View style={styles.iconBubble}>
-            <Ionicons name="calendar-number" size={18} color={colors.accent} />
+        <View style={styles.staffExamHeader}>
+          <View style={styles.staffExamTitleBlock}>
+            <Text style={styles.staffExamTitle} numberOfLines={2}>{exam.name}</Text>
+            <View style={styles.staffExamStatus}>
+              <View style={[styles.staffExamStatusDot, exam.results_published && styles.staffExamStatusDotPublished]} />
+              <Text style={styles.staffExamStatusText}>{exam.results_published ? 'Published' : 'Not published'}</Text>
+            </View>
           </View>
-          <View style={styles.cardCopy}>
-            <Text style={styles.cardTitle}>{exam.name}</Text>
-            <Text style={styles.cardMeta}>{compact([exam.teacher_name, exam.standard, exam.division, formatDate(exam.exam_date)])}</Text>
-          </View>
-          <SelectableChip label={exam.results_published ? 'Published' : 'Hidden'} selected={exam.results_published} />
+          <Ionicons name="chevron-forward" size={18} color={colors.textSoft} />
         </View>
-        <View style={styles.miniGrid}>
-          <MetricTile value={exam.paper_ids?.length ?? 0} label="Papers" />
-          <MetricTile value={exam.duration_minutes || '-'} label="Minutes" />
+
+        <View style={styles.staffExamMetaRow}>
+          <View style={styles.staffExamMetaItem}>
+            <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.staffExamMetaText}>{formatDate(exam.exam_date)}</Text>
+          </View>
+          {classLabel ? <View style={styles.staffExamMetaDivider} /> : null}
+          {classLabel ? <Text style={styles.staffExamMetaText}>{classLabel}</Text> : null}
+        </View>
+
+        <View style={styles.staffExamFacts}>
+          <View style={styles.staffExamFact}>
+            <Ionicons name="documents-outline" size={15} color={colors.accentStrong} />
+            <Text style={styles.staffExamFactText}>{paperCount} {paperCount === 1 ? 'paper' : 'papers'}</Text>
+          </View>
+          <View style={styles.staffExamFactDivider} />
+          <View style={styles.staffExamFact}>
+            <Ionicons name="time-outline" size={15} color={colors.accentStrong} />
+            <Text style={styles.staffExamFactText}>{durationLabel}</Text>
+          </View>
         </View>
       </Pressable>
 
-      {linkedPapers.length > 0 ? (
-        <View style={styles.examPapersList}>
-          {linkedPapers.map((paper) => (
-            <View key={paper.id} style={styles.examPaperChip}>
-              <Ionicons name="document-text-outline" size={13} color={colors.textMuted} />
-              <Text style={styles.examPaperChipText} numberOfLines={1}>{paper.title}</Text>
+      {visiblePapers.length > 0 ? (
+        <View style={styles.staffExamPaperList}>
+          {visiblePapers.map((paper) => (
+            <View key={paper.id} style={styles.staffExamPaperRow}>
+              <Ionicons name="document-text-outline" size={15} color={colors.textMuted} />
+              <Text style={styles.staffExamPaperTitle} numberOfLines={1}>{paper.title}</Text>
             </View>
           ))}
+          {remainingPaperCount ? <Text style={styles.staffExamMorePapers}>+{remainingPaperCount} more</Text> : null}
         </View>
       ) : null}
 
       <View style={styles.staffCardActions}>
         <StaffCardActionButton
-          label="Edit"
+          label="Edit exam"
           icon="create-outline"
+          primary
           onPress={onPress}
         />
         <StaffCardActionButton
@@ -1092,16 +1114,83 @@ function StaffExamCard({
   )
 }
 
+function ComposerSectionHeader({
+  number,
+  title,
+  complete,
+}: {
+  number: number
+  title: string
+  complete: boolean
+}) {
+  return (
+    <View style={styles.composerSectionHeader}>
+      <View style={[styles.composerSectionNumber, complete && styles.composerSectionNumberComplete]}>
+        {complete ? (
+          <Ionicons name="checkmark" size={14} color={colors.white} />
+        ) : (
+          <Text style={styles.composerSectionNumberText}>{number}</Text>
+        )}
+      </View>
+      <Text style={styles.composerSectionTitle}>{title}</Text>
+    </View>
+  )
+}
+
+function ExamSettingToggle({
+  icon,
+  title,
+  enabled,
+  enabledCopy,
+  disabledCopy,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap
+  title: string
+  enabled: boolean
+  enabledCopy: string
+  disabledCopy: string
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: enabled }}
+      accessibilityLabel={title}
+      accessibilityHint={enabled ? enabledCopy : disabledCopy}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.settingRow,
+        enabled && styles.settingRowEnabled,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={[styles.settingIcon, enabled && styles.settingIconEnabled]}>
+        <Ionicons name={icon} size={18} color={enabled ? colors.accentStrong : colors.textMuted} />
+      </View>
+      <View style={styles.settingCopy}>
+        <Text style={styles.settingTitle}>{title}</Text>
+        <Text style={styles.settingDescription}>{enabled ? enabledCopy : disabledCopy}</Text>
+      </View>
+      <View style={[styles.settingSwitch, enabled && styles.settingSwitchEnabled]}>
+        <View style={[styles.settingSwitchThumb, enabled && styles.settingSwitchThumbEnabled]} />
+      </View>
+    </Pressable>
+  )
+}
+
 function StaffExamsView({ role }: { role?: Role }) {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null)
   const [form, setForm] = useState<ExamFormState>(emptyForm)
+  const [paperAssistError, setPaperAssistError] = useState('')
+  const [paperDefaultsLoadingId, setPaperDefaultsLoadingId] = useState('')
   const scrollRef = useRef<ScrollView>(null)
 
   const examsQuery = useQuery({ queryKey: ['exams', 'staff'], queryFn: examsApi.listStaffExams })
   const subjectsQuery = useQuery({ queryKey: ['exams', 'subjects'], queryFn: examsApi.listSubjects })
-  const papersQuery = useQuery({ queryKey: ['exams', 'papers'], queryFn: examsApi.listPublishedPapers })
+  const papersQuery = useQuery({ queryKey: ['exams', 'papers'], queryFn: () => examsApi.listPublishedPapers() })
   const optionsQuery = useQuery({ queryKey: ['exams', 'paper-options'], queryFn: examsApi.getPaperOptions, enabled: role === 'teacher' })
   const teachersQuery = useQuery({ queryKey: ['exams', 'teachers'], queryFn: examsApi.listTeachers, enabled: isAdminLike(role) })
   const syllabiQuery = useQuery({ queryKey: ['exams', 'syllabi'], queryFn: cheatSheetsApi.listSharedSyllabi })
@@ -1125,58 +1214,198 @@ function StaffExamsView({ role }: { role?: Role }) {
     }
     return map
   }, [exams, papers])
-  const standardOptions = useMemo(() => {
-    const fromPapers = papers.map((paper) => paper.standard).filter(Boolean) as string[]
-    return Array.from(new Set([...(optionsQuery.data?.standards ?? []), ...fromPapers]))
-  }, [optionsQuery.data?.standards, papers])
-  const divisionOptions = useMemo(() => {
-    const fromPapers = papers.map((paper) => paper.division).filter(Boolean) as string[]
-    return Array.from(new Set([...(optionsQuery.data?.divisions ?? []), ...fromPapers]))
-  }, [optionsQuery.data?.divisions, papers])
-
-  const visibleSubjects = useMemo(() => {
-    if (role !== 'teacher') return subjects
-    const taught = new Set((user?.subjects_taught ?? []).map((name) => name.trim().toLowerCase()).filter(Boolean))
-    if (taught.size === 0) return subjects
-    return subjects.filter((subject) => taught.has(subject.name.trim().toLowerCase()))
-  }, [role, subjects, user?.subjects_taught])
+  const selectedTeacher = teachers.find((teacher) => teacher.id === form.teacherId)
+  const allowedStandards = isAdminLike(role)
+    ? selectedTeacher?.standards_taught ?? []
+    : user?.standards_taught?.length ? user.standards_taught : optionsQuery.data?.standards ?? []
+  const allowedDivisions = isAdminLike(role)
+    ? selectedTeacher?.divisions_taught ?? []
+    : user?.divisions_taught?.length ? user.divisions_taught : optionsQuery.data?.divisions ?? []
+  const taughtSubjectNames = isAdminLike(role)
+    ? selectedTeacher?.subjects_taught ?? []
+    : user?.subjects_taught ?? []
+  const visibleSubjects = useMemo(
+    () => isAdminLike(role) && !selectedTeacher
+      ? []
+      : filterSubjectsForTeacher(subjects, taughtSubjectNames),
+    [role, selectedTeacher, subjects, taughtSubjectNames],
+  )
+  const contextualOptions = useMemo(
+    () => deriveExamSetupOptions(
+      optionsQuery.data?.sections ?? [],
+      form.subjectId,
+      form.standard,
+      allowedStandards,
+      allowedDivisions,
+    ),
+    [allowedDivisions, allowedStandards, form.standard, form.subjectId, optionsQuery.data?.sections],
+  )
 
   const subjectSelectOptions = visibleSubjects.map((subject) => ({ value: subject.id, label: subject.name }))
   const teacherSelectOptions = teachers
     .filter((teacher) => teacher.is_active && teacher.is_approved)
     .map((teacher) => ({ value: teacher.id, label: compact([`${teacher.first_name} ${teacher.last_name}`, teacher.teacher_id, teacher.email]) }))
-  const standardSelectOptions = standardOptions.map((value) => ({ value, label: value }))
-  const divisionSelectOptions = divisionOptions.map((value) => ({ value, label: value }))
+  const standardSelectOptions = [
+    ...(form.standard && !contextualOptions.standards.includes(form.standard) ? [form.standard] : []),
+    ...contextualOptions.standards,
+  ].map((value) => ({ value, label: value }))
+  const divisionSelectOptions = [
+    ...(form.division && !contextualOptions.divisions.includes(form.division) ? [form.division] : []),
+    ...contextualOptions.divisions,
+  ].map((value) => ({ value, label: value }))
   const semesterSelectOptions = useMemo(() => {
     const fromExams = exams.map((exam) => exam.semester).filter((value): value is string => Boolean(value))
-    return Array.from(new Set([...defaultSemesterOptions, ...fromExams])).map((value) => ({ value, label: value }))
-  }, [exams])
+    return Array.from(new Set([...defaultSemesterOptions, ...fromExams, ...(form.semester ? [form.semester] : [])])).map((value) => ({ value, label: value }))
+  }, [exams, form.semester])
 
+  const paperPickerQuery = useQuery({
+    queryKey: ['exams', 'papers', 'subject', form.subjectId],
+    queryFn: () => examsApi.listPublishedPapers(form.subjectId),
+    enabled: Boolean(form.subjectId),
+  })
+  const subjectPapers = paperPickerQuery.data ?? []
   const filteredPapers = useMemo(() => {
-    return papers.filter((paper) => {
-      if (form.subjectId && paper.subject_id && paper.subject_id !== form.subjectId) return false
+    return subjectPapers.filter((paper) => {
+      if (paper.subject_id && paper.subject_id !== form.subjectId) return false
       if (form.standard && paper.standard && paper.standard !== form.standard) return false
       if (form.division && paper.division && paper.division !== form.division) return false
       return true
     })
-  }, [form.division, form.standard, form.subjectId, papers])
+  }, [form.division, form.standard, form.subjectId, subjectPapers])
 
   const paperSelectOptions = useMemo(
     () => filteredPapers.map((paper) => ({ value: paper.id, label: compact([paper.title, `${paper.total_marks} marks`]) })),
     [filteredPapers],
   )
 
+  const keepCompatiblePaperIds = (paperIds: string[], standard: string, division: string) => {
+    const byId = new Map(subjectPapers.map((paper) => [paper.id, paper]))
+    return paperIds.filter((paperId) => {
+      const paper = byId.get(paperId)
+      if (!paper) return false
+      if (standard && paper.standard && paper.standard !== standard) return false
+      if (division && paper.division && paper.division !== division) return false
+      return true
+    })
+  }
+
+  const handleTeacherChange = (teacherId: string) => {
+    const teacher = teachers.find((candidate) => candidate.id === teacherId)
+    const nextSubjects = filterSubjectsForTeacher(subjects, teacher?.subjects_taught ?? [])
+    const subjectStillValid = nextSubjects.some((subject) => subject.id === form.subjectId)
+    const subjectId = subjectStillValid ? form.subjectId : nextSubjects.length === 1 ? nextSubjects[0].id : ''
+    const nextOptions = deriveExamSetupOptions(
+      optionsQuery.data?.sections ?? [],
+      subjectId,
+      form.standard,
+      teacher?.standards_taught ?? [],
+      teacher?.divisions_taught ?? [],
+    )
+    const standard = keepOrSelectOnly(form.standard, nextOptions.standards)
+    const divisionOptions = deriveExamSetupOptions(
+      optionsQuery.data?.sections ?? [],
+      subjectId,
+      standard,
+      teacher?.standards_taught ?? [],
+      teacher?.divisions_taught ?? [],
+    ).divisions
+    const division = keepOrSelectOnly(form.division, divisionOptions)
+    setPaperAssistError('')
+    setForm((current) => ({
+      ...current,
+      teacherId,
+      subjectId,
+      standard,
+      division,
+      paperIds: subjectId === current.subjectId
+        ? keepCompatiblePaperIds(current.paperIds, standard, division)
+        : [],
+    }))
+  }
+
+  const handleSubjectChange = (subjectId: string) => {
+    const nextOptions = deriveExamSetupOptions(
+      optionsQuery.data?.sections ?? [],
+      subjectId,
+      form.standard,
+      allowedStandards,
+      allowedDivisions,
+    )
+    const standard = keepOrSelectOnly(form.standard, nextOptions.standards)
+    const divisionOptions = deriveExamSetupOptions(
+      optionsQuery.data?.sections ?? [],
+      subjectId,
+      standard,
+      allowedStandards,
+      allowedDivisions,
+    ).divisions
+    const division = keepOrSelectOnly(form.division, divisionOptions)
+    setPaperAssistError('')
+    setForm((current) => ({ ...current, subjectId, standard, division, paperIds: [] }))
+  }
+
+  const handleStandardChange = (standard: string) => {
+    const divisionOptions = deriveExamSetupOptions(
+      optionsQuery.data?.sections ?? [],
+      form.subjectId,
+      standard,
+      allowedStandards,
+      allowedDivisions,
+    ).divisions
+    const division = keepOrSelectOnly(form.division, divisionOptions)
+    setForm((current) => ({
+      ...current,
+      standard,
+      division,
+      paperIds: keepCompatiblePaperIds(current.paperIds, standard, division),
+    }))
+  }
+
+  const handleDivisionChange = (division: string) => {
+    setForm((current) => ({
+      ...current,
+      division,
+      paperIds: keepCompatiblePaperIds(current.paperIds, current.standard, division),
+    }))
+  }
+
+  const handlePaperChange = (paperIds: string[]) => {
+    const addedPaperId = paperIds.find((paperId) => !form.paperIds.includes(paperId))
+    setPaperAssistError('')
+    setForm((current) => ({ ...current, paperIds }))
+    if (!addedPaperId) return
+
+    setPaperDefaultsLoadingId(addedPaperId)
+    void queryClient.fetchQuery({
+      queryKey: ['papers', 'detail', addedPaperId],
+      queryFn: () => papersApi.getById(addedPaperId),
+    }).then((paper) => {
+      setForm((current) => current.paperIds.includes(addedPaperId)
+        ? applyPaperDefaults(current, paper)
+        : current)
+    }).catch(() => {
+      setPaperAssistError('Paper linked. Some details could not be filled automatically; you can enter them manually.')
+    }).finally(() => {
+      setPaperDefaultsLoadingId((current) => current === addedPaperId ? '' : current)
+    })
+  }
+
   const resetForm = () => {
     setSelectedExam(null)
     setForm(emptyForm)
+    setPaperAssistError('')
   }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const trimmedName = form.name.trim()
       if (!trimmedName) throw new Error('Exam name is required.')
-      if (!form.examDate.trim()) throw new Error('Exam date is required.')
       if (isAdminLike(role) && !form.teacherId) throw new Error('Teacher is required.')
+      if (!form.subjectId) throw new Error('Subject is required.')
+      if (!form.standard) throw new Error('Standard is required.')
+      if (!form.division) throw new Error('Division is required.')
+      if (!form.semester.trim()) throw new Error('Semester is required.')
+      if (!form.examDate.trim()) throw new Error('Exam date is required.')
       const duration = form.durationMinutes.trim() ? Number(form.durationMinutes.trim()) : null
       if (duration !== null && (!Number.isInteger(duration) || duration <= 0)) {
         throw new Error('Duration must be a positive whole number.')
@@ -1229,9 +1458,46 @@ function StaffExamsView({ role }: { role?: Role }) {
   const isError = examsQuery.isError || subjectsQuery.isError || papersQuery.isError
   const refreshing = examsQuery.isRefetching || subjectsQuery.isRefetching || papersQuery.isRefetching || teachersQuery.isRefetching || syllabiQuery.isRefetching
 
+  const setupGuide = isAdminLike(role) && !form.teacherId
+    ? 'Choose a teacher first. Their subjects and classes will be prepared automatically.'
+    : !form.subjectId
+      ? 'Start with a subject. Only related classes and papers will be shown next.'
+      : paperPickerQuery.isLoading
+        ? 'Finding published papers for this subject…'
+        : paperPickerQuery.isError
+          ? 'Papers could not be loaded. Pull down to retry; the rest of your form is safe.'
+          : form.paperIds.length > 0
+            ? `${form.paperIds.length} paper${form.paperIds.length === 1 ? '' : 's'} linked. Blank details are filled from the newest selection.`
+            : filteredPapers.length > 0
+              ? `${filteredPapers.length} matching paper${filteredPapers.length === 1 ? '' : 's'} ready to link. Selecting one can fill blank exam details.`
+              : 'No published paper matches this setup yet. You can still create the exam and link a paper later.'
+  const contextComplete = Boolean(
+    (!isAdminLike(role) || form.teacherId)
+    && form.subjectId
+    && form.standard
+    && form.division,
+  )
+  const detailsComplete = Boolean(form.name.trim())
+  const durationValue = form.durationMinutes.trim() ? Number(form.durationMinutes.trim()) : null
+  const durationValid = durationValue === null || (Number.isInteger(durationValue) && durationValue > 0)
+  const scheduleComplete = Boolean(form.semester.trim() && form.examDate.trim() && durationValid)
+  const requiredSetup = [
+    ...(isAdminLike(role) ? [{ complete: Boolean(form.teacherId), label: 'choose a teacher' }] : []),
+    { complete: Boolean(form.subjectId), label: 'choose a subject' },
+    { complete: Boolean(form.standard), label: 'choose a standard' },
+    { complete: Boolean(form.division), label: 'choose a division' },
+    { complete: Boolean(form.name.trim()), label: 'name the exam' },
+    { complete: Boolean(form.semester.trim()), label: 'choose a semester' },
+    { complete: Boolean(form.examDate.trim()), label: 'choose the exam date' },
+    { complete: durationValid, label: 'enter a valid duration' },
+  ]
+  const nextRequired = requiredSetup.find((item) => !item.complete)?.label
+  const formReady = !nextRequired
+  const selectedSubjectName = subjects.find((subject) => subject.id === form.subjectId)?.name
+
   if (isLoading) {
     return (
-      <AppScreen scroll={false} contentStyle={styles.center}>
+      <AppScreen scroll={false} tone="auth" ambient={false} contentStyle={styles.center}>
         <ActivityIndicator color={colors.accent} />
         <Text style={styles.loadingText}>Loading exams</Text>
       </AppScreen>
@@ -1240,7 +1506,7 @@ function StaffExamsView({ role }: { role?: Role }) {
 
   if (isError) {
     return (
-      <AppScreen scroll={false} contentStyle={styles.center}>
+      <AppScreen scroll={false} tone="auth" ambient={false} contentStyle={styles.center}>
         <ErrorState title="Exams unavailable" message="Unable to load exam management data." onAction={() => {
           void examsQuery.refetch()
           void subjectsQuery.refetch()
@@ -1253,135 +1519,213 @@ function StaffExamsView({ role }: { role?: Role }) {
   return (
     <AppScreen
       ref={scrollRef}
+      tone="auth"
+      ambient={false}
       contentStyle={styles.screen}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
         void examsQuery.refetch()
         void subjectsQuery.refetch()
         void papersQuery.refetch()
+        if (form.subjectId) void paperPickerQuery.refetch()
         void teachersQuery.refetch()
         void syllabiQuery.refetch()
       }} tintColor={colors.accent} colors={[colors.accent]} />}
     >
-      <GradientHeroCard
-        eyebrow="EXAMS"
-        title="Exam manager"
-        subtitle="Create, schedule, link papers, and control grading visibility from mobile."
-      />
+      <View style={styles.composerHeader}>
+        <Text style={styles.composerEyebrow}>{selectedExam ? 'EDIT EXAM' : 'EXAM SETUP'}</Text>
+        <Text style={styles.composerTitle}>{selectedExam ? 'Update this exam' : 'Create an exam'}</Text>
+        <Text style={styles.composerSubtitle}>
+          {selectedExam
+            ? 'Adjust the setup below. Existing student work stays untouched.'
+            : 'Choose the class and paper. Eduraa will fill every detail it already knows.'}
+        </Text>
+      </View>
 
-      <AnimatedCard style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <MetricTile value={exams.length} label="Exams" />
-          <MetricTile value={papers.length} label="Papers" />
-          <MetricTile value={subjects.length} label="Subjects" />
-        </View>
-      </AnimatedCard>
-
-      <View style={styles.section}>
-        <SectionHeader title={selectedExam ? 'Edit exam' : 'Create exam'} subtitle="Matches the website exam form and backend validation." count={form.paperIds.length} />
-        <AnimatedCard style={styles.formCard}>
-          <TextInputField
-            label="Exam name"
-            value={form.name}
-            onChangeText={(name) => setForm((current) => ({ ...current, name }))}
-            placeholder="e.g. Physics unit test"
-            left={<Ionicons name="create" size={17} color={colors.textMuted} />}
-          />
-          {isAdminLike(role) ? (
+      <View style={styles.workflowSurface}>
+          <View style={styles.composerSection}>
+            <ComposerSectionHeader
+              number={1}
+              title="Choose class and subject"
+              complete={contextComplete}
+            />
+            <Text style={styles.sectionHelp}>Start with the teaching context. Each selection narrows the choices that follow.</Text>
+            {isAdminLike(role) ? (
+              <SelectField
+                label="Teacher"
+                value={form.teacherId}
+                placeholder={teacherSelectOptions.length ? 'Select teacher' : 'No approved teachers'}
+                options={teacherSelectOptions}
+                onChange={handleTeacherChange}
+                disabled={teacherSelectOptions.length === 0}
+              />
+            ) : null}
             <SelectField
-              label="Teacher"
-              value={form.teacherId}
-              placeholder={teacherSelectOptions.length ? 'Select teacher' : 'No approved teachers'}
-              options={teacherSelectOptions}
-              onChange={(teacherId) => setForm((current) => ({ ...current, teacherId }))}
-              disabled={teacherSelectOptions.length === 0}
+              label="Subject"
+              value={form.subjectId}
+              placeholder={isAdminLike(role) && !form.teacherId ? 'Select teacher first' : 'Select subject'}
+              options={subjectSelectOptions}
+              onChange={handleSubjectChange}
+              disabled={(isAdminLike(role) && !form.teacherId) || subjectSelectOptions.length === 0}
             />
-          ) : null}
-          <SelectField
-            label="Subject"
-            value={form.subjectId}
-            placeholder="Select subject"
-            options={subjectSelectOptions}
-            onChange={(subjectId) => setForm((current) => ({ ...current, subjectId }))}
-            disabled={subjectSelectOptions.length === 0}
-          />
-          <View style={styles.twoColumn}>
-            <View style={styles.fieldHalf}>
-              <SelectField
-                label="Standard"
-                value={form.standard}
-                placeholder="Standard"
-                options={standardSelectOptions}
-                onChange={(standard) => setForm((current) => ({ ...current, standard }))}
-                disabled={standardSelectOptions.length === 0}
-              />
-            </View>
-            <View style={styles.fieldHalf}>
-              <SelectField
-                label="Division"
-                value={form.division}
-                placeholder="Division"
-                options={divisionSelectOptions}
-                onChange={(division) => setForm((current) => ({ ...current, division }))}
-                disabled={divisionSelectOptions.length === 0}
-              />
+            <View style={styles.twoColumn}>
+              <View style={styles.fieldHalf}>
+                <SelectField
+                  label="Standard"
+                  value={form.standard}
+                  placeholder={form.subjectId ? 'Standard' : 'Subject first'}
+                  options={standardSelectOptions}
+                  onChange={handleStandardChange}
+                  disabled={!form.subjectId || standardSelectOptions.length === 0}
+                  loading={optionsQuery.isLoading}
+                />
+              </View>
+              <View style={styles.fieldHalf}>
+                <SelectField
+                  label="Division"
+                  value={form.division}
+                  placeholder={form.standard ? 'Division' : 'Standard first'}
+                  options={divisionSelectOptions}
+                  onChange={handleDivisionChange}
+                  disabled={!form.standard || divisionSelectOptions.length === 0}
+                  loading={optionsQuery.isLoading}
+                />
+              </View>
             </View>
           </View>
-          <View style={styles.twoColumn}>
-            <View style={styles.fieldHalf}>
-              <DateField
-                label="Exam date"
-                value={form.examDate}
-                onChange={(examDate) => setForm((current) => ({ ...current, examDate }))}
-                placeholder="Select date"
-              />
-            </View>
-            <View style={styles.fieldHalf}>
-              <TextInputField
-                label="Duration"
-                value={form.durationMinutes}
-                onChangeText={(durationMinutes) => setForm((current) => ({ ...current, durationMinutes }))}
-                placeholder="Minutes"
-                keyboardType="number-pad"
-                left={<Ionicons name="timer" size={17} color={colors.textMuted} />}
-              />
-            </View>
-          </View>
-          <SelectField
-            label="Semester"
-            value={form.semester}
-            placeholder="Select semester"
-            options={semesterSelectOptions}
-            onChange={(semester) => setForm((current) => ({ ...current, semester }))}
-          />
-          <MultiSelectField
-            label="Papers"
-            values={form.paperIds}
-            placeholder="Select papers"
-            options={paperSelectOptions}
-            onChange={(paperIds) => setForm((current) => ({ ...current, paperIds }))}
-            disabled={paperSelectOptions.length === 0}
-          />
-          <View style={styles.chipRow}>
-            <SelectableChip
-              label="Auto grade"
-              selected={form.autoGradeEnabled}
-              onPress={() => setForm((current) => ({ ...current, autoGradeEnabled: !current.autoGradeEnabled }))}
+
+          <View style={styles.composerDivider} />
+
+          <View style={styles.composerSection}>
+            <ComposerSectionHeader
+              number={2}
+              title="Choose paper and name"
+              complete={detailsComplete}
             />
-            <SelectableChip
-              label="Publish results"
-              selected={form.resultsPublished}
-              onPress={() => setForm((current) => ({ ...current, resultsPublished: !current.resultsPublished }))}
+            <Text style={styles.sectionHelp}>Select a paper first and Eduraa will reuse its name, class, term, and duration where available.</Text>
+            <View style={styles.formGuide} accessibilityLiveRegion="polite">
+              <Ionicons name="sparkles-outline" size={16} color={paperPickerQuery.isError ? colors.danger : colors.accentStrong} />
+              <Text style={[styles.formGuideText, paperPickerQuery.isError && styles.formGuideError]}>{setupGuide}</Text>
+            </View>
+            <MultiSelectField
+              label="Paper · optional"
+              values={form.paperIds}
+              placeholder={!form.subjectId ? 'Select subject first' : paperPickerQuery.isError ? 'Pull down to retry' : 'Select matching papers'}
+              options={paperSelectOptions}
+              onChange={handlePaperChange}
+              disabled={!form.subjectId || paperPickerQuery.isError || paperSelectOptions.length === 0}
+              loading={paperPickerQuery.isLoading || Boolean(paperDefaultsLoadingId)}
+              error={paperAssistError || undefined}
+            />
+            <TextInputField
+              label="Exam name"
+              value={form.name}
+              onChangeText={(name) => setForm((current) => ({ ...current, name }))}
+              placeholder={selectedSubjectName ? `e.g. ${selectedSubjectName} unit test` : 'e.g. Physics unit test'}
+              left={<Ionicons name="create-outline" size={17} color={colors.textMuted} />}
             />
           </View>
-          <View style={styles.actionRow}>
-            <AnimatedButton label={selectedExam ? 'Update exam' : 'Create exam'} loading={saveMutation.isPending} disabled={saveMutation.isPending} onPress={() => saveMutation.mutate()} style={styles.actionButton} />
-            <AnimatedButton label="Clear" variant="ghost" onPress={resetForm} style={styles.actionButton} />
+
+          <View style={styles.composerDivider} />
+
+          <View style={styles.composerSection}>
+            <ComposerSectionHeader
+              number={3}
+              title="Set the schedule"
+              complete={scheduleComplete}
+            />
+            <Text style={styles.sectionHelp}>Confirm the academic term and date. Duration is optional.</Text>
+            <SelectField
+              label="Semester"
+              value={form.semester}
+              placeholder="Select semester"
+              options={semesterSelectOptions}
+              onChange={(semester) => setForm((current) => ({ ...current, semester }))}
+            />
+            <View style={styles.twoColumn}>
+              <View style={styles.fieldHalf}>
+                <DateField
+                  label="Exam date"
+                  value={form.examDate}
+                  onChange={(examDate) => setForm((current) => ({ ...current, examDate }))}
+                  placeholder="Select date"
+                />
+              </View>
+              <View style={styles.fieldHalf}>
+                <TextInputField
+                  label="Duration · optional"
+                  value={form.durationMinutes}
+                  onChangeText={(durationMinutes) => setForm((current) => ({ ...current, durationMinutes }))}
+                  placeholder="Minutes"
+                  keyboardType="number-pad"
+                  left={<Ionicons name="timer-outline" size={17} color={colors.textMuted} />}
+                />
+              </View>
+            </View>
           </View>
-        </AnimatedCard>
+
+          <View style={styles.composerDivider} />
+
+          <View style={styles.composerSection}>
+            <ComposerSectionHeader
+              number={4}
+              title="Student experience"
+              complete
+            />
+            <Text style={styles.sectionHelp}>The recommended defaults are already on. Change them only when this exam needs different handling.</Text>
+            <View style={styles.settingsList}>
+              <ExamSettingToggle
+                icon="sparkles-outline"
+                title="Auto-grade with AI"
+                enabled={form.autoGradeEnabled}
+                enabledCopy="Submissions are graded automatically."
+                disabledCopy="Submissions wait for teacher review."
+                onPress={() => setForm((current) => ({ ...current, autoGradeEnabled: !current.autoGradeEnabled }))}
+              />
+              <ExamSettingToggle
+                icon="eye-outline"
+                title="Show results to students"
+                enabled={form.resultsPublished}
+                enabledCopy="Students can see scores and feedback."
+                disabledCopy="Results stay visible to staff only."
+                onPress={() => setForm((current) => ({ ...current, resultsPublished: !current.resultsPublished }))}
+              />
+            </View>
+          </View>
+
+          <View style={[styles.submitSurface, formReady && styles.submitSurfaceReady]} accessibilityLiveRegion="polite">
+            <View style={styles.submitStatusRow}>
+              <View style={[styles.readinessIcon, formReady && styles.readinessIconReady]}>
+                <Ionicons name={formReady ? 'shield-checkmark' : 'lock-closed-outline'} size={18} color={formReady ? colors.success : colors.textMuted} />
+              </View>
+              <View style={styles.readinessCopy}>
+                <Text style={styles.readinessTitle}>{formReady ? 'Ready to save' : `Next: ${nextRequired}`}</Text>
+                <Text style={styles.readinessDescription}>
+                  {formReady ? 'Everything required is complete. Review once, then save.' : 'Your progress is kept while you finish the remaining details.'}
+                </Text>
+              </View>
+            </View>
+            <AnimatedButton
+              label={selectedExam ? 'Update exam' : 'Create exam'}
+              icon={<Ionicons name={selectedExam ? 'checkmark-circle-outline' : 'add-circle-outline'} size={19} color={colors.white} />}
+              loading={saveMutation.isPending}
+              disabled={saveMutation.isPending || !formReady}
+              onPress={() => saveMutation.mutate()}
+            />
+          </View>
+          <Pressable accessibilityRole="button" onPress={resetForm} style={({ pressed }) => [styles.clearLink, pressed && styles.pressed]}>
+            <Ionicons name="refresh-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.clearLinkText}>{selectedExam ? 'Cancel editing' : 'Clear form'}</Text>
+          </Pressable>
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title="Existing exams" subtitle="Tap an exam to edit its mobile form." count={exams.length} />
+        <View style={styles.staffLibraryHeader}>
+          <View style={styles.staffLibraryHeaderCopy}>
+            <Text style={styles.staffLibraryTitle}>Existing exams</Text>
+            <Text style={styles.staffLibrarySubtitle}>Manage schedules, papers, and student visibility.</Text>
+          </View>
+          <Text style={styles.staffLibraryCount}>{exams.length} total</Text>
+        </View>
         {exams.length === 0 ? (
           <AnimatedCard style={styles.emptyCard}>
             <Text style={styles.emptyText}>No exams created yet.</Text>
@@ -1420,7 +1764,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   screen: {
-    paddingBottom: spacing[20],
+    paddingBottom: spacing[20] + spacing[16],
   },
   learnerScreen: {
     gap: spacing[3],
@@ -1435,8 +1779,29 @@ const styles = StyleSheet.create({
     ...typography.roles.body,
     color: colors.textMuted,
   },
-  summaryCard: {
-    gap: spacing[4],
+  composerHeader: {
+    gap: spacing[1],
+    paddingHorizontal: spacing[1],
+    paddingTop: spacing[1],
+  },
+  composerEyebrow: {
+    color: colors.accentStrong,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 11,
+    letterSpacing: 1.5,
+  },
+  composerTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.heading,
+    fontSize: 27,
+    lineHeight: 32,
+  },
+  composerSubtitle: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 14,
+    lineHeight: 20,
+    maxWidth: 540,
   },
   libraryStats: {
     minHeight: 74,
@@ -1469,28 +1834,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyBold,
     fontSize: 9,
     letterSpacing: 0.9,
-    textTransform: 'uppercase',
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: spacing[3],
-  },
-  metricTile: {
-    flex: 1,
-    minHeight: 78,
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
-    padding: spacing[3],
-    justifyContent: 'space-between',
-  },
-  metricValue: {
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 22,
-  },
-  metricLabel: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
     textTransform: 'uppercase',
   },
   chipRow: {
@@ -1815,23 +2158,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyBold,
     fontSize: 12,
   },
-  cardSelected: {
-    gap: spacing[4],
-    borderColor: colors.accent,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  iconBubble: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
-  },
   cardCopy: {
     flex: 1,
   },
@@ -1846,53 +2172,189 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  miniGrid: {
+  staffExamRecord: {
+    gap: 0,
+    padding: 0,
+    overflow: 'hidden',
+    borderRadius: radius.lg,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+  },
+  staffLibraryHeader: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+    paddingHorizontal: spacing[1],
+  },
+  staffLibraryHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  staffLibraryTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 20,
+    lineHeight: 25,
+  },
+  staffLibrarySubtitle: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  staffLibraryCount: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  staffExamRecordSelected: {
+    gap: 0,
+    padding: 0,
+    overflow: 'hidden',
+    borderRadius: radius.lg,
+    borderColor: colors.text,
+    backgroundColor: colors.backgroundElevated,
+  },
+  staffExamMain: {
+    gap: spacing[3],
+    padding: spacing[4],
+  },
+  staffExamHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: spacing[3],
   },
-  examPapersList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[2],
+  staffExamTitleBlock: {
+    flex: 1,
+    gap: spacing[1],
   },
-  examPaperChip: {
-    maxWidth: '100%',
+  staffExamTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 17,
+    lineHeight: 22,
+  },
+  staffExamStatus: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[1],
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.backgroundMuted,
-    paddingHorizontal: spacing[2],
-    paddingVertical: 5,
+    gap: 6,
   },
-  examPaperChipText: {
+  staffExamStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.textSoft,
+  },
+  staffExamStatusDotPublished: {
+    backgroundColor: colors.success,
+  },
+  staffExamStatusText: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 11,
+    lineHeight: 15,
   },
-  staffCardActions: {
+  staffExamMetaRow: {
     flexDirection: 'row',
-    gap: spacing[3],
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  staffExamMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  staffExamMetaText: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  staffExamMetaDivider: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+  },
+  staffExamFacts: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: radius.md,
+    backgroundColor: colors.backgroundMuted,
+    paddingHorizontal: spacing[3],
+  },
+  staffExamFact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+  },
+  staffExamFactText: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 12,
+  },
+  staffExamFactDivider: {
+    width: 1,
+    height: 16,
+    marginHorizontal: spacing[3],
+    backgroundColor: colors.border,
+  },
+  staffExamPaperList: {
+    gap: spacing[2],
+    marginHorizontal: spacing[4],
     paddingTop: spacing[3],
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
   },
+  staffExamPaperRow: {
+    minHeight: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  staffExamPaperTitle: {
+    flex: 1,
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+  },
+  staffExamMorePapers: {
+    color: colors.textSoft,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 11,
+    paddingLeft: spacing[5],
+  },
+  staffCardActions: {
+    flexDirection: 'row',
+    gap: spacing[2],
+    marginTop: spacing[3],
+    padding: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+    backgroundColor: colors.backgroundMuted,
+  },
   staffCardActionButton: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: radius.lg,
+    minHeight: 42,
+    borderRadius: radius.md,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing[2],
-    paddingHorizontal: spacing[2],
+    paddingHorizontal: spacing[3],
   },
-  staffCardActionButtonShare: {
-    borderColor: colors.borderBrand,
-    backgroundColor: colors.accentSurface,
+  staffCardActionButtonPrimary: {
+    borderColor: colors.text,
+    backgroundColor: colors.text,
+  },
+  staffCardActionButtonSecondary: {
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.backgroundElevated,
   },
   staffCardActionButtonDelete: {
     borderColor: `${colors.danger}35`,
@@ -1902,8 +2364,8 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   staffCardActionText: {
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 13,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 12,
   },
   paperList: {
     gap: spacing[2],
@@ -2242,21 +2704,191 @@ const styles = StyleSheet.create({
     ...typography.roles.body,
     color: colors.textMuted,
   },
-  formCard: {
+  workflowSurface: {
+    backgroundColor: 'transparent',
+  },
+  composerSection: {
     gap: spacing[4],
+    paddingVertical: spacing[4],
+  },
+  composerSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  composerSectionNumber: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.accentSurfaceStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  composerSectionNumberComplete: {
+    backgroundColor: colors.success,
+  },
+  composerSectionNumberText: {
+    color: colors.accentStrong,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  composerSectionTitle: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 18,
+  },
+  composerDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  sectionHelp: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  formGuide: {
+    minHeight: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.backgroundMuted,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[3],
+  },
+  formGuideText: {
+    flex: 1,
+    ...typography.roles.label,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
+  formGuideError: {
+    color: colors.danger,
+  },
+  settingsList: {
+    gap: spacing[3],
+  },
+  settingRow: {
+    minHeight: 70,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundMuted,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    padding: spacing[3],
+  },
+  settingRowEnabled: {
+    backgroundColor: colors.backgroundMuted,
+  },
+  settingIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.backgroundElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingIconEnabled: {
+    backgroundColor: colors.accentSurfaceStrong,
+  },
+  settingCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  settingTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  settingDescription: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  settingSwitch: {
+    width: 42,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.borderStrong,
+    padding: 3,
+    justifyContent: 'center',
+  },
+  settingSwitchEnabled: {
+    backgroundColor: colors.accentStrong,
+  },
+  settingSwitchThumb: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.white,
+    ...shadows.sm,
+  },
+  settingSwitchThumbEnabled: {
+    alignSelf: 'flex-end',
+  },
+  submitSurface: {
+    gap: spacing[3],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing[3],
+  },
+  submitSurfaceReady: {
+    borderColor: colors.borderBrand,
+  },
+  submitStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  readinessIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.backgroundMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  readinessIconReady: {
+    backgroundColor: colors.successSurface,
+  },
+  readinessCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  readinessTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  readinessDescription: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  clearLink: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+  },
+  clearLinkText: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 12,
   },
   twoColumn: {
     flexDirection: 'row',
     gap: spacing[3],
   },
   fieldHalf: {
-    flex: 1,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: spacing[3],
-  },
-  actionButton: {
     flex: 1,
   },
   pressed: {

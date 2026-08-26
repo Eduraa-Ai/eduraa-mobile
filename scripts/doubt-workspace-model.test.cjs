@@ -5,6 +5,9 @@ const {
   createClientRequestId,
   emptyDoubtDraft,
   filterDoubts,
+  normalizeDoubtDetail,
+  normalizeDoubtSummary,
+  returnFromDoubts,
   selectTeacher,
   validateDoubtDraft,
 } = require(process.env.DOUBT_WORKSPACE_MODEL_PATH)
@@ -61,4 +64,62 @@ test('status filtering never leaks another state into the selected queue', () =>
 
   assert.deepEqual(filterDoubts(items, 'answered').map((item) => item.id), ['2'])
   assert.equal(filterDoubts(items, 'all').length, 3)
+})
+
+test('legacy backend doubt records are normalized without blanking the screen', () => {
+  const legacy = normalizeDoubtSummary({
+    id: 'doubt-1',
+    student_id: 'student-1',
+    student_name: 'Aarav',
+    teacher_id: 'teacher-1',
+    teacher_name: 'Meera',
+    subject: 'Physics',
+    status: 'open',
+    latest_message_at: '2026-08-25T10:00:00Z',
+    created_at: '2026-08-25T09:00:00Z',
+    last_message: 'Why does acceleration stay constant?',
+  })
+
+  assert.equal(legacy.status, 'pending')
+  assert.equal(legacy.title, 'Physics question')
+  assert.equal(legacy.revision, null)
+  assert.equal(legacy.updated_at, legacy.latest_message_at)
+})
+
+test('legacy detail responses get safe empty history and closed status mapping', () => {
+  const detail = normalizeDoubtDetail({
+    doubt: {
+      id: 'doubt-2',
+      subject: 'Chemistry',
+      status: 'closed',
+      created_at: '2026-08-25T09:00:00Z',
+      latest_message_at: '2026-08-25T10:00:00Z',
+    },
+    messages: [],
+  })
+
+  assert.equal(detail.doubt.status, 'resolved')
+  assert.deepEqual(detail.history, [])
+})
+
+test('doubts back uses history when available', () => {
+  const calls = []
+  const result = returnFromDoubts({
+    canGoBack: () => true,
+    goBack: () => calls.push('back'),
+    reset: () => calls.push('reset'),
+  }, false)
+
+  assert.equal(result, 'back')
+  assert.deepEqual(calls, ['back'])
+})
+
+test('direct doubt routes reset to the role-safe workspace root', () => {
+  const studentStates = []
+  const teacherStates = []
+
+  assert.equal(returnFromDoubts({ reset: (state) => studentStates.push(state) }, false), 'HomeMain')
+  assert.equal(returnFromDoubts({ reset: (state) => teacherStates.push(state) }, true), 'StaffWorkspace')
+  assert.deepEqual(studentStates, [{ index: 0, routes: [{ name: 'HomeMain' }] }])
+  assert.deepEqual(teacherStates, [{ index: 0, routes: [{ name: 'StaffWorkspace' }] }])
 })

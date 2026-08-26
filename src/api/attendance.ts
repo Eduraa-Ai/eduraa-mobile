@@ -55,6 +55,12 @@ export interface TeacherAttendanceHome {
   sheet: AttendanceSheet
 }
 
+export interface TeacherAttendanceClass {
+  class_section_id: string
+  standard: string
+  division: string
+}
+
 export interface TeacherAttendanceSummary {
   attendance_date: string
   class_section_id?: string | null
@@ -139,18 +145,35 @@ export interface AttendanceRecordUpdate {
 }
 
 export const attendanceApi = {
-  async getTeacherToday() {
-    const response = await apiClient.get<TeacherAttendanceHome>('/attendance/teacher/today')
+  async getTeacherClasses() {
+    const response = await apiClient.get<TeacherAttendanceClass[]>('/attendance/teacher/classes')
     return response.data
   },
 
-  async getTeacherSummary() {
-    const response = await apiClient.get<TeacherAttendanceSummary>('/attendance/dashboard/teacher-summary')
+  async getTeacherToday(attendanceDate?: string, classSectionId?: string | null) {
+    const response = await apiClient.get<TeacherAttendanceHome>('/attendance/teacher/today', {
+      params: {
+        ...(attendanceDate ? { attendance_date: attendanceDate } : {}),
+        ...(classSectionId ? { class_section_id: classSectionId } : {}),
+      },
+    })
     return response.data
   },
 
-  async getLeadershipSummary() {
-    const response = await apiClient.get<LeadershipAttendanceSummary>('/attendance/dashboard/leadership')
+  async getTeacherSummary(attendanceDate?: string, classSectionId?: string | null) {
+    const response = await apiClient.get<TeacherAttendanceSummary>('/attendance/dashboard/teacher-summary', {
+      params: {
+        ...(attendanceDate ? { attendance_date: attendanceDate } : {}),
+        ...(classSectionId ? { class_section_id: classSectionId } : {}),
+      },
+    })
+    return response.data
+  },
+
+  async getLeadershipSummary(attendanceDate?: string) {
+    const response = await apiClient.get<LeadershipAttendanceSummary>('/attendance/dashboard/leadership', {
+      params: attendanceDate ? { attendance_date: attendanceDate } : undefined,
+    })
     return response.data
   },
 
@@ -198,6 +221,15 @@ export const attendanceApi = {
 
   async reopenSheet(sheetId: string, reason: string) {
     const response = await apiClient.post<AttendanceSheet>(`/attendance/sheets/${sheetId}/reopen`, { reason })
+    return response.data
+  },
+
+  async overrideRecord(recordId: string, status: AttendanceStatus, reason: string, note?: string | null) {
+    const response = await apiClient.post<AttendanceSheet>(`/attendance/records/${recordId}/override`, {
+      status,
+      reason,
+      note: note?.trim() || null,
+    })
     return response.data
   },
 

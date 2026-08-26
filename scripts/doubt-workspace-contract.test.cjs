@@ -12,6 +12,7 @@ test('doubt creation is idempotent, attachment-free, and revision-aware', () => 
 
   assert.match(api, /'Idempotency-Key': input\.client_request_id/)
   assert.match(api, /expected_revision: expectedRevision/)
+  assert.match(api, /if \(expectedRevision != null\)/)
   assert.doesNotMatch(api, /FormData|attachment|image-picker/i)
   assert.match(screen, /createMutation\.isPending/)
   assert.match(screen, /AsyncStorage\.setItem\(storageKey/)
@@ -19,6 +20,7 @@ test('doubt creation is idempotent, attachment-free, and revision-aware', () => 
   assert.match(screen, /JSON\.stringify\(draftRef\.current\)/)
   assert.match(screen, /accepted\.current = true/)
   assert.match(screen, /Your draft is safe/)
+  assert.match(screen, /isTeacher && doubt\.revision != null/)
 })
 
 test('both roles have native routes and unauthorized thread failures recover', () => {
@@ -33,4 +35,7 @@ test('both roles have native routes and unauthorized thread failures recover', (
   assert.match(home, /navigation\.navigate\("Doubts"\)/)
   assert.match(screen, /This thread is no longer available/)
   assert.match(screen, /Your access changed/)
+  assert.match(screen, /returnFromDoubts\(navigation, isTeacher\)/)
+  assert.match(screen, /navigation\.replace\?\.\('Doubts'\)/)
+  assert.doesNotMatch(screen, /doubtId: undefined/)
 })

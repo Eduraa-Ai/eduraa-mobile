@@ -33,6 +33,12 @@ export interface TeacherOption {
 export interface PaperGenerateOptions {
   standards: string[]
   divisions: string[]
+  subjects?: Array<{ id: string; name: string }>
+  sections?: Array<{
+    standard: string
+    division: string
+    subjects: Array<{ id: string; name: string }>
+  }>
 }
 
 async function safeList<T>(path: string): Promise<T[]> {
@@ -60,9 +66,9 @@ export const examsApi = {
     return response.data
   },
 
-  async listPublishedPapers() {
+  async listPublishedPapers(subjectId?: string) {
     const response = await apiClient.get<{ items: PaperListItem[] }>('/papers', {
-      params: { status: 'published', limit: 200 },
+      params: { status: 'published', subject_id: subjectId || undefined, limit: 200 },
     })
     return response.data.items ?? []
   },
