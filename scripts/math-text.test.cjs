@@ -5,6 +5,16 @@ const modelPath = process.env.MATH_TEXT_MODEL_PATH
 if (!modelPath) throw new Error('Set MATH_TEXT_MODEL_PATH to the compiled math text utility.')
 const { readableMathText } = require(modelPath)
 
+test('renders fill-in-the-blank and degree notation instead of leaking commands', () => {
+  assert.equal(
+    readableMathText('$(x, y) = (\\underline{\\hspace{1cm}}, -1)$'),
+    '(x, y) = (_____, -1)',
+  )
+  assert.equal(readableMathText('a $30^\\circ-60^\\circ$ triangle'), 'a 30°-60° triangle')
+  assert.equal(readableMathText('$\\theta = 37^{\\circ}$'), 'θ = 37°')
+  assert.equal(readableMathText('$\\underline{answer}$ here'), 'answer here')
+})
+
 test('converts common paper LaTeX without leaking delimiters or commands', () => {
   const rendered = readableMathText(
     String.raw`If \(\alpha^2 + \frac{1}{2}\geq\sqrt{4}\), find \(x_1\).`,

@@ -1,3 +1,5 @@
+import { normalizeLatexBlanksAndDegrees } from './latexBlanks'
+
 const DIFFERENTIAL_COMMA_RE = /(?<=[0-9A-Za-z)\]}])\s*,\s*d([A-Za-z])(?![A-Za-z])/g
 const BRACKETED_MATH_RE = /(?<!\\)\[\s*([\s\S]{6,}?)\s*(?<!\\)\](?!\()/g
 const MATH_SIGNAL_RE = /\\[A-Za-z]+|[_^{}]|(?:\d|[A-Za-z])\s*[=<>+\-*/]\s*(?:\d|[A-Za-z])/
@@ -124,7 +126,7 @@ function toLowered(value: string) {
  * native and web attempts without introducing a WebView-only renderer.
  */
 export function readableMathText(value: string | null | undefined) {
-  let next = normalizeMathMarkdown(value || '')
+  let next = normalizeLatexBlanksAndDegrees(normalizeMathMarkdown(value || ''))
     .replace(/\$\$([\s\S]*?)\$\$/g, (_match, expression: string) => ` ${expression} `)
     .replace(/\$([^$]*?)\$/g, (_match, expression: string) => ` ${expression} `)
     .replace(/\\(?:dfrac|tfrac|frac)\{([^{}]+)\}\{([^{}]+)\}/g, '($1)/($2)')

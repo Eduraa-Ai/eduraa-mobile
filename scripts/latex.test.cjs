@@ -5,6 +5,16 @@ const modelPath = process.env.LATEX_MODEL_PATH
 if (!modelPath) throw new Error('Set LATEX_MODEL_PATH to the compiled LaTeX model.')
 const model = require(modelPath)
 
+test('renders fill-in-the-blank and degree notation instead of leaking commands', () => {
+  assert.equal(
+    model.latexToPlainText('$(x, y) = (\\underline{\\hspace{1cm}}, -1)$'),
+    '(x, y) = (_____, -1)',
+  )
+  assert.equal(model.latexToPlainText('a $30^\\circ-60^\\circ$ triangle'), 'a 30°-60° triangle')
+  assert.equal(model.latexToPlainText('$\\theta = 37^{\\circ}$'), 'θ = 37°')
+  assert.equal(model.latexToPlainText('$\\underline{answer}$ here'), 'answer here')
+})
+
 test('preserves mixed physics prose and one multiline display equation', () => {
   const physicsQuestion = String.raw`A physical quantity $Q$ is given by
 \[

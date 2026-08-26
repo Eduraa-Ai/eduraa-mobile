@@ -5,6 +5,16 @@ const modelPath = process.env.MATH_CONTENT_PATH
 if (!modelPath) throw new Error('Set MATH_CONTENT_PATH to the compiled math content utility.')
 const { normalizeMathContent } = require(modelPath)
 
+test('renders fill-in-the-blank and degree notation instead of leaking commands', () => {
+  assert.equal(
+    normalizeMathContent('$(x, y) = (\\underline{\\hspace{1cm}}, -1)$').text,
+    '(x, y) = (_____, -1)',
+  )
+  assert.equal(normalizeMathContent('a $30^\\circ-60^\\circ$ triangle').text, 'a 30°-60° triangle')
+  assert.equal(normalizeMathContent('$\\theta = 37^{\\circ}$').text, 'θ = 37°')
+  assert.equal(normalizeMathContent('$\\underline{answer}$ here').text, 'answer here')
+})
+
 test('formula rendering snapshots cover required notation', () => {
   const snapshots = {
     fraction: normalizeMathContent('Speed is $\\frac{d}{t}$.').text,

@@ -1,3 +1,5 @@
+import { normalizeLatexBlanksAndDegrees } from './latexBlanks'
+
 export interface NormalizedMathContent {
   text: string
   hasMath: boolean
@@ -138,7 +140,7 @@ function replaceMatrices(source: string) {
 }
 
 function normalizeFormula(source: string) {
-  let value = source
+  let value = normalizeLatexBlanksAndDegrees(source)
   let degraded = false
 
   const matrix = replaceMatrices(value)
