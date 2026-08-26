@@ -13,6 +13,7 @@ const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'eduraa-model-tests-'))
 const models = [
   'src/screens/results/checkedPapersLibraryModel.ts',
   'src/screens/results/checkedPaperDetailModel.ts',
+  'src/screens/results/checkedPaperWorkspaceModel.ts',
   'src/screens/learning/agenticLearningModel.ts',
   'src/screens/learning/previousPapersModel.ts',
   'src/screens/learning/schoolPreviousPapersModel.ts',
@@ -26,6 +27,7 @@ const models = [
   'src/screens/workspace/attendanceModel.ts',
   'src/screens/workspace/doubtWorkspaceModel.ts',
   'src/screens/workspace/checkedPaperPipelineModel.ts',
+  'src/screens/workspace/scanUploadModel.ts',
   'src/navigation/paperResultsNavigation.ts',
   'src/utils/mathText.ts',
   'src/utils/mathContent.ts',
@@ -49,6 +51,10 @@ const suites = [
   {
     file: 'scripts/checked-paper-detail-model.test.cjs',
     env: { CHECKED_PAPER_DETAIL_MODEL_PATH: path.join(outDir, 'screens/results/checkedPaperDetailModel.js') },
+  },
+  {
+    file: 'scripts/checked-paper-workspace-model.test.cjs',
+    env: { CHECKED_PAPER_WORKSPACE_MODEL_PATH: path.join(outDir, 'screens/results/checkedPaperWorkspaceModel.js') },
   },
   {
     file: 'scripts/agentic-learning-model.test.cjs',
@@ -93,6 +99,10 @@ const suites = [
   {
     file: 'scripts/checked-paper-pipeline-model.test.cjs',
     env: { CHECKED_PAPER_PIPELINE_MODEL_PATH: path.join(outDir, 'screens/workspace/checkedPaperPipelineModel.js') },
+  },
+  {
+    file: 'scripts/scan-upload-model.test.cjs',
+    env: { SCAN_UPLOAD_MODEL_PATH: path.join(outDir, 'screens/workspace/scanUploadModel.js') },
   },
   {
     file: 'scripts/exam-workspace-contract.test.cjs',

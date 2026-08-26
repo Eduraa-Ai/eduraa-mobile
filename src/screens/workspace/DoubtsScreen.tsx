@@ -33,6 +33,7 @@ import {
   doubtDraftStorageKey,
   emptyDoubtDraft,
   filterDoubts,
+  returnFromDoubts,
   selectTeacher,
   validateDoubtDraft,
   type DoubtDraft,
@@ -423,7 +424,7 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
   }
 
   const replyMutation = useMutation({
-    mutationFn: ({ body, revision }: { body: string; revision: number }) => doubtsApi.reply(id, body, revision),
+    mutationFn: ({ body, revision }: { body: string; revision: number | null }) => doubtsApi.reply(id, body, revision),
     onSuccess: (detail) => { acceptDetail(detail); setReply(''); setActionError(null) },
     onError: async (error) => {
       if (doubtErrorCode(error) === 'stale_doubt') await detailQuery.refetch()
@@ -563,9 +564,11 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
           />
           {actionError ? <InlineNotice message={actionError} offline={netInfo.isConnected === false} /> : null}
           <View style={styles.replyActions}>
-            {isTeacher ? (
+            {isTeacher && doubt.revision != null ? (
               <Pressable
-                onPress={() => resolveMutation.mutate(doubt.revision)}
+                onPress={() => {
+                  if (doubt.revision != null) resolveMutation.mutate(doubt.revision)
+                }}
                 disabled={resolveMutation.isPending || replyMutation.isPending}
                 accessibilityRole="button"
                 accessibilityLabel="Resolve this doubt"
@@ -620,11 +623,15 @@ export default function DoubtsScreen() {
   }, [route.params?.doubtId])
 
   const filtered = useMemo(() => filterDoubts(listQuery.data ?? [], filter), [filter, listQuery.data])
+  const closeThread = () => {
+    setActiveId(null)
+    if (route.params?.doubtId) navigation.replace?.('Doubts')
+  }
 
   if (composing && !isTeacher) {
     return <ComposeView onBack={() => setComposing(false)} onCreated={(detail) => { setComposing(false); setActiveId(detail.doubt.id) }} />
   }
-  if (activeId) return <ThreadView id={activeId} onBack={() => { setActiveId(null); navigation.setParams?.({ doubtId: undefined }) }} />
+  if (activeId) return <ThreadView id={activeId} onBack={closeThread} />
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -638,7 +645,7 @@ export default function DoubtsScreen() {
         refreshControl={<RefreshControl refreshing={listQuery.isRefetching} onRefresh={() => void listQuery.refetch()} tintColor={colors.accent} />}
         contentStyle={styles.screen}
       >
-        <ScreenHeader title={isTeacher ? 'Student doubts' : 'Ask your teacher'} onBack={() => navigation.canGoBack() && navigation.goBack()} />
+        <ScreenHeader title={isTeacher ? 'Student doubts' : 'Ask your teacher'} onBack={() => returnFromDoubts(navigation, isTeacher)} />
 
         {listQuery.data ? <FocusPanel items={listQuery.data} isTeacher={isTeacher} /> : null}
         {listQuery.isLoading ? (

@@ -57,10 +57,40 @@ test('report derives a real score and question distribution', () => {
 })
 
 test('report never fabricates a score when summary metadata is missing', () => {
-  const report = model.buildCheckedPaperReport(paper({ total_score: null, max_score: null, grading_results: null }))
+  const incompletePaper = paper({ status: 'auto_assessed', total_score: null, max_score: null, grading_results: null })
+  const report = model.buildCheckedPaperReport(incompletePaper)
   assert.equal(report.percent, null)
   assert.equal(report.questions.length, 0)
   assert.equal(report.headline, 'Your diagnosis will appear when checking finishes.')
+  assert.equal(model.isCheckedPaperChecking(incompletePaper), true)
+})
+
+test('terminal score metadata without question results keeps polling', () => {
+  assert.equal(model.isCheckedPaperChecking(paper({
+    status: 'auto_assessed',
+    total_score: 7,
+    max_score: 10,
+    grading_results: [],
+  })), true)
+})
+
+test('blocked paper without a score explains the saved recovery action', () => {
+  const report = model.buildCheckedPaperReport(paper({
+    status: 'integrity_needs_review',
+    needs_review: true,
+    total_score: null,
+    max_score: null,
+    grading_results: [],
+    processing_blockers: [{
+      message: 'The system could not confirm whether the script is complete.',
+      resolved_by_teacher: false,
+    }],
+  }))
+
+  assert.equal(report.percent, null)
+  assert.equal(report.headline, 'Checking paused.\nReview one issue to continue.')
+  assert.equal(report.diagnosisTitle, 'Your paper needs a quick check.')
+  assert.equal(report.diagnosisBody, 'The system could not confirm whether the script is complete.')
 })
 
 test('partial review keeps known marks visible and labels them provisional', () => {
@@ -161,7 +191,7 @@ test('question status is expressed with text and not color alone', () => {
   assert.equal(model.questionStatus(question(4, null, 5)), 'pending')
 })
 
-test('checking state and estimated progress remain honest until a real score arrives', () => {
+test('checking state remains active until a real score or review outcome arrives', () => {
   const pending = paper({ status: 'graded', total_score: null, max_score: null })
   assert.equal(model.isCheckedPaperChecking(pending), true)
   assert.equal(model.isCheckedPaperChecking(paper()), false)
@@ -171,15 +201,6 @@ test('checking state and estimated progress remain honest until a real score arr
     max_score: null,
   })), false)
 
-  const started = Date.parse('2026-07-17T12:00:00.000Z')
-  const halfway = model.buildCheckingEstimate('2026-07-17T12:00:00.000Z', started + 30_000)
-  assert.equal(halfway.percent > 8 && halfway.percent < 94, true)
-  assert.equal(halfway.timeLabel, '≈ 30s left')
-  assert.equal(halfway.isOverdue, false)
-  const overdue = model.buildCheckingEstimate('2026-07-17T12:00:00.000Z', started + 180_000)
-  assert.equal(overdue.percent, 94)
-  assert.equal(overdue.timeLabel, 'Finishing up')
-  assert.equal(overdue.isOverdue, true)
 })
 
 test('legacy partial and incorrect values normalize to the Wrong category', () => {

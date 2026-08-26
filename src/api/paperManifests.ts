@@ -68,6 +68,8 @@ export interface CustomPaperFile {
   uri: string
   name: string
   type: string
+  size?: number
+  lastModified?: number
   file?: File
 }
 

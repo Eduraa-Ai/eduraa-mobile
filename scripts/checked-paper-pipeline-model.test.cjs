@@ -46,12 +46,130 @@ test('teacher-facing status is limited to the four experience states', () => {
   assert.equal(model.friendlyStage(null), 'Checking')
 })
 
+test('review stays in checking until the terminal payload contains scores and questions', () => {
+  const emptyTerminal = {
+    status: 'auto_assessed',
+    total_score: null,
+    max_score: null,
+    grading_results: [],
+  }
+  const completeTerminal = {
+    status: 'auto_assessed',
+    total_score: 7,
+    max_score: 10,
+    grading_results: [{ question_id: 'question-1' }],
+  }
+
+  assert.equal(model.checkedPaperExperienceStatus(emptyTerminal), 'ready_for_review')
+  assert.equal(model.hasCheckedPaperReviewPayload(emptyTerminal), false)
+  assert.equal(model.checkedPaperReviewExperienceStatus(emptyTerminal), 'checking')
+  assert.equal(model.hasCheckedPaperReviewPayload(completeTerminal), true)
+  assert.equal(model.checkedPaperReviewExperienceStatus(completeTerminal), 'ready_for_review')
+})
+
 test('continue as exception only shows when every blocker is teacher-resolvable', () => {
   const mixed = [{ resolvable_by_teacher: true }, { resolvable_by_teacher: false }]
   const allResolvable = [{ resolvable_by_teacher: true }, { resolvable_by_teacher: true }]
   assert.equal(model.canContinueAsException(mixed), false)
   assert.equal(model.canContinueAsException(allResolvable), true)
   assert.equal(model.canContinueAsException([]), false)
+})
+
+test('calibration flags explain that the teacher owns the final decision', () => {
+  assert.equal(
+    model.isReleaseConfidenceBlocker({ code: 'page_unreadable' }),
+    false,
+  )
+  assert.equal(
+    model.checkedPaperBlockerMessage({
+      issue_id: 'technical:unknown',
+      code: 'unknown',
+      stage: 'release_evaluation',
+      resolvable_by_teacher: false,
+    }),
+    'Eduraa needs a teacher to review this flag before the result can be approved.',
+  )
+})
+
+test('teacher decision preserves distinct scoped flags and the suggested result', () => {
+  const decision = model.buildTeacherPaperDecision({
+    status: 'pending_question_review',
+    needs_review: true,
+    can_save_review: true,
+    total_score: 18,
+    max_score: 21,
+    grading_results: Array.from({ length: 10 }, (_, index) => ({ question_id: String(index) })),
+    processing_blockers: [
+      { issue_id: 'language', code: 'language_identity_missing', stage: 'release_evaluation', resolvable_by_teacher: true },
+      { issue_id: 'slice-1', code: 'slice_not_calibrated', stage: 'release_evaluation', resolvable_by_teacher: true },
+      { issue_id: 'slice-2', code: 'slice_not_calibrated', stage: 'release_evaluation', resolvable_by_teacher: true },
+    ],
+  })
+
+  assert.equal(decision.issueCount, 2)
+  assert.equal(decision.statusLabel, '2 checks')
+  assert.equal(decision.title, '2 checks need confirmation')
+  assert.equal(decision.actionLabel, 'Review 2 checks')
+  assert.match(decision.body, /graded all 10 questions and suggests 18\/21/)
+})
+
+test('duplicate issue delivery is collapsed only by stable issue identity', () => {
+  const repeated = { issue_id: 'same', code: 'slice_not_calibrated', stage: 'release', resolvable_by_teacher: true }
+  const unique = model.uniqueCheckedPaperBlockers([
+    repeated,
+    repeated,
+    { ...repeated, issue_id: 'different', question_ids: ['q2'] },
+  ])
+  assert.deepEqual(unique.map((item) => item.issue_id), ['same', 'different'])
+})
+
+test('checking stages use backend milestones instead of elapsed-time percentages', () => {
+  assert.equal(model.checkingStageLabel('integrity_running'), 'Checking page integrity')
+  assert.equal(model.checkingStageLabel('grading', 'rubric_grading'), 'Applying the marking rubric')
+  assert.equal(model.checkingStageLabel('mapping_pending'), 'Matching answers to questions')
+})
+
+test('legacy grading feedback yields a concise visible-answer summary', () => {
+  const feedback = [
+    '**Student response**',
+    '- The student selected option `D`.',
+    '- The map label is visible.',
+    '',
+    '**Rubric evaluation**',
+    '1. Correct.',
+  ].join('\n')
+
+  assert.equal(
+    model.studentResponseSummaryFromFeedback(feedback),
+    'The student selected option D.\nThe map label is visible.',
+  )
+  assert.equal(model.studentResponseSummaryFromFeedback('Legacy free-form feedback'), null)
+})
+
+test('teacher decision gives a recovery action when checking fails without a result', () => {
+  const decision = model.buildTeacherPaperDecision({
+    status: 'grading_failed',
+    needs_review: true,
+    can_save_review: false,
+    grading_results: [],
+    processing_blockers: [],
+  })
+
+  assert.equal(decision.title, 'Checking could not finish')
+  assert.equal(decision.actionLabel, 'Review scan issue')
+  assert.equal(decision.hasSuggestedResult, false)
+})
+
+test('missing answer extraction is teacher review, never an automatic zero', () => {
+  assert.equal(
+    model.checkedPaperBlockerMessage({
+      issue_id: 'evidence:no-candidate-response',
+      code: 'no_candidate_response_detected',
+      stage: 'answer_reading',
+      resolvable_by_teacher: true,
+    }),
+    'Eduraa could not detect answer regions on the uploaded pages. Review the scan and set the final marks; a zero is not automatic.',
+  )
 })
 
 test('standard/division matching normalizes "Class 10" / "Std. 10" prefixes and case', () => {

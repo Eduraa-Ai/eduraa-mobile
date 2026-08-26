@@ -68,6 +68,7 @@ let questionVisualMode = 'ready'
 let examWorkspaceMode = 'ready'
 let syntheticRole = 'b2c_student'
 let schoolPreviousPapersMode = 'ready'
+let scanUploadMode = 'ready'
 let attendanceMode = 'ready'
 let attendanceRevision = 7
 let studentAttendanceCorrection = null
@@ -1681,6 +1682,62 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && path === '/api/v1/checked-papers') {
         const checkedPaper = buildPreviousCheckedPaper()
         json(response, 200, checkedPaper ? [checkedPaper] : [])
+        return
+    }
+
+    if (request.method === 'POST' && path === '/__test__/scan-upload-mode') {
+        const payload = await readBody(request)
+        scanUploadMode = String(payload.mode || 'ready')
+        json(response, 200, { mode: scanUploadMode })
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/checked-papers/options') {
+        json(response, 200, {
+            exams: [{
+                id: TEACHER_EXAM_ID,
+                name: 'Grade 10 Mathematics Midterm — Algebra, Coordinate Geometry and Applied Reasoning',
+                teacher_id: '00000000-0000-4000-8000-000000000018',
+                subject_id: 'subject-mathematics',
+                standard: '10',
+                division: 'A',
+                auto_grade_enabled: true,
+                results_published: false,
+                created_at: '2026-08-20T09:00:00.000Z',
+                updated_at: '2026-08-20T09:00:00.000Z',
+            }],
+            papers: [{
+                id: TEACHER_PAPER_OPEN_ID,
+                title: 'Algebra and Coordinate Geometry Practice with Extended Applied-Reasoning Responses',
+                source_type: 'custom_paper',
+                subject_id: 'subject-mathematics',
+                subject_name: 'Mathematics',
+                standard: '10',
+                division: 'A',
+                created_at: '2026-08-21T09:00:00.000Z',
+            }],
+            subjects: [{
+                id: 'subject-mathematics',
+                name: 'Mathematics',
+                code: 'MATH-10',
+                created_at: '2026-07-01T09:00:00.000Z',
+            }],
+            students: [
+                { id: 'student-aarav', first_name: 'Aarav', last_name: 'Ramanathan', student_id: 'STU-2048', standard: '10', division: 'A' },
+                { id: 'student-meera', first_name: 'Meera Ananya', last_name: 'Kapoor Subramaniam', student_id: 'STU-2051', standard: '10', division: 'A' },
+            ],
+        })
+        return
+    }
+
+    if (request.method === 'POST' && path === '/api/v1/checked-papers/scan') {
+        request.resume()
+        await new Promise((resolve) => setTimeout(resolve, scanUploadMode === 'slow' ? 20000 : 1800))
+        if (scanUploadMode === 'error') {
+            json(response, 503, { detail: 'The scan could not be received. Your draft is still safe on this device.' })
+            return
+        }
+        json(response, 200, buildPreviousCheckedPaper())
         return
     }
 

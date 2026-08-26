@@ -1,4 +1,4 @@
-import type { DoubtStatus, DoubtSummary, DoubtTeacherOption } from '../../api/doubts'
+import type { DoubtDetail, DoubtEvent, DoubtMessage, DoubtStatus, DoubtSummary, DoubtTeacherOption } from '../../api/doubts'
 
 export interface DoubtDraft {
   teacherId: string
@@ -48,6 +48,80 @@ export function selectTeacher(draft: DoubtDraft, option: DoubtTeacherOption): Do
 
 export function filterDoubts(items: DoubtSummary[], status: DoubtStatus | 'all') {
   return status === 'all' ? items : items.filter((item) => item.status === status)
+}
+
+type UnknownRecord = Record<string, unknown>
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' ? value as UnknownRecord : {}
+}
+
+function stringValue(value: unknown, fallback = '') {
+  return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+export function normalizeDoubtStatus(value: unknown): DoubtStatus {
+  if (value === 'answered' || value === 'resolved') return value
+  if (value === 'closed') return 'resolved'
+  return 'pending'
+}
+
+export function normalizeDoubtSummary(value: unknown): DoubtSummary {
+  const raw = asRecord(value)
+  const subject = stringValue(raw.subject, 'Academic')
+  const latestMessageAt = stringValue(raw.latest_message_at, stringValue(raw.created_at, new Date(0).toISOString()))
+  const createdAt = stringValue(raw.created_at, latestMessageAt)
+  const revision = typeof raw.revision === 'number' && Number.isFinite(raw.revision) ? raw.revision : null
+
+  return {
+    id: stringValue(raw.id),
+    student_id: stringValue(raw.student_id),
+    student_name: stringValue(raw.student_name, 'Student'),
+    teacher_id: stringValue(raw.teacher_id),
+    teacher_name: stringValue(raw.teacher_name, 'Assigned teacher'),
+    subject_id: typeof raw.subject_id === 'string' ? raw.subject_id : null,
+    subject,
+    title: stringValue(raw.title, `${subject} question`),
+    school_id: typeof raw.school_id === 'string' ? raw.school_id : null,
+    class_label: typeof raw.class_label === 'string' ? raw.class_label : null,
+    status: normalizeDoubtStatus(raw.status),
+    revision,
+    latest_message_at: latestMessageAt,
+    created_at: createdAt,
+    updated_at: stringValue(raw.updated_at, latestMessageAt),
+    last_message: typeof raw.last_message === 'string' ? raw.last_message : null,
+  }
+}
+
+export function normalizeDoubtDetail(value: unknown): DoubtDetail {
+  const raw = asRecord(value)
+  return {
+    doubt: normalizeDoubtSummary(raw.doubt),
+    messages: Array.isArray(raw.messages) ? raw.messages as DoubtMessage[] : [],
+    history: Array.isArray(raw.history) ? raw.history as DoubtEvent[] : [],
+  }
+}
+
+type DoubtNavigationLike = {
+  canGoBack?: () => boolean
+  goBack?: () => void
+  navigate?: (routeName: string) => void
+  reset?: (state: { index: number; routes: Array<{ name: string }> }) => void
+}
+
+export function returnFromDoubts(navigation: DoubtNavigationLike, isTeacher: boolean) {
+  if (navigation.canGoBack?.() && navigation.goBack) {
+    navigation.goBack()
+    return 'back' as const
+  }
+
+  const destination = isTeacher ? 'StaffWorkspace' : 'HomeMain'
+  if (navigation.reset) {
+    navigation.reset({ index: 0, routes: [{ name: destination }] })
+  } else {
+    navigation.navigate?.(destination)
+  }
+  return destination
 }
 
 export function createClientRequestId(random = Math.random) {

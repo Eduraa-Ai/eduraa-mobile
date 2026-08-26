@@ -1,5 +1,6 @@
 import axios from 'axios'
 import apiClient from './client'
+import { normalizeDoubtDetail, normalizeDoubtSummary } from '../screens/workspace/doubtWorkspaceModel'
 
 export type DoubtStatus = 'pending' | 'answered' | 'resolved'
 
@@ -23,7 +24,7 @@ export interface DoubtSummary {
   school_id?: string | null
   class_label?: string | null
   status: DoubtStatus
-  revision: number
+  revision: number | null
   latest_message_at: string
   created_at: string
   updated_at: string
@@ -89,8 +90,8 @@ export function doubtHttpStatus(error: unknown) {
 
 export const doubtsApi = {
   async list() {
-    const response = await apiClient.get<{ items: DoubtSummary[] }>('/communication/doubts')
-    return response.data.items
+    const response = await apiClient.get<{ items?: unknown[] }>('/communication/doubts')
+    return (response.data.items ?? []).map(normalizeDoubtSummary)
   },
 
   async teacherOptions() {
@@ -99,30 +100,29 @@ export const doubtsApi = {
   },
 
   async detail(id: string) {
-    const response = await apiClient.get<DoubtDetail>(`/communication/doubts/${id}`)
-    return response.data
+    const response = await apiClient.get<unknown>(`/communication/doubts/${id}`)
+    return normalizeDoubtDetail(response.data)
   },
 
   async create(input: CreateDoubtInput) {
-    const response = await apiClient.post<DoubtDetail>('/communication/doubts', input, {
+    const response = await apiClient.post<unknown>('/communication/doubts', input, {
       headers: { 'Idempotency-Key': input.client_request_id },
     })
-    return response.data
+    return normalizeDoubtDetail(response.data)
   },
 
-  async reply(id: string, body: string, expectedRevision: number) {
-    const response = await apiClient.post<DoubtDetail>(`/communication/doubts/${id}/messages`, {
-      body,
-      expected_revision: expectedRevision,
-    })
-    return response.data
+  async reply(id: string, body: string, expectedRevision: number | null) {
+    const payload: { body: string; expected_revision?: number } = { body }
+    if (expectedRevision != null) payload.expected_revision = expectedRevision
+    const response = await apiClient.post<unknown>(`/communication/doubts/${id}/messages`, payload)
+    return normalizeDoubtDetail(response.data)
   },
 
   async resolve(id: string, expectedRevision: number) {
     const response = await apiClient.patch<DoubtDetail>(`/communication/doubts/${id}/resolve`, {
       expected_revision: expectedRevision,
     })
-    return response.data
+    return normalizeDoubtDetail(response.data)
   },
 }
 

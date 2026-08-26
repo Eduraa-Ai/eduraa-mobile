@@ -135,10 +135,27 @@ export function isPaperChecking(paper: CheckedPaper) {
   return checkingStatuses.has(status) || scorePercent(paper) == null
 }
 
-export function paperAccessibilityLabel(paper: CheckedPaper, dateLabel: string) {
+export function paperNeedsInput(paper: CheckedPaper) {
+  return checkedPaperExperienceStatus(paper) === 'needs_input'
+}
+
+export function paperNeedsRecovery(paper: CheckedPaper) {
+  const status = normalize(paper.status).replace(/[\s-]+/g, '_')
+  return isBlockedStatus(status)
+}
+
+export function canDownloadPaperReport(paper: CheckedPaper) {
+  return !isPaperChecking(paper)
+    && paper.total_score != null
+    && paper.max_score != null
+    && paper.max_score > 0
+}
+
+export function paperAccessibilityLabel(paper: CheckedPaper, dateLabel: string, opensRecovery = false) {
   const questions = getQuestionCount(paper)
   const questionLabel = questions == null ? 'Question count unavailable' : `${questions} question${questions === 1 ? '' : 's'}`
-  return `${getPaperTitle(paper)}, ${getPaperSubject(paper)}, ${scoreLabel(paper)}, ${paperStatusLabel(paper)}, ${questionLabel}, ${dateLabel}. Opens the checked paper report.`
+  const destination = opensRecovery ? 'Opens the paper issue for review.' : 'Opens the checked paper report.'
+  return `${getPaperTitle(paper)}, ${getPaperSubject(paper)}, ${scoreLabel(paper)}, ${paperStatusLabel(paper)}, ${questionLabel}, ${dateLabel}. ${destination}`
 }
 
 export function canOpenPaper(paperId: string | null | undefined, openingPaperId: string | null) {
@@ -166,6 +183,9 @@ export function isStrong(paper: CheckedPaper) {
 }
 
 export function paperStatusLabel(paper: CheckedPaper) {
+  const reviewCount = getQuestionReviewCount(paper)
+  if (reviewCount > 0) return `${reviewCount} answer${reviewCount === 1 ? '' : 's'} to confirm`
+  if (paperNeedsRecovery(paper)) return 'Action required'
   return CHECKED_PAPER_EXPERIENCE_LABELS[checkedPaperExperienceStatus(paper)]
 }
 
@@ -175,11 +195,13 @@ export function paperInsight(paper: CheckedPaper) {
   const questionReviewCount = getQuestionReviewCount(paper)
   if (questionReviewCount > 0) {
     const labels = getQuestionReviewLabels(paper).slice(0, 2).join(', ')
-    return `${questionReviewCount} review request${questionReviewCount === 1 ? '' : 's'} pending${labels ? `: ${labels}` : ''}.`
+    return labels
+      ? `Check ${labels} against the scan, then confirm.`
+      : `Check ${questionReviewCount === 1 ? 'this answer' : 'these answers'} against the scan, then confirm.`
   }
   if (paper.manual_review_requested) return 'Awaiting a manual review.'
-  if (paper.needs_review || paper.status === 'pending_manual_review') return 'The reviewer needs to look at this paper.'
-  if (isBlockedStatus(status)) return 'Open the paper to review the specific item that needs you.'
+  if (isBlockedStatus(status)) return 'Checking paused. Review the paper issue to continue.'
+  if (paper.needs_review || paper.status === 'pending_manual_review') return 'Open the scan, check the suggested marks, then confirm.'
   if (checkingStatuses.has(status)) return 'Eduraa is still checking this result.'
   if (percent == null) return 'Score will appear after checking completes.'
   if (percent >= STRONG_PERCENT) return 'Strong performance with a clear next step.'

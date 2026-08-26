@@ -4,7 +4,7 @@
  */
 
 import apiClient from './client'
-import type { CheckedPaper } from '../types'
+import type { CheckedPaper, CheckedPaperProcessingBlocker } from '../types'
 import type { DownloadedPdf } from '../utils/pdfDownload'
 
 export interface ManualReviewRequestPayload {
@@ -23,7 +23,12 @@ export interface CheckedPaperScannedPage {
 
 export interface CheckedPaperIntegrity {
   script_version: Record<string, unknown> | null
-  integrity_run: Record<string, unknown> | null
+  integrity_run: {
+    id: string
+    status: string
+    ordered_page_ids: string[]
+    blockers: CheckedPaperProcessingBlocker[]
+  } | null
   pages: CheckedPaperScannedPage[]
 }
 
@@ -71,6 +76,10 @@ export interface TeacherReviewPayload {
   results: TeacherReviewResultPayload[]
 }
 
+export interface CheckedPaperScannedPageCount {
+  page_count: number
+}
+
 function downloadFilename(contentDisposition: unknown, fallback: string) {
   if (typeof contentDisposition !== 'string') return fallback
   const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
@@ -93,6 +102,13 @@ export const checkedPapersApi = {
   getById: async (id: string): Promise<CheckedPaper> => {
     const response = await apiClient.get<CheckedPaper>(`/checked-papers/${id}`)
     return response.data
+  },
+
+  getScannedPageCount: async (id: string): Promise<number> => {
+    const response = await apiClient.get<CheckedPaperScannedPageCount>(
+      `/checked-papers/${encodeURIComponent(id)}/scanned/pages`,
+    )
+    return response.data.page_count
   },
 
   downloadPdf: async (id: string): Promise<DownloadedPdf> => {

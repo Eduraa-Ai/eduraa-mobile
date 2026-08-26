@@ -23,11 +23,18 @@ import {
   type TeacherProfileSnapshot,
   type TeacherProfileUpdateRequest,
 } from '../../api/b2bProfile'
+import { MultiSelectField } from '../../components/ui/MultiSelectField'
 import { SelectField } from '../../components/ui/SelectField'
 import { useAuthStore } from '../../stores/authStore'
 import { typography } from '../../theme'
 import type { B2BProfileRole, TeacherProfileApprovalDraft, TeacherDraftErrors } from './b2bProfileModel'
-import { buildTeacherApprovalPayload, validateTeacherApprovalDraft } from './b2bProfileModel'
+import {
+  buildTeacherApprovalPayload,
+  normalizeProfileList,
+  retainAvailableSelections,
+  teachingScopeOptions,
+  validateTeacherApprovalDraft,
+} from './b2bProfileModel'
 
 const NAVY = '#07152D'
 const NAVY_SOFT = '#122844'
@@ -59,9 +66,9 @@ const emptyTeacherDraft: TeacherProfileApprovalDraft = {
   teacherId: '',
   branchId: '',
   board: '',
-  standardsTaught: '',
-  divisionsTaught: '',
-  subjectsTaught: '',
+  standardsTaught: [],
+  divisionsTaught: [],
+  subjectsTaught: [],
 }
 
 function valueOrDash(value?: string | null) {
@@ -94,9 +101,9 @@ function teacherDraftFromProfile(profile: TeacherMasterProfile): TeacherProfileA
     teacherId: source.teacher_id ?? '',
     branchId: source.branch_id ?? profile.profile.branch_id ?? '',
     board: source.board ?? '',
-    standardsTaught: joined(source.standards_taught),
-    divisionsTaught: joined(source.divisions_taught),
-    subjectsTaught: joined(source.subjects_taught),
+    standardsTaught: [...(source.standards_taught ?? [])],
+    divisionsTaught: [...(source.divisions_taught ?? [])],
+    subjectsTaught: [...(source.subjects_taught ?? [])],
   }
 }
 
@@ -178,6 +185,74 @@ export default function B2BProfileScreen() {
     }
     return options
   }, [branchQuery.data, draft.branchId, teacher])
+
+  const selectedBranch = useMemo(
+    () => (branchQuery.data ?? []).find((branch) => branch.id === draft.branchId),
+    [branchQuery.data, draft.branchId],
+  )
+  const boardOptions = useMemo(
+    () => normalizeProfileList(selectedBranch?.boards ?? []).map((board) => ({ label: board, value: board })),
+    [selectedBranch?.boards],
+  )
+  const offeringsQuery = useQuery({
+    queryKey: ['b2b-profile', accountKey, 'teacher-offerings', teacher?.profile.school_id, draft.branchId],
+    queryFn: () => authApi.listOfferings(teacher?.profile.school_id ?? '', draft.branchId),
+    enabled: role === 'teacher' && surface === 'teacher-edit' && Boolean(teacher?.profile.school_id && draft.branchId),
+  })
+  const subjectsQuery = useQuery({
+    queryKey: ['b2b-profile', 'teacher-subject-options'],
+    queryFn: b2bProfileApi.listTeacherProfileSubjects,
+    enabled: role === 'teacher' && surface === 'teacher-edit',
+    staleTime: 10 * 60 * 1000,
+  })
+  const scopeOptions = useMemo(
+    () => teachingScopeOptions(offeringsQuery.data ?? [], draft.standardsTaught),
+    [offeringsQuery.data, draft.standardsTaught],
+  )
+  const standardOptions = useMemo(
+    () => scopeOptions.standards.map((standard) => ({
+      label: /^(std|class)\s/i.test(standard) ? standard : `Std ${standard}`,
+      value: standard,
+    })),
+    [scopeOptions.standards],
+  )
+  const divisionOptions = useMemo(
+    () => scopeOptions.divisions.map((division) => ({ label: division, value: division })),
+    [scopeOptions.divisions],
+  )
+  const subjectOptions = useMemo(
+    () => (subjectsQuery.data ?? []).map((subject) => ({ label: subject.name, value: subject.name })),
+    [subjectsQuery.data],
+  )
+
+  useEffect(() => {
+    if (!branchQuery.isSuccess || !selectedBranch || boardOptions.length === 0) return
+    if (boardOptions.some((option) => option.value === draft.board)) return
+    setDraft((current) => ({ ...current, board: '' }))
+  }, [boardOptions, branchQuery.isSuccess, draft.board, selectedBranch])
+
+  useEffect(() => {
+    if (!offeringsQuery.isSuccess) return
+    setDraft((current) => {
+      const standardsTaught = retainAvailableSelections(current.standardsTaught, scopeOptions.standards)
+      const divisionsForStandards = teachingScopeOptions(offeringsQuery.data ?? [], standardsTaught).divisions
+      const divisionsTaught = retainAvailableSelections(current.divisionsTaught, divisionsForStandards)
+      if (
+        normalizeProfileList(current.standardsTaught).join('\0') === standardsTaught.join('\0') &&
+        normalizeProfileList(current.divisionsTaught).join('\0') === divisionsTaught.join('\0')
+      ) return current
+      return { ...current, standardsTaught, divisionsTaught }
+    })
+  }, [offeringsQuery.data, offeringsQuery.isSuccess, scopeOptions.standards])
+
+  useEffect(() => {
+    if (!subjectsQuery.isSuccess || subjectOptions.length === 0) return
+    setDraft((current) => {
+      const subjectsTaught = retainAvailableSelections(current.subjectsTaught, subjectOptions.map((option) => option.value))
+      if (normalizeProfileList(current.subjectsTaught).join('\0') === subjectsTaught.join('\0')) return current
+      return { ...current, subjectsTaught }
+    })
+  }, [subjectOptions, subjectsQuery.isSuccess])
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -356,6 +431,16 @@ export default function B2BProfileScreen() {
               branchesLoading={branchQuery.isLoading}
               branchesError={branchQuery.isError ? profileErrorMessage(branchQuery.error) : null}
               onRetryBranches={() => void branchQuery.refetch()}
+              boardOptions={boardOptions}
+              standardOptions={standardOptions}
+              divisionOptions={divisionOptions}
+              subjectOptions={subjectOptions}
+              scopeLoading={offeringsQuery.isLoading}
+              subjectsLoading={subjectsQuery.isLoading}
+              scopeError={offeringsQuery.isError ? profileErrorMessage(offeringsQuery.error) : null}
+              subjectsError={subjectsQuery.isError ? profileErrorMessage(subjectsQuery.error) : null}
+              onRetryScope={() => void offeringsQuery.refetch()}
+              onRetrySubjects={() => void subjectsQuery.refetch()}
               onChange={updateDraft}
               onCancel={closeToView}
               onSave={() => {
@@ -794,6 +879,16 @@ function TeacherEditView({
   branchesLoading,
   branchesError,
   onRetryBranches,
+  boardOptions,
+  standardOptions,
+  divisionOptions,
+  subjectOptions,
+  scopeLoading,
+  subjectsLoading,
+  scopeError,
+  subjectsError,
+  onRetryScope,
+  onRetrySubjects,
   onChange,
   onCancel,
   onSave,
@@ -808,6 +903,16 @@ function TeacherEditView({
   branchesLoading: boolean
   branchesError: string | null
   onRetryBranches: () => void
+  boardOptions: Array<{ label: string; value: string }>
+  standardOptions: Array<{ label: string; value: string }>
+  divisionOptions: Array<{ label: string; value: string }>
+  subjectOptions: Array<{ label: string; value: string }>
+  scopeLoading: boolean
+  subjectsLoading: boolean
+  scopeError: string | null
+  subjectsError: string | null
+  onRetryScope: () => void
+  onRetrySubjects: () => void
   onChange: <K extends keyof TeacherProfileApprovalDraft>(key: K, value: TeacherProfileApprovalDraft[K]) => void
   onCancel: () => void
   onSave: () => void
@@ -838,15 +943,73 @@ function TeacherEditView({
         disabled={branchesLoading || !branchOptions.length}
         placeholder={branchesLoading ? 'Loading branches' : 'Choose branch'}
         error={errors.branchId}
-        onChange={(value) => onChange('branchId', value)}
+        onChange={(value) => {
+          onChange('branchId', value)
+          onChange('board', '')
+          onChange('standardsTaught', [])
+          onChange('divisionsTaught', [])
+        }}
       />
       {branchesError ? (
         <InlineError message={branchesError} actionLabel="Retry" onAction={onRetryBranches} />
       ) : null}
-      <ProfileInput label="Board" value={draft.board} error={errors.board} onChangeText={(value) => onChange('board', value)} autoCapitalize="characters" returnKeyType="next" maxLength={100} />
-      <ProfileInput label="Standards" value={String(draft.standardsTaught)} error={errors.standardsTaught} onChangeText={(value) => onChange('standardsTaught', value)} placeholder="Std 9, Std 10" helper="Separate multiple standards with commas." returnKeyType="next" />
-      <ProfileInput label="Divisions" value={String(draft.divisionsTaught)} error={errors.divisionsTaught} onChangeText={(value) => onChange('divisionsTaught', value)} placeholder="A, B" helper="Use the division names configured by your school." returnKeyType="next" />
-      <ProfileInput label="Subjects" value={String(draft.subjectsTaught)} error={errors.subjectsTaught} onChangeText={(value) => onChange('subjectsTaught', value)} placeholder="Physics, Mathematics" helper="Separate multiple subjects with commas." returnKeyType="done" />
+      {boardOptions.length > 0 ? (
+        <SelectField
+          label="Board"
+          value={draft.board}
+          options={boardOptions}
+          loading={scopeLoading}
+          disabled={scopeLoading}
+          placeholder={scopeLoading ? 'Loading boards' : 'Choose board'}
+          error={errors.board}
+          onChange={(value) => onChange('board', value)}
+        />
+      ) : (
+        <ProfileInput
+          label="Board"
+          value={draft.board}
+          error={errors.board}
+          onChangeText={(value) => onChange('board', value)}
+          autoCapitalize="characters"
+          returnKeyType="next"
+          maxLength={100}
+          locked={scopeLoading}
+          helper={scopeLoading ? 'Loading the boards configured for this branch.' : 'No board list is configured, so enter the official board name.'}
+        />
+      )}
+      <MultiSelectField
+        label="Standards"
+        values={normalizeProfileList(draft.standardsTaught)}
+        options={standardOptions}
+        loading={scopeLoading}
+        disabled={scopeLoading || standardOptions.length === 0}
+        placeholder={scopeLoading ? 'Loading standards' : 'Choose standards'}
+        error={errors.standardsTaught}
+        onChange={(values) => onChange('standardsTaught', values)}
+      />
+      <MultiSelectField
+        label="Divisions"
+        values={normalizeProfileList(draft.divisionsTaught)}
+        options={divisionOptions}
+        loading={scopeLoading}
+        disabled={scopeLoading || normalizeProfileList(draft.standardsTaught).length === 0 || divisionOptions.length === 0}
+        placeholder={normalizeProfileList(draft.standardsTaught).length === 0 ? 'Choose standards first' : 'Choose divisions'}
+        error={errors.divisionsTaught}
+        onChange={(values) => onChange('divisionsTaught', values)}
+      />
+      <MultiSelectField
+        label="Subjects"
+        values={normalizeProfileList(draft.subjectsTaught)}
+        options={subjectOptions}
+        loading={subjectsLoading}
+        disabled={subjectsLoading || subjectOptions.length === 0}
+        placeholder={subjectsLoading ? 'Loading subjects' : 'Choose subjects'}
+        error={errors.subjectsTaught}
+        onChange={(values) => onChange('subjectsTaught', values)}
+      />
+
+      {scopeError ? <InlineError message={`Teaching scope could not load. ${scopeError}`} actionLabel="Retry" onAction={onRetryScope} /> : null}
+      {subjectsError ? <InlineError message={`Subjects could not load. ${subjectsError}`} actionLabel="Retry" onAction={onRetrySubjects} /> : null}
 
       {saveError ? <InlineError message={saveError} /> : null}
 

@@ -1,14 +1,16 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { navigateToCheckedPapers } = require(process.env.PAPER_RESULTS_NAVIGATION_PATH)
+const { navigateToCheckedPapers, returnToCheckedPapers } = require(process.env.PAPER_RESULTS_NAVIGATION_PATH)
 
-function navigator(routeNames, parent) {
+function navigator(routeNames, parent, canGoBack = false) {
   const calls = []
   return {
     calls,
+    canGoBack: () => canGoBack,
     getParent: () => parent,
     getState: () => ({ routeNames }),
+    goBack: () => calls.push(['goBack']),
     navigate: (...args) => calls.push(args),
   }
 }
@@ -36,4 +38,18 @@ test('returns false instead of locking the UI when no results route exists', () 
 
   assert.equal(navigateToCheckedPapers(papers, 'submission-1'), false)
   assert.deepEqual(papers.calls, [])
+})
+
+test('result back returns through the existing stack when history is available', () => {
+  const resultDetail = navigator(['ResultsList', 'ResultDetail'], undefined, true)
+
+  assert.equal(returnToCheckedPapers(resultDetail), true)
+  assert.deepEqual(resultDetail.calls, [['goBack']])
+})
+
+test('result back falls through to the staff checked-paper library without history', () => {
+  const staffWorkspace = navigator(['StaffWorkspace', 'StaffResults', 'ResultDetail'])
+
+  assert.equal(returnToCheckedPapers(staffWorkspace), true)
+  assert.deepEqual(staffWorkspace.calls, [['StaffResults', { screen: 'ResultsList' }]])
 })

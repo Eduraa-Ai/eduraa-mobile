@@ -160,6 +160,34 @@ export function normalizeProfileList(value: string | readonly string[]): string[
   return normalized
 }
 
+export type TeachingScopeOffering = {
+  standard: string
+  divisions: readonly string[]
+}
+
+export function teachingScopeOptions(
+  offerings: readonly TeachingScopeOffering[],
+  selectedStandards: string | readonly string[],
+) {
+  const standards = normalizeProfileList(offerings.map((offering) => offering.standard))
+  const selected = new Set(normalizeProfileList(selectedStandards))
+  const divisions = normalizeProfileList(
+    offerings
+      .filter((offering) => selected.has(offering.standard))
+      .flatMap((offering) => offering.divisions),
+  )
+  return { standards, divisions }
+}
+
+export function retainAvailableSelections(
+  selections: string | readonly string[],
+  available: readonly string[],
+) {
+  if (available.length === 0) return normalizeProfileList(selections)
+  const allowed = new Set(available)
+  return normalizeProfileList(selections).filter((selection) => allowed.has(selection))
+}
+
 export function validateTeacherApprovalDraft(draft: TeacherProfileApprovalDraft): TeacherDraftErrors {
   const errors: TeacherDraftErrors = {}
   const firstName = draft.firstName.trim()

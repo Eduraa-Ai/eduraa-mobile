@@ -268,14 +268,18 @@ export function resolvePaperScope(
     subjects.some((subject) => subject.id === selection.subjectId);
 
   if (sections.length === 0) {
+    const standards = uniqueBy(input.standards ?? [], standardKey).sort(compareStandards);
+    const divisions = uniqueBy(input.divisions ?? [], plainKey).sort((left, right) =>
+      left.localeCompare(right),
+    );
     const subjects = input.subjects ?? [];
     return {
-      standards: input.standards ?? [],
-      divisions: input.divisions ?? [],
+      standards,
+      divisions,
       subjects,
       selection: {
-        standard: selection.standard,
-        division: selection.division,
+        standard: pickOption(standards, selection.standard, standardKey),
+        division: pickOption(divisions, selection.division, plainKey),
         subjectId: subjectIsSelectable(subjects) ? selection.subjectId : "",
       },
     };

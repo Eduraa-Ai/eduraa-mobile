@@ -9,6 +9,8 @@ const attemptSource = fs.readFileSync(path.join(root, 'src/screens/papers/Attemp
 const listSource = fs.readFileSync(path.join(root, 'src/screens/papers/PapersScreen.tsx'), 'utf8')
 const apiSource = fs.readFileSync(path.join(root, 'src/api/papers.ts'), 'utf8')
 const resultDetailSource = fs.readFileSync(path.join(root, 'src/screens/results/ResultDetailScreen.tsx'), 'utf8')
+const checkedPaperWorkspaceSource = fs.readFileSync(path.join(root, 'src/screens/results/CheckedPaperWorkspaceScreen.tsx'), 'utf8')
+const resultsLibrarySource = fs.readFileSync(path.join(root, 'src/screens/results/CheckedPapersLibraryScreen.tsx'), 'utf8')
 const resultsNavigationSource = fs.readFileSync(path.join(root, 'src/navigation/paperResultsNavigation.ts'), 'utf8')
 
 test('paper detail keeps retest, download, and owned-paper delete in the top-right action area', () => {
@@ -59,5 +61,30 @@ test('submitted papers can always leave for learner or staff checked papers', ()
     detailSource,
     /navigateToCheckedPapers\(\s*navigation,\s*submittedAttempt\.id,?\s*\)/,
   )
-  assert.match(resultDetailSource, /const goBack = \(\) => navigation\.navigate\('ResultsList'\)/)
+  assert.match(resultDetailSource, /const goBack = \(\) => returnToCheckedPapers\(navigation\)/)
+  assert.match(checkedPaperWorkspaceSource, /const goBack = \(\) => returnToCheckedPapers\(navigation\)/)
+  assert.match(checkedPaperWorkspaceSource, /accessibilityLabel="Back to checked papers" onPress=\{goBack\}/)
+  assert.match(resultDetailSource, /navigation\.navigate\('CheckedPaperWorkspace', \{ checkedPaperId: id \}\)/)
+
+  assert.match(resultsLibrarySource, /navigation\.navigate\('CheckedPaperStatus', \{ checkedPaperId: paper\.id \}\)/)
+  assert.match(resultsLibrarySource, /navigation\.navigate\('CheckedPaperWorkspace'/)
+  assert.match(resultsLibrarySource, /navigation\.navigate\('ResultDetail', \{ checkedPaperId: paper\.id \}\)/)
+  assert.match(resultsLibrarySource, /needsInput \? `Check \$\{reviewCount \|\| ''\}`\.trim\(\) : 'View'/)
+})
+
+test('teacher checked-paper report states publication plainly', () => {
+  assert.match(resultDetailSource, /'Published to student\.'/)
+  assert.match(resultDetailSource, /'Suggested marks ready\.\\nNot published yet\.'/)
+  assert.match(resultDetailSource, /'Marks confirmed\.\\nNot published yet\.'/)
+  assert.match(resultDetailSource, /'Review and confirm marks'/)
+  assert.match(resultDetailSource, /'Continue to publish'/)
+  assert.match(resultDetailSource, /isStaff \? 'Teacher result' : 'Performance report'/)
+})
+
+test('terminal scan status cannot show ready before review data is available', () => {
+  const statusSource = fs.readFileSync(path.join(root, 'src/screens/workspace/CheckedPaperStatusScreen.tsx'), 'utf8')
+  assert.match(statusSource, /checkedPaperReviewExperienceStatus\(paper\) === 'checking'/)
+  assert.match(resultDetailSource, /checkedPaperReviewExperienceStatus\(data\)/)
+  assert.match(resultDetailSource, /isChecking\s*\n\s*\? 'Checking'/)
+  assert.match(resultDetailSource, /'Preparing review details'/)
 })
