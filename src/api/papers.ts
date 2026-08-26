@@ -215,11 +215,15 @@ export const papersApi = {
     return response.data;
   },
 
-  downloadPdf: async (paperId: string): Promise<DownloadedPdf> => {
+  downloadPdf: async (
+    paperId: string,
+    options?: { includeAnswers?: boolean },
+  ): Promise<DownloadedPdf> => {
+    const includeAnswers = options?.includeAnswers ?? false;
     const response = await apiClient.get<ArrayBuffer>(
       `/papers/${paperId}/export/pdf`,
       {
-        params: { include_answers: false },
+        params: { include_answers: includeAnswers },
         responseType: "arraybuffer",
         timeout: 120000,
       },
@@ -228,7 +232,9 @@ export const papersApi = {
       bytes: response.data,
       filename: downloadFilename(
         response.headers["content-disposition"],
-        `eduraa-paper-${paperId}.pdf`,
+        includeAnswers
+          ? `eduraa-paper-${paperId}-answer-key.pdf`
+          : `eduraa-paper-${paperId}.pdf`,
       ),
     };
   },
