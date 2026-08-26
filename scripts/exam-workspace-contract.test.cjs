@@ -53,12 +53,13 @@ test('scan options refresh when an exam or eligible paper changes', () => {
   const examsScreen = read('src/screens/workspace/ExamsScreen.tsx')
   const customPaperScreen = read('src/screens/papers/CustomPaperScreen.tsx')
   const paperDetailScreen = read('src/screens/papers/PaperDetailScreen.tsx')
+  const invalidatesScanOptions = /invalidateQueries\(\{\s*queryKey:\s*SCAN_UPLOAD_OPTIONS_QUERY_KEY,?\s*\}\)/
 
   assert.match(scanApi, /SCAN_UPLOAD_OPTIONS_QUERY_KEY = \['scan-upload', 'options'\] as const/)
   assert.match(scanScreen, /queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY/)
-  assert.match(examsScreen, /invalidateQueries\(\{ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY \}\)/)
-  assert.match(customPaperScreen, /invalidateQueries\(\{ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY \}\)/)
-  assert.match(paperDetailScreen, /invalidateQueries\(\{ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY \}\)/)
+  assert.match(examsScreen, invalidatesScanOptions)
+  assert.match(customPaperScreen, invalidatesScanOptions)
+  assert.match(paperDetailScreen, invalidatesScanOptions)
 })
 
 test('native scan uploads use Expo file-backed multipart while web keeps Axios', () => {
