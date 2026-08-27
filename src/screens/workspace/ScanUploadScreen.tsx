@@ -519,7 +519,7 @@ export default function ScanUploadScreen() {
   const assessmentComplete = assessmentSelected && Boolean(effectiveSubjectId)
   const identityComplete = isStudentRole(role) ? assessmentComplete : assessmentComplete && Boolean(selectedStudentId)
   const phaseCopy: Record<ScanUploadPhase, string> = {
-    preparing: 'Preparing your pages…', uploading: 'Uploading pages securely…', confirming: 'Upload sent. Waiting for confirmation…', checking: 'Pages received. Checking has started…',
+    preparing: 'Preparing your pages…', uploading: 'Uploading pages securely…', confirming: 'Upload sent. Waiting for confirmation…', checking: 'Pages received. Checking continues in the background…',
   }
   const uploadLocked = uploadMutation.isPending || Boolean(pendingUpload)
 
@@ -594,7 +594,7 @@ export default function ScanUploadScreen() {
               <View style={[styles.submitStatusIcon, readiness.ready && styles.submitStatusIconReady]}><Ionicons name={readiness.ready ? 'shield-checkmark' : 'lock-closed-outline'} size={18} color={readiness.ready ? colors.success : colors.textMuted} /></View>
               <View style={styles.submitCopy}><Text style={styles.submitTitle}>{uploadPhase ? phaseCopy[uploadPhase] : readiness.message}</Text><Text style={styles.submitMeta}>{files.length ? `${files.length} ${files.length === 1 ? 'file' : 'files'} · ${formatBytes(files.reduce((sum, file) => sum + (file.size ?? 0), 0))}` : 'Your draft is saved on this device.'}</Text></View>
             </View>
-            {uploadMutation.isPending ? uploadPhase === 'confirming' ? <AnimatedButton label="Confirming receipt…" variant="ghost" disabled onPress={() => undefined} /> : <AnimatedButton label={uploadPhase === 'checking' ? 'Stop waiting' : 'Cancel upload'} variant="ghost" onPress={() => uploadControllerRef.current?.abort()} /> : <AnimatedButton label="Upload answer sheet" disabled={!readiness.ready} onPress={() => startUpload()} />}
+            {uploadMutation.isPending ? uploadPhase === 'confirming' ? <AnimatedButton label="Confirming receipt…" variant="ghost" disabled onPress={() => undefined} /> : uploadPhase === 'checking' ? null : <AnimatedButton label="Cancel upload" variant="ghost" onPress={() => uploadControllerRef.current?.abort()} /> : <AnimatedButton label="Upload answer sheet" disabled={!readiness.ready} onPress={() => startUpload()} />}
           </>}
         </View>
       </View>
