@@ -25,6 +25,7 @@ const models = [
   'src/screens/workspace/approvalsModel.ts',
   'src/screens/workspace/announcementModel.ts',
   'src/screens/workspace/attendanceModel.ts',
+  'src/screens/workspace/dashboardModel.ts',
   'src/screens/workspace/doubtWorkspaceModel.ts',
   'src/screens/workspace/checkedPaperPipelineModel.ts',
   'src/screens/workspace/scanUploadModel.ts',
@@ -135,6 +136,10 @@ const suites = [
   {
     file: 'scripts/attendance-model.test.cjs',
     env: { ATTENDANCE_MODEL_PATH: path.join(outDir, 'screens/workspace/attendanceModel.js') },
+  },
+  {
+    file: 'scripts/dashboard-model.test.cjs',
+    env: { DASHBOARD_MODEL_PATH: path.join(outDir, 'screens/workspace/dashboardModel.js') },
   },
   {
     file: 'scripts/paper-detail-contract.test.cjs',

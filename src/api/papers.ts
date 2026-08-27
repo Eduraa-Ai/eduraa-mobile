@@ -17,6 +17,27 @@ import type {
   PaginatedResponse,
   Chapter,
 } from "../types";
+import type { PaperQuestionUpdatePayload } from "../screens/papers/paperDetailModel";
+
+export type PaperQuestionVisualFile = {
+  uri: string;
+  name: string;
+  type: string;
+  size?: number;
+  file?: File;
+};
+
+export type PaperInstructMessage = {
+  role: "user" | "ai";
+  text: string;
+};
+
+export type PaperInstructInput = {
+  instruction: string;
+  paperContext: string;
+  chatHistory: PaperInstructMessage[];
+  pendingInstruction?: string | null;
+};
 
 type JeeSyllabusResponse = {
   chapters?: Array<{
@@ -168,6 +189,70 @@ export const papersApi = {
 
   getById: async (paperId: string): Promise<Paper> => {
     const response = await apiClient.get<Paper>(`/papers/${paperId}`);
+    return normalizePaperQuestionVisuals(response.data);
+  },
+
+  updateQuestion: async (
+    paperId: string,
+    questionNumber: number,
+    data: PaperQuestionUpdatePayload,
+  ): Promise<Paper> => {
+    const response = await apiClient.patch<Paper>(
+      `/papers/${paperId}/questions/${questionNumber}`,
+      data,
+    );
+    return normalizePaperQuestionVisuals(response.data);
+  },
+
+  uploadQuestionVisual: async (
+    paperId: string,
+    questionNumber: number,
+    file: PaperQuestionVisualFile,
+  ): Promise<Paper> => {
+    const formData = new FormData();
+    if (file.file) {
+      formData.append("file", file.file, file.name);
+    } else {
+      formData.append("file", {
+        uri: file.uri,
+        name: file.name,
+        type: file.type,
+      } as unknown as Blob);
+    }
+    const response = await apiClient.post<Paper>(
+      `/papers/${paperId}/questions/${questionNumber}/visual`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return normalizePaperQuestionVisuals(response.data);
+  },
+
+  removeQuestionVisual: async (
+    paperId: string,
+    questionNumber: number,
+  ): Promise<Paper> => {
+    const response = await apiClient.patch<Paper>(
+      `/papers/${paperId}/questions/${questionNumber}`,
+      { visual_payload: null },
+    );
+    return normalizePaperQuestionVisuals(response.data);
+  },
+
+  runPaperInstruction: async (
+    paperId: string,
+    input: PaperInstructInput,
+  ): Promise<Paper> => {
+    const response = await apiClient.post<Paper>(
+      `/papers/${paperId}/instruct`,
+      {
+        instruction: input.instruction,
+        paper_context: input.paperContext,
+        chat_history: input.chatHistory.slice(-6),
+        pending_instruction: input.pendingInstruction || undefined,
+        dry_run: false,
+      },
+      { timeout: 240000 },
+    );
     return normalizePaperQuestionVisuals(response.data);
   },
 

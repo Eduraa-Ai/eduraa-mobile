@@ -43,6 +43,7 @@ import AgenticTopicScreen from '../screens/learning/AgenticTopicScreen'
 import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
 import CheatSheetsScreen from '../screens/learning/CheatSheetsScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
+import DashboardScreen from '../screens/workspace/DashboardScreen'
 import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
 import AttendanceScreen from '../screens/workspace/AttendanceScreen'
@@ -127,6 +128,7 @@ export type HomeStackParamList = {
 
 export type StaffWorkspaceStackParamList = {
   StaffWorkspace: undefined;
+  Dashboard: undefined;
   ClassTeacherOverview: undefined;
   ClassRoster: undefined;
   ClassSubjects: undefined;
@@ -445,6 +447,11 @@ function StaffWorkspaceNavigator() {
         name="StaffWorkspace"
         component={WorkspaceScreen}
         options={{ title: "Workspace" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{ title: "Dashboard" }}
       />
       <StaffWorkspaceStack.Screen
         name="ClassTeacherOverview"

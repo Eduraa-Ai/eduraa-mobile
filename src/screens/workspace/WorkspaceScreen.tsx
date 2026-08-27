@@ -102,6 +102,10 @@ export default function WorkspaceScreen() {
     const parent = navigation.getParent?.()
     const parentRoutes: string[] = parent?.getState?.().routeNames ?? []
 
+    if (control.id === 'dashboard') {
+      navigation.navigate('Dashboard')
+      return
+    }
     if (control.id === 'class-teacher') {
       navigation.navigate('ClassTeacherOverview')
       return
