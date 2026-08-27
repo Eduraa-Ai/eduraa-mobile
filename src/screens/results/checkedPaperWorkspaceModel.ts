@@ -100,3 +100,16 @@ export function clampReviewScore(value: number, maxScore?: number | null) {
 export function questionWorkspaceLabel(item: GradingResultItem, index: number) {
   return `Q${item.question_number ?? index + 1}`
 }
+
+export function formatCheckedPaperDuration(seconds?: number | null) {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '—'
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`
+  const wholeSeconds = Math.round(seconds)
+  const minutes = Math.floor(wholeSeconds / 60)
+  const remaining = wholeSeconds % 60
+  return `${minutes}m ${remaining.toString().padStart(2, '0')}s`
+}
+
+export function isLearningSupportInProgress(status?: string | null) {
+  return status === 'pending' || status === 'running'
+}

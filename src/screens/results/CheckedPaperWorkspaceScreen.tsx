@@ -29,7 +29,9 @@ import { checkedPaperScanPagePath } from '../../utils/protectedDocumentModel'
 import { answerDisplay, buildQuestionReview, questionStatus } from './checkedPaperDetailModel'
 import {
   clampReviewScore,
+  formatCheckedPaperDuration,
   initialQuestionIndex,
+  isLearningSupportInProgress,
   questionReviewHighlight,
   questionWorkspaceLabel,
 } from './checkedPaperWorkspaceModel'
@@ -82,6 +84,7 @@ export default function CheckedPaperWorkspaceScreen() {
   const [paneWidth, setPaneWidth] = useState<number | null>(null)
   const [scoreDraft, setScoreDraft] = useState('')
   const [feedbackDraft, setFeedbackDraft] = useState('')
+  const [timingExpanded, setTimingExpanded] = useState(false)
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
   const goBack = () => returnToCheckedPapers(navigation)
 
@@ -96,6 +99,7 @@ export default function CheckedPaperWorkspaceScreen() {
     queryKey: ['checked-paper', params.checkedPaperId],
     queryFn: () => checkedPapersApi.getById(params.checkedPaperId),
     enabled: Boolean(params.checkedPaperId),
+    refetchInterval: (query) => isLearningSupportInProgress(query.state.data?.learning_support_status) ? 3000 : false,
   })
   const pageCountQuery = useQuery({
     queryKey: ['checked-paper', params.checkedPaperId, 'scan-pages'],
@@ -113,6 +117,7 @@ export default function CheckedPaperWorkspaceScreen() {
   const highlight = useMemo(() => questionReviewHighlight(item), [item])
   const pageCount = Math.max(1, pageCountQuery.data ?? 1)
   const canEdit = Boolean(isStaff && paperQuery.data?.can_save_review && !paperQuery.data.legacy_read_only)
+  const processingTiming = paperQuery.data?.processing_timing
   const scanViewportWidth = Math.max(280, Math.min((paneWidth ?? width) - spacing[6], 620))
   const displayWidth = scanViewportWidth * zoom
   const imageHeight = displayWidth * naturalRatio
@@ -273,6 +278,63 @@ export default function CheckedPaperWorkspaceScreen() {
         </View>
       </View>
 
+      {isStaff && processingTiming?.stages.length ? (
+        <View style={styles.timingPanel}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={timingExpanded ? 'Hide checking time breakdown' : 'View checking time breakdown'}
+            accessibilityState={{ expanded: timingExpanded }}
+            onPress={() => setTimingExpanded((value) => !value)}
+            style={styles.timingSummary}
+          >
+            <View style={styles.timingTitleRow}>
+              <Ionicons name="time-outline" size={17} color={colors.accentStrong} />
+              <Text style={styles.timingTitle}>
+                {processingTiming.total_seconds != null
+                  ? `Checked in ${formatCheckedPaperDuration(processingTiming.total_seconds)}`
+                  : 'Checking time in progress'}
+              </Text>
+            </View>
+            <View style={styles.timingAction}>
+              <Text style={styles.timingActionText}>{timingExpanded ? 'Hide' : 'Breakdown'}</Text>
+              <Ionicons name={timingExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+            </View>
+          </Pressable>
+          {timingExpanded ? (
+            <View style={styles.timingDetails}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timingStages}>
+                {processingTiming.stages.map((stage) => (
+                  <View key={stage.key} style={styles.timingStageCard}>
+                    <View style={styles.timingStageHeading}>
+                      <Text numberOfLines={1} style={styles.timingStageLabel}>{stage.label}</Text>
+                      <Text style={styles.timingStageTotal}>{formatCheckedPaperDuration(stage.total_seconds)}</Text>
+                    </View>
+                    {stage.queue_seconds != null && stage.execution_seconds != null ? (
+                      <Text numberOfLines={1} style={styles.timingStageMeta}>
+                        Ready {formatCheckedPaperDuration(stage.queue_seconds)} / Work {formatCheckedPaperDuration(stage.execution_seconds)}
+                      </Text>
+                    ) : (
+                      <Text style={styles.timingStageProgress}>In progress</Text>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+              {isLearningSupportInProgress(paper.learning_support_status) ? (
+                <View style={styles.learningSupportNote}>
+                  <ActivityIndicator size="small" color={colors.accentStrong} />
+                  <Text style={styles.learningSupportText}>Optional learning insights are being prepared. Marks and feedback are already ready.</Text>
+                </View>
+              ) : paper.learning_support_status === 'failed' ? (
+                <View style={styles.learningSupportNote}>
+                  <Ionicons name="information-circle-outline" size={17} color={colors.textMuted} />
+                  <Text style={styles.learningSupportText}>Marks and feedback are ready. Optional learning insights could not be prepared.</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.questionBar}>
         <Pressable accessibilityRole="button" accessibilityLabel="Previous question" accessibilityState={{ disabled: questionIndex === 0 }} disabled={questionIndex === 0} onPress={() => selectQuestion(questionIndex - 1)} style={[styles.navButton, questionIndex === 0 && styles.disabled]}>
           <Ionicons name="chevron-back" size={17} color={colors.text} />
@@ -409,6 +471,22 @@ const styles = StyleSheet.create({
   progressTrack: { flex: 1, height: 4, borderRadius: radius.full, overflow: 'hidden', backgroundColor: colors.backgroundMuted },
   progressFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.accent },
   releaseText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, textTransform: 'uppercase' },
+  timingPanel: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#f8fafc' },
+  timingSummary: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], paddingHorizontal: spacing[4] },
+  timingTitleRow: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  timingTitle: { flexShrink: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  timingAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  timingActionText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, textTransform: 'uppercase' },
+  timingDetails: { borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: spacing[3], gap: spacing[3] },
+  timingStages: { gap: spacing[2], paddingHorizontal: spacing[4] },
+  timingStageCard: { width: 148, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
+  timingStageHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
+  timingStageLabel: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  timingStageTotal: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 11 },
+  timingStageMeta: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 8, marginTop: spacing[1] },
+  timingStageProgress: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8, marginTop: spacing[1] },
+  learningSupportNote: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[4] },
+  learningSupportText: { flex: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 14 },
   questionBar: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#fffdf9', paddingHorizontal: spacing[1] },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.32 },

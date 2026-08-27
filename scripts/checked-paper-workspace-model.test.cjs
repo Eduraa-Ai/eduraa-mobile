@@ -62,3 +62,19 @@ test('opens the first unanswered teacher check when no question was linked', () 
   ]
   assert.equal(model.initialQuestionIndex(questions), 1)
 })
+
+test('formats total and stage timings consistently with the website', () => {
+  assert.equal(model.formatCheckedPaperDuration(null), '—')
+  assert.equal(model.formatCheckedPaperDuration(-1), '—')
+  assert.equal(model.formatCheckedPaperDuration(8.25), '8.3s')
+  assert.equal(model.formatCheckedPaperDuration(43.05), '43s')
+  assert.equal(model.formatCheckedPaperDuration(181), '3m 01s')
+})
+
+test('polls only while optional learning support is being prepared', () => {
+  assert.equal(model.isLearningSupportInProgress('pending'), true)
+  assert.equal(model.isLearningSupportInProgress('running'), true)
+  assert.equal(model.isLearningSupportInProgress('ready'), false)
+  assert.equal(model.isLearningSupportInProgress('failed'), false)
+  assert.equal(model.isLearningSupportInProgress(null), false)
+})

@@ -426,6 +426,25 @@ export interface CheckedPaperProcessingBlocker {
   resolved_by_teacher?: boolean;
 }
 
+export interface CheckedPaperStageTiming {
+  key: string;
+  label: string;
+  status?: string | null;
+  queued_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  queue_seconds?: number | null;
+  execution_seconds?: number | null;
+  total_seconds?: number | null;
+}
+
+export interface CheckedPaperProcessingTiming {
+  started_at?: string | null;
+  completed_at?: string | null;
+  total_seconds?: number | null;
+  stages: CheckedPaperStageTiming[];
+}
+
 export interface GradingResultItem {
   result_id?: string | null;
   question_id: string;
@@ -546,6 +565,9 @@ export interface CheckedPaper {
   published_by?: string | null;
   processing_stage?: string | null;
   processing_blockers?: CheckedPaperProcessingBlocker[];
+  processing_timing?: CheckedPaperProcessingTiming | null;
+  learning_support_status?: string | null;
+  learning_support_completed_at?: string | null;
   release_evaluation_status?: string | null;
   identity_resolved?: boolean;
   can_save_review?: boolean;
