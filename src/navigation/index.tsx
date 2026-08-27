@@ -1,5 +1,5 @@
 import React from 'react'
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { NavigationContainer, type LinkingOptions, type NavigatorScreenParams } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
@@ -33,6 +33,7 @@ import QuizScreen from '../screens/papers/QuizScreen'
 import ResultsScreen from '../screens/results/ResultsScreen'
 import ResultDetailScreen from '../screens/results/ResultDetailScreen'
 import QuestionEvidenceScreen from '../screens/results/QuestionEvidenceScreen'
+import CheckedPaperWorkspaceScreen from '../screens/results/CheckedPaperWorkspaceScreen'
 import CompetitiveExamScreen from '../screens/learning/CompetitiveExamScreen'
 import CompetitiveSubjectScreen from '../screens/learning/CompetitiveSubjectScreen'
 import CompetitiveChapterScreen from '../screens/learning/CompetitiveChapterScreen'
@@ -42,6 +43,7 @@ import AgenticTopicScreen from '../screens/learning/AgenticTopicScreen'
 import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
 import CheatSheetsScreen from '../screens/learning/CheatSheetsScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
+import DashboardScreen from '../screens/workspace/DashboardScreen'
 import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
 import AttendanceScreen from '../screens/workspace/AttendanceScreen'
@@ -90,6 +92,8 @@ export type PapersStackParamList = {
 export type ResultsStackParamList = {
   ResultsList: undefined;
   ResultDetail: { submissionId?: string; checkedPaperId?: string };
+  CheckedPaperStatus: { checkedPaperId: string };
+  CheckedPaperWorkspace: { checkedPaperId: string; questionId?: string; questionIndex?: number };
   QuestionEvidence: {
     checkedPaperId: string;
     questionId?: string;
@@ -124,6 +128,7 @@ export type HomeStackParamList = {
 
 export type StaffWorkspaceStackParamList = {
   StaffWorkspace: undefined;
+  Dashboard: undefined;
   ClassTeacherOverview: undefined;
   ClassRoster: undefined;
   ClassSubjects: undefined;
@@ -134,6 +139,7 @@ export type StaffWorkspaceStackParamList = {
   Attendance: undefined;
   ScanUpload: ScanUploadParams;
   CheckedPaperStatus: { checkedPaperId: string };
+  CheckedPaperWorkspace: { checkedPaperId: string; questionId?: string; questionIndex?: number };
   Exams: undefined;
   Announcements: { announcementId?: string } | undefined;
   Doubts: { doubtId?: string } | undefined;
@@ -170,7 +176,7 @@ export type StaffTabParamList = {
   StaffAttendance: undefined;
   StaffScanUpload: undefined;
   StaffExams: undefined;
-  StaffPapers: undefined;
+  StaffPapers: NavigatorScreenParams<PapersStackParamList> | undefined;
   StaffPreviousPapers: undefined;
   StaffResults: undefined;
   StaffAIStudio: undefined;
@@ -209,11 +215,13 @@ const linking: LinkingOptions<any> = {
       StaffHome: {
         screens: {
           Doubts: 'teacher/doubts/:doubtId?',
+          CheckedPaperWorkspace: 'teacher/results/checked/:checkedPaperId/review',
         },
       },
       Results: {
         screens: {
           ResultDetail: 'results/checked/:checkedPaperId',
+          CheckedPaperWorkspace: 'results/checked/:checkedPaperId/review',
         },
       },
     },
@@ -235,6 +243,24 @@ const stackScreenOptions = {
     backgroundColor: colors.background,
   },
 };
+
+function CustomPaperHeaderBackButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Back to generate paper"
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.customPaperBack,
+        pressed && styles.customPaperBackPressed,
+      ]}
+    >
+      <Ionicons name="chevron-back" size={20} color={colors.text} />
+      <Text style={styles.customPaperBackText}>Back</Text>
+    </Pressable>
+  )
+}
 
 function AuthNavigator() {
   return (
@@ -272,7 +298,18 @@ function PapersNavigator() {
       <PapersStack.Screen
         name="CustomPaper"
         component={CustomPaperScreen}
-        options={{ title: "Custom paper" }}
+        options={({ navigation }) => ({
+          title: "Custom paper",
+          headerBackVisible: false,
+          headerLeft: () => (
+            <CustomPaperHeaderBackButton
+              onPress={() => {
+                if (navigation.canGoBack()) navigation.goBack()
+                else navigation.navigate('GeneratePaper')
+              }}
+            />
+          ),
+        })}
       />
       <PapersStack.Screen
         name="PaperDetail"
@@ -307,8 +344,18 @@ function ResultsNavigator() {
         options={{ headerShown: false }}
       />
       <ResultsStack.Screen
+        name="CheckedPaperStatus"
+        component={CheckedPaperStatusScreen}
+        options={{ title: 'Paper status' }}
+      />
+      <ResultsStack.Screen
         name="QuestionEvidence"
         component={QuestionEvidenceScreen}
+        options={{ headerShown: false }}
+      />
+      <ResultsStack.Screen
+        name="CheckedPaperWorkspace"
+        component={CheckedPaperWorkspaceScreen}
         options={{ headerShown: false }}
       />
     </ResultsStack.Navigator>
@@ -402,6 +449,11 @@ function StaffWorkspaceNavigator() {
         options={{ title: "Workspace" }}
       />
       <StaffWorkspaceStack.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{ title: "Dashboard" }}
+      />
+      <StaffWorkspaceStack.Screen
         name="ClassTeacherOverview"
         component={ClassTeacherOverviewScreen}
         options={{ title: "My class" }}
@@ -479,7 +531,18 @@ function StaffWorkspaceNavigator() {
       <StaffWorkspaceStack.Screen
         name="StaffCustomPaper"
         component={CustomPaperScreen}
-        options={{ title: "Custom paper" }}
+        options={({ navigation }) => ({
+          title: "Custom paper",
+          headerBackVisible: false,
+          headerLeft: () => (
+            <CustomPaperHeaderBackButton
+              onPress={() => {
+                if (navigation.canGoBack()) navigation.goBack()
+                else navigation.navigate('StaffGeneratePaper')
+              }}
+            />
+          ),
+        })}
       />
       <StaffWorkspaceStack.Screen
         name="StaffPapers"
@@ -499,6 +562,11 @@ function StaffWorkspaceNavigator() {
       <StaffWorkspaceStack.Screen
         name="QuestionEvidence"
         component={QuestionEvidenceScreen}
+        options={{ headerShown: false }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="CheckedPaperWorkspace"
+        component={CheckedPaperWorkspaceScreen}
         options={{ headerShown: false }}
       />
     </StaffWorkspaceStack.Navigator>
@@ -705,6 +773,24 @@ export default function RootNavigator({
 }
 
 const styles = StyleSheet.create({
+  customPaperBack: {
+    minWidth: 64,
+    minHeight: 44,
+    marginLeft: -spacing[2],
+    paddingHorizontal: spacing[2],
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    borderRadius: 14,
+  },
+  customPaperBackPressed: {
+    backgroundColor: colors.backgroundTint,
+  },
+  customPaperBackText: {
+    color: colors.text,
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+  },
   loadingRoot: {
     flex: 1,
     alignItems: "center",

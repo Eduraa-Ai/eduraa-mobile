@@ -1,0 +1,4 @@
+interface:
+  display_name: "Start Mobile"
+  short_description: "Start Eduraa Mobile and return a fresh QR"
+  default_prompt: "Use $start-mobile to launch Eduraa Mobile in Expo Go and give me a fresh QR code."

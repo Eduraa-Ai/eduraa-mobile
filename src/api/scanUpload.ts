@@ -36,6 +36,7 @@ export interface ScanUploadFile {
   uri: string
   name: string
   type: string
+  size?: number | null
   file?: File
 }
 
@@ -46,7 +47,11 @@ export interface ScanUploadPayload {
   studentId?: string | null
   uploadMode?: string | null
   files: ScanUploadFile[]
+  signal?: AbortSignal
+  onPhase?: (phase: ScanUploadPhase) => void
 }
+
+export type ScanUploadPhase = 'preparing' | 'uploading' | 'confirming'
 
 function appendOptional(formData: FormData, key: string, value?: string | null) {
   if (value) formData.append(key, value)
@@ -107,13 +112,19 @@ function uploadError(detail: string, status?: number) {
 async function uploadNative(payload: ScanUploadPayload) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 120000)
+  const abortFromCaller = () => controller.abort()
+  payload.signal?.addEventListener('abort', abortFromCaller, { once: true })
 
   try {
+    payload.onPhase?.('preparing')
+    const body = buildFormData(payload, true)
+    payload.onPhase?.('uploading')
     const response = await authenticatedFetch(`${API_BASE_URL}/api/v1/checked-papers/scan`, {
       method: 'POST',
-      body: buildFormData(payload, true),
+      body,
       signal: controller.signal,
     })
+    payload.onPhase?.('confirming')
     const data = await response.json().catch(() => null)
     if (!response.ok) {
       throw uploadError(responseDetail(data, 'The upload was not accepted. Please check the selections and try again.'), response.status)
@@ -121,12 +132,16 @@ async function uploadNative(payload: ScanUploadPayload) {
     return data as CheckedPaper
   } catch (error) {
     if (controller.signal.aborted) {
+      if (payload.signal?.aborted) {
+        throw uploadError('Upload cancelled. Your selections and pages are still here.')
+      }
       throw uploadError('The upload took too long. Your selections are still here; check your connection and try again.')
     }
     if ((error as { response?: unknown }).response) throw error
     throw uploadError('Eduraa could not receive the scan. Check your connection and try again; your selections are still here.')
   } finally {
     clearTimeout(timeout)
+    payload.signal?.removeEventListener('abort', abortFromCaller)
   }
 }
 
@@ -139,13 +154,19 @@ export const scanUploadApi = {
   async upload(payload: ScanUploadPayload) {
     if (Platform.OS !== 'web') return uploadNative(payload)
 
+    payload.onPhase?.('preparing')
     const formData = buildFormData(payload, false)
+    payload.onPhase?.('uploading')
 
     const response = await apiClient.post<CheckedPaper>('/checked-papers/scan', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
       timeout: 120000,
+      signal: payload.signal,
+      onUploadProgress: (event) => {
+        payload.onPhase?.(event.loaded < (event.total ?? Number.POSITIVE_INFINITY) ? 'uploading' : 'confirming')
+      },
     })
     return response.data
   },

@@ -113,6 +113,7 @@ export type PaperStatus = "draft" | "published" | "archived";
 export interface MCQOption {
   id: string;
   text: string;
+  is_correct?: boolean;
 }
 
 export interface MatchColumnsOptions {
@@ -148,7 +149,7 @@ export interface QuestionInPaper {
   difficulty: Difficulty;
   marks: number;
   options?: MCQOption[] | MatchColumnsOptions;
-  answer_key?: string | Record<string, string>;
+  answer_key?: string | Record<string, string> | unknown[];
   marking_rubric?: RubricItem[];
   topic_id?: string;
   topic_name?: string;
@@ -180,6 +181,16 @@ export interface Paper {
   generation_config?: Record<string, unknown>;
   created_at: string;
   questions: QuestionInPaper[];
+  clarify?: {
+    pending_action?: string;
+    pending_spec?: Record<string, unknown>;
+    questions: Array<{
+      field: string;
+      prompt: string;
+      chips?: Array<{ label: string; value: string }>;
+      allow_custom?: boolean;
+    }>;
+  } | null;
 }
 
 export interface PaperListItem {
@@ -189,6 +200,7 @@ export interface PaperListItem {
   subject_name?: string;
   standard?: string | null;
   division?: string | null;
+  semester?: string | null;
   category?: string | null;
   total_marks: number;
   duration_minutes?: number | null;
@@ -202,6 +214,7 @@ export interface PaperGenerateRequest {
   subject_id: string;
   chapter_ids: string[];
   difficulty: Difficulty;
+  language?: string;
   title_line_1: string;
   title_line_2?: string;
   semester?: string;
@@ -395,14 +408,41 @@ export type CheckedPaperStatus =
 export interface CheckedPaperProcessingBlocker {
   issue_id: string;
   code: string;
-  message: string;
+  message?: string;
   stage: string;
   resolvable_by_teacher: boolean;
+  resolution?: string;
   page_ids?: string[];
   page_numbers?: number[];
   occurrence_ids?: string[];
+  question_ids?: string[];
   attempt_ids?: string[];
+  category?: 'upload' | 'integrity' | 'evidence' | 'mapping' | 'grading' | 'release' | string;
+  scope?: 'paper' | 'pages' | 'questions' | string;
+  title?: string;
+  recommended_action?: string;
+  blocks_confirmation?: boolean;
+  blocks_publication?: boolean;
   resolved_by_teacher?: boolean;
+}
+
+export interface CheckedPaperStageTiming {
+  key: string;
+  label: string;
+  status?: string | null;
+  queued_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  queue_seconds?: number | null;
+  execution_seconds?: number | null;
+  total_seconds?: number | null;
+}
+
+export interface CheckedPaperProcessingTiming {
+  started_at?: string | null;
+  completed_at?: string | null;
+  total_seconds?: number | null;
+  stages: CheckedPaperStageTiming[];
 }
 
 export interface GradingResultItem {
@@ -417,6 +457,7 @@ export interface GradingResultItem {
   question_type?: string | null;
   response?: unknown;
   student_answer?: unknown;
+  student_answer_summary?: string | null;
   selected_answer?: unknown;
   expected_answer?: unknown;
   options?: unknown;
@@ -431,6 +472,9 @@ export interface GradingResultItem {
   selected?: boolean | null;
   attempt_ids?: string[] | null;
   evidence_citations?: unknown[] | null;
+  highlight_region?: unknown;
+  highlight_regions?: unknown[] | null;
+  answer_image_bbox?: unknown;
   score?: number | null;
   max_score?: number | null;
   feedback?: string | null;
@@ -521,6 +565,9 @@ export interface CheckedPaper {
   published_by?: string | null;
   processing_stage?: string | null;
   processing_blockers?: CheckedPaperProcessingBlocker[];
+  processing_timing?: CheckedPaperProcessingTiming | null;
+  learning_support_status?: string | null;
+  learning_support_completed_at?: string | null;
   release_evaluation_status?: string | null;
   identity_resolved?: boolean;
   can_save_review?: boolean;

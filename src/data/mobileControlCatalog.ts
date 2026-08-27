@@ -42,7 +42,7 @@ export const mobileControls: MobileControl[] = [
     icon: 'grid',
     section: 'core',
     nativeStatus: 'partial',
-    target: { kind: 'tab', tab: 'Home' },
+    target: { kind: 'detail' },
   },
   {
     id: 'approvals',
@@ -60,7 +60,7 @@ export const mobileControls: MobileControl[] = [
     label: 'Generate',
     webPath: '/generate-paper',
     roles: ['teacher', 'admin', 'student', 'b2c_student'],
-    description: 'Generate AI question papers from course, subject, chapter, and prompt controls.',
+    description: 'Generate AI question papers, then review, edit, reshape, and add question visuals before publishing.',
     icon: 'flash',
     section: 'core',
     nativeStatus: 'native',

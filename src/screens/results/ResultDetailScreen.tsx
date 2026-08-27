@@ -13,6 +13,7 @@ import { prefetchAgenticLearning } from '../../api/agenticLearning'
 import { isLearnerRole } from '../../auth/roles'
 import { AuthLogoMark, MathText } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
+import { returnToCheckedPapers } from '../../navigation/paperResultsNavigation'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
 import type { GradingResultItem } from '../../types'
@@ -20,7 +21,6 @@ import { downloadCheckedPaperPdf } from '../../utils/openProtectedDocument'
 import {
   answerDisplay,
   buildCheckedPaperReport,
-  buildCheckingEstimate,
   CHECKED_PAPER_POLL_INTERVAL_MS,
   checkedPaperTitle,
   formatReportDate,
@@ -34,7 +34,7 @@ import {
   unreadQuestionReviewResponseItems,
 } from './checkedPaperDetailModel'
 import { loadSeenReviewResponseKeys } from './reviewNotificationState'
-import { CHECKED_PAPER_EXPERIENCE_LABELS, checkedPaperExperienceStatus } from '../workspace/checkedPaperPipelineModel'
+import { CHECKED_PAPER_EXPERIENCE_LABELS, buildTeacherPaperDecision, checkedPaperExperienceStatus, checkedPaperReviewExperienceStatus, checkingStageLabel } from '../workspace/checkedPaperPipelineModel'
 
 type Route = RouteProp<ResultsStackParamList, 'ResultDetail'>
 type Nav = NativeStackNavigationProp<ResultsStackParamList, 'ResultDetail'>
@@ -50,47 +50,43 @@ function ReportScoreRing({
   percent,
   score,
   max,
+  checking,
   checkingPercent,
-  checkingEstimated,
-  checkingOverdue,
   checkingPaused,
+  checkingStage,
 }: {
   percent: number | null
   score: number | null
   max: number | null
-  checkingPercent: number
-  checkingEstimated: boolean
-  checkingOverdue: boolean
+  checking: boolean
+  checkingPercent: number | null
   checkingPaused: boolean
+  checkingStage: string
 }) {
   const size = 88
   const stroke = 7
   const ringRadius = (size - stroke) / 2
   const circumference = Math.PI * 2 * ringRadius
-  const isChecking = percent == null
-  const progress = percent ?? checkingPercent
-  const checkingValue = `${Math.round(checkingPercent)}%`
+  const isChecking = checking
+  const progress = isChecking ? checkingPercent ?? 0 : percent ?? 0
+  const checkingValue = checkingPercent == null ? '…' : `${Math.round(checkingPercent)}%`
   const checkingLabel = checkingPaused
     ? 'RETRYING'
-    : checkingOverdue
-      ? 'STILL CHECKING'
-      : checkingEstimated
-        ? 'EST. CHECKED'
-        : 'CHECKED'
+    : 'CHECKING'
   return (
     <View
       style={styles.scoreRing}
       accessibilityLabel={isChecking
         ? checkingPaused
           ? 'Checking progress paused while Eduraa retries the connection'
-          : checkingOverdue
-            ? 'Still checking, taking longer than the original estimate'
-            : `Checking progress, ${checkingEstimated ? 'estimated ' : ''}${Math.round(checkingPercent)} percent complete`
+          : checkingPercent == null
+            ? checkingStage
+            : `${checkingStage}, ${Math.round(checkingPercent)} percent complete`
         : `${percent} percent, ${score} out of ${max} marks`}
     >
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Circle cx={size / 2} cy={size / 2} r={ringRadius} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={stroke} />
-        <Circle
+        {!isChecking || checkingPercent != null ? <Circle
           cx={size / 2}
           cy={size / 2}
           r={ringRadius}
@@ -102,13 +98,13 @@ function ReportScoreRing({
           strokeDashoffset={circumference - (Math.max(0, Math.min(100, progress)) / 100) * circumference}
           rotation="-90"
           origin={`${size / 2}, ${size / 2}`}
-        />
+        /> : null}
       </Svg>
       <View style={styles.scoreRingCenter}>
         <Text style={styles.scoreRingPercent}>
-          {isChecking ? checkingValue : `${percent}%`}
+          {isChecking ? checkingValue : percent == null ? '—' : `${percent}%`}
         </Text>
-        <Text style={styles.scoreRingMarks}>{isChecking ? checkingLabel : `${score ?? '-'} / ${max ?? '-'}`}</Text>
+        <Text style={styles.scoreRingMarks}>{isChecking ? checkingLabel : percent == null ? 'NEEDS INPUT' : `${score ?? '-'} / ${max ?? '-'}`}</Text>
       </View>
     </View>
   )
@@ -189,7 +185,6 @@ export default function ResultDetailScreen() {
   const id = params.checkedPaperId || params.submissionId || ''
   const focusedOnce = useRef(false)
   const completionNotified = useRef(false)
-  const [progressClock, setProgressClock] = useState(() => Date.now())
   const [manualRefreshing, setManualRefreshing] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -222,38 +217,31 @@ export default function ResultDetailScreen() {
   }, [id, isStaff, refetch, user?.id]))
 
   const report = useMemo(() => data ? buildCheckedPaperReport(data) : null, [data])
+  const teacherDecision = useMemo(() => data ? buildTeacherPaperDecision(data) : null, [data])
   const isChecking = Boolean(data && isCheckedPaperChecking(data))
+  const pipelineExperienceStatus = data ? checkedPaperExperienceStatus(data) : 'checking'
+  const experienceStatus = data ? checkedPaperReviewExperienceStatus(data) : 'checking'
+  const needsInput = experienceStatus === 'needs_input'
   const checkFailed = Boolean(data && isCheckedPaperCheckFailed(data))
   const reportedCheckingPercent = typeof data?.checking_progress_percent === 'number'
     && Number.isFinite(data.checking_progress_percent)
     ? Math.max(0, Math.min(100, Math.round(data.checking_progress_percent)))
     : null
-  const checkingEstimate = useMemo(
-    () => buildCheckingEstimate(data?.created_at, progressClock),
-    [data?.created_at, progressClock],
-  )
-  const checkingPercent = reportedCheckingPercent ?? checkingEstimate.percent
-  const checkingProgressEstimated = reportedCheckingPercent == null
+  const checkingPercent = reportedCheckingPercent
+  const checkingStage = isChecking && pipelineExperienceStatus === 'ready_for_review'
+    ? 'Preparing review details'
+    : checkingStageLabel(data?.status, data?.processing_stage)
   const pollingIssue = isChecking && isError
   const checkingContextLabel = pollingIssue
     ? 'Connection status'
-    : checkingProgressEstimated && checkingEstimate.isOverdue
-      ? 'Grading status'
-      : checkingProgressEstimated
-        ? 'Estimated progress'
-        : 'Checking progress'
+    : reportedCheckingPercent == null
+      ? 'Current stage'
+      : 'Checking progress'
   const checkingContextValue = pollingIssue
     ? 'Retrying'
-    : checkingProgressEstimated && checkingEstimate.isOverdue
-      ? 'Still checking'
+    : reportedCheckingPercent == null
+      ? checkingStage
       : 'Checking'
-
-  useEffect(() => {
-    if (!isChecking || reportedCheckingPercent != null) return undefined
-    setProgressClock(Date.now())
-    const timer = setInterval(() => setProgressClock(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [isChecking, reportedCheckingPercent])
 
   useEffect(() => {
     if (!data || isChecking || completionNotified.current || report?.percent == null) return
@@ -262,7 +250,7 @@ export default function ResultDetailScreen() {
     const topicIds = (data.grading_results ?? []).map((item) => item.topic_id || '').filter(Boolean)
     void prefetchAgenticLearning(queryClient, data.id, topicIds)
   }, [data, isChecking, queryClient, report?.percent])
-  const goBack = () => navigation.navigate('ResultsList')
+  const goBack = () => returnToCheckedPapers(navigation)
   const refreshManually = async () => {
     if (manualRefreshing) return
     setManualRefreshing(true)
@@ -278,7 +266,7 @@ export default function ResultDetailScreen() {
     questionIndex: index,
   })
   const openPaperWorkspace = () => {
-    if (isStaff) navigation.getParent()?.navigate('StaffPapers')
+    if (isStaff) navigation.navigate('CheckedPaperWorkspace', { checkedPaperId: id })
     else navigation.getParent()?.navigate('Home', {
       screen: 'AgenticLearning',
       params: { origin: 'checked-paper', checkedPaperId: id },
@@ -314,7 +302,7 @@ export default function ResultDetailScreen() {
     )
   }
 
-  if (checkFailed) {
+  if (checkFailed && !isStaff) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
         <View style={styles.stateSurface}>
@@ -350,11 +338,56 @@ export default function ResultDetailScreen() {
       questionIndex: target.index,
     })
   }
+  const resultPublished = Boolean(data.results_published || data.release_status === 'published')
+  const marksApproved = data.approval_status === 'approved'
+  const teacherReleaseStage = resultPublished
+    ? 'Published'
+    : 'Not published'
   const statusLabel = pollingIssue
     ? 'Checking'
-    : isChecking && checkingProgressEstimated && checkingEstimate.isOverdue
+    : isChecking
       ? 'Checking'
-      : CHECKED_PAPER_EXPERIENCE_LABELS[checkedPaperExperienceStatus(data)]
+      : isStaff && !isChecking
+        ? teacherReleaseStage
+        : isStaff && needsInput && teacherDecision
+          ? teacherDecision.statusLabel
+          : CHECKED_PAPER_EXPERIENCE_LABELS[experienceStatus]
+  const reportHeadline = isStaff && !isChecking
+    ? resultPublished
+      ? 'Published to student.'
+      : marksApproved
+        ? 'Marks confirmed.\nNot published yet.'
+        : needsInput && teacherDecision
+          ? `${teacherDecision.title}.\nNot published yet.`
+          : 'Suggested marks ready.\nNot published yet.'
+    : report.headline
+  const diagnosisTitle = isStaff && !isChecking
+    ? resultPublished
+      ? 'The student can see this result.'
+      : marksApproved
+        ? 'Ready to publish.'
+        : needsInput && teacherDecision
+          ? teacherDecision.title
+          : 'Students cannot see this result yet.'
+    : report.diagnosisTitle
+  const diagnosisBody = isStaff && !isChecking
+    ? resultPublished
+      ? 'The confirmed marks and feedback are now visible to the student.'
+      : marksApproved
+        ? 'The marks are confirmed and remain private until you publish them.'
+        : needsInput && teacherDecision
+          ? `${teacherDecision.body} The result remains private until it is published.`
+          : 'Review the suggested marks, confirm the result, then publish it when ready.'
+    : report.diagnosisBody
+  const primaryActionLabel = isStaff
+    ? resultPublished
+      ? 'View checked answers'
+      : marksApproved
+        ? 'Continue to publish'
+        : needsInput && teacherDecision
+          ? teacherDecision.actionLabel
+          : 'Review and confirm marks'
+    : 'Start a focused repair'
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
@@ -408,25 +441,25 @@ export default function ResultDetailScreen() {
             </View>
           ) : null}
           <LinearGradient colors={['#07152d', '#0b1830', '#0d1a33']} style={styles.hero}>
-            <Text style={styles.heroKicker}>Performance report</Text>
-            <Text style={styles.heroTitle}>{report.headline}</Text>
+            <Text style={styles.heroKicker}>{isStaff ? 'Teacher result' : 'Performance report'}</Text>
+            <Text style={styles.heroTitle}>{reportHeadline}</Text>
             <View style={[styles.scoreStage, width < 380 && styles.scoreStageCompact]}>
               <ReportScoreRing
                 percent={report.percent}
                 score={report.totalScore}
                 max={report.maxScore}
+                checking={isChecking}
                 checkingPercent={checkingPercent}
-                checkingEstimated={checkingProgressEstimated}
-                checkingOverdue={checkingProgressEstimated && checkingEstimate.isOverdue}
                 checkingPaused={pollingIssue}
+                checkingStage={checkingStage}
               />
               <View style={styles.scoreContext}>
-                <Text style={styles.scoreContextLabel}>{isChecking ? checkingContextLabel : report.provisional ? 'Provisional score' : 'Score signal'}</Text>
-                <Text style={styles.scoreContextValue}>{isChecking ? checkingContextValue : report.percent != null && report.percent >= 65 ? 'Strong foundation' : 'Focused repair'}</Text>
+                <Text style={styles.scoreContextLabel}>{isChecking ? checkingContextLabel : isStaff ? (resultPublished ? 'Final score' : 'Suggested score') : needsInput ? 'Paper status' : report.provisional ? 'Provisional score' : 'Score signal'}</Text>
+                <Text style={styles.scoreContextValue}>{isChecking ? checkingContextValue : isStaff ? (resultPublished ? 'Visible to student' : marksApproved ? 'Ready to publish' : 'Waiting for confirmation') : needsInput ? 'Action needed' : report.percent != null && report.percent >= 65 ? 'Strong foundation' : 'Focused repair'}</Text>
                 {!isChecking ? (
                   <View style={styles.signalPill}>
-                    <Ionicons name="analytics-outline" size={13} color="#93e2b7" />
-                    <Text style={styles.signalPillText}>{report.questions.length ? `${report.questions.length} questions diagnosed` : 'Summary only'}</Text>
+                    <Ionicons name={isStaff ? 'checkmark-circle-outline' : 'analytics-outline'} size={13} color="#93e2b7" />
+                    <Text style={styles.signalPillText}>{report.questions.length ? `${report.questions.length} questions ${isStaff ? 'checked' : 'diagnosed'}` : 'Summary only'}</Text>
                   </View>
                 ) : null}
               </View>
@@ -437,18 +470,18 @@ export default function ResultDetailScreen() {
             <View style={styles.grabber} />
             <View style={styles.diagnosis}>
               <View style={styles.diagnosisIcon}>
-                <Ionicons name={pollingIssue ? 'cloud-offline-outline' : isChecking ? 'timer-outline' : 'bulb-outline'} size={20} color={pollingIssue ? colors.warning : colors.accentStrong} />
+                <Ionicons name={pollingIssue ? 'cloud-offline-outline' : isChecking ? 'timer-outline' : isStaff ? resultPublished ? 'people-outline' : 'lock-closed-outline' : 'bulb-outline'} size={20} color={pollingIssue ? colors.warning : colors.accentStrong} />
               </View>
               <View style={styles.diagnosisCopy}>
                 <Text style={styles.diagnosisTitle}>
-                  {pollingIssue ? 'Connection paused.' : isChecking && checkingProgressEstimated && checkingEstimate.isOverdue ? 'Taking a little longer.' : report.diagnosisTitle}
+                  {pollingIssue ? 'Connection paused.' : isChecking ? checkingStage : diagnosisTitle}
                 </Text>
                 <Text style={styles.diagnosisText} numberOfLines={4}>
                   {pollingIssue
                     ? 'Your paper is safe. Eduraa will retry automatically when the connection returns.'
-                    : isChecking && checkingProgressEstimated && checkingEstimate.isOverdue
-                      ? 'Your paper is still checking. This report will update automatically when it is ready.'
-                      : report.diagnosisBody}
+                    : isChecking
+                      ? 'Your paper is safe. This report updates automatically as Eduraa reaches each real processing milestone.'
+                      : diagnosisBody}
                 </Text>
               </View>
             </View>
@@ -462,12 +495,12 @@ export default function ResultDetailScreen() {
             {!isChecking ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={isStaff ? 'Open paper workspace' : 'Start a focused repair practice'}
+                accessibilityLabel={primaryActionLabel}
                 onPress={openPaperWorkspace}
                 style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
               >
                 <Ionicons name={isStaff ? 'documents-outline' : 'play-outline'} size={17} color={colors.white} />
-                <Text style={styles.primaryActionText}>{isStaff ? 'Open paper workspace' : 'Start a focused repair'}</Text>
+                <Text style={styles.primaryActionText}>{primaryActionLabel}</Text>
               </Pressable>
             ) : null}
 
@@ -500,7 +533,7 @@ export default function ResultDetailScreen() {
                   {isChecking
                     ? 'Answer-by-answer feedback will appear automatically.'
                     : isStaff
-                      ? 'Open a row to connect feedback and source evidence.'
+                      ? 'Optional: open an answer to view its scan and marking.'
                       : 'Open a row to connect feedback, evidence, and review.'}
                 </Text>
               </View>

@@ -5,6 +5,8 @@ const {
   B2B_PROFILE_FIELD_CONTRACT,
   buildTeacherApprovalPayload,
   canMutateB2BProfileDirectly,
+  retainAvailableSelections,
+  teachingScopeOptions,
   validateTeacherApprovalDraft,
 } = require(process.env.B2B_PROFILE_MODEL_PATH)
 
@@ -124,4 +126,22 @@ test('teacher contract separates approval and immutable fields', () => {
   assert.ok(contract.immutable.includes('school_id'))
   assert.ok(contract.immutable.includes('class_teacher_opt_in'))
   assert.equal(contract.approvalRequired.includes('school_id'), false)
+})
+
+test('teaching scope derives unique standards and only divisions for selected standards', () => {
+  assert.deepEqual(
+    teachingScopeOptions(
+      [
+        { standard: '5', divisions: ['A', 'B'] },
+        { standard: '10', divisions: ['A', 'C'] },
+      ],
+      ['10'],
+    ),
+    { standards: ['5', '10'], divisions: ['A', 'C'] },
+  )
+})
+
+test('canonical options remove stale selections but preserve values when no options are configured', () => {
+  assert.deepEqual(retainAvailableSelections(['A', 'Legacy', 'a'], ['A', 'B']), ['A'])
+  assert.deepEqual(retainAvailableSelections(['Legacy'], []), ['Legacy'])
 })

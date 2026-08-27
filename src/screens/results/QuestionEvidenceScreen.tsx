@@ -27,7 +27,7 @@ import { AuthLogoMark, MathText, ProtectedContentImage } from '../../components/
 import type { ResultsStackParamList } from '../../navigation'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
-import { openProtectedDocument } from '../../utils/openProtectedDocument'
+import { openCheckedPaperScan, protectedDocumentErrorMessage } from '../../utils/openProtectedDocument'
 import {
   buildQuestionReview,
   findEvidenceQuestion,
@@ -553,7 +553,11 @@ export default function QuestionEvidenceScreen() {
   }
 
   const openPaperWorkspace = () => {
-    if (isStaff) navigation.getParent()?.navigate('StaffPapers')
+    if (isStaff) navigation.navigate('CheckedPaperWorkspace', {
+      checkedPaperId: data.id,
+      questionId: item.question_id || undefined,
+      questionIndex: evidence.index,
+    })
     else if (item.topic_id) navigation.getParent()?.navigate('Home', {
       screen: 'AgenticTopic',
       params: {
@@ -575,9 +579,9 @@ export default function QuestionEvidenceScreen() {
     setScanError(null)
     setIsOpeningScan(true)
     try {
-      await openProtectedDocument(String(data.scanned_pdf_url), `checked-paper-${data.id}`)
-    } catch {
-      setScanError('The scan evidence could not be opened on this device. Try again when the connection is stable.')
+      await openCheckedPaperScan(data.id)
+    } catch (error) {
+      setScanError(protectedDocumentErrorMessage(error))
     } finally {
       setIsOpeningScan(false)
     }

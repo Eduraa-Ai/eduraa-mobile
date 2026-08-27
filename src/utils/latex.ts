@@ -1,3 +1,5 @@
+import { normalizeLatexBlanksAndDegrees } from "./latexBlanks";
+
 const CODE_FENCE_RE = /```(?:latex|tex|math)?[ \t]*\n?([\s\S]*?)```/gi;
 const BRACKETED_MATH_RE = /(?<!\\)\[\s*([\s\S]{3,}?)\s*(?<!\\)\](?!\()/g;
 const EXPLICIT_MATH_RE =
@@ -161,7 +163,7 @@ const greekSymbols: Record<string, string> = {
 };
 
 export function latexToPlainText(value?: string | null) {
-  let normalized = normalizeLatexContent(value)
+  let normalized = normalizeLatexBlanksAndDegrees(normalizeLatexContent(value))
     .replace(/\$\$([\s\S]*?)\$\$/g, " $1 ")
     .replace(/\$([^$]*?)\$/g, " $1 ")
     .replace(/\\\[([\s\S]*?)\\\]/g, " $1 ")

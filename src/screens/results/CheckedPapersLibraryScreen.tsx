@@ -4,6 +4,7 @@ import {
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -29,6 +30,7 @@ import {
   buildAssessmentModel,
   buildOptionList,
   buildSubjectOptions,
+  canDownloadPaperReport,
   canOpenPaper,
   CHECKED_PAPERS_POLL_INTERVAL_MS,
   formatPaperCount,
@@ -36,6 +38,7 @@ import {
   getPaperTitle,
   getQuestionCount,
   getQuestionReviewCount,
+  getQuestionReviewItems,
   getQuestionReviewLabels,
   getUnreadReviewResponseCount,
   getUnreadReviewResponseLabels,
@@ -45,6 +48,8 @@ import {
   isPaperChecking,
   paperAccessibilityLabel,
   paperInsight,
+  paperNeedsInput,
+  paperNeedsRecovery,
   paperStatusLabel,
   scorePercent,
   sortByRecency,
@@ -140,6 +145,9 @@ function CheckedPaperRow({
   seenReviewResponseKeys: ReadonlySet<string>
 }) {
   const percent = scorePercent(paper)
+  const needsInput = isStaff && paperNeedsInput(paper)
+  const needsRecovery = isStaff && paperNeedsRecovery(paper)
+  const canDownload = canDownloadPaperReport(paper)
   const icon = getPaperIcon(paper)
   const title = getPaperTitle(paper)
   const subject = getPaperSubject(paper)
@@ -148,7 +156,7 @@ function CheckedPaperRow({
   const reviewCount = getQuestionReviewCount(paper)
   const reviewLabels = getQuestionReviewLabels(paper)
   const reviewLabel = reviewLabels.slice(0, 2).join(', ')
-  const reviewTitle = `${reviewCount} question review${reviewCount === 1 ? '' : 's'} pending`
+  const reviewTitle = `${reviewCount} answer${reviewCount === 1 ? '' : 's'} to confirm`
   const unreadResponseCount = isStaff ? 0 : getUnreadReviewResponseCount(paper, seenReviewResponseKeys)
   const unreadResponseLabels = isStaff ? [] : getUnreadReviewResponseLabels(paper, seenReviewResponseKeys)
   const unreadResponseLabel = unreadResponseLabels.slice(0, 2).join(', ')
@@ -161,9 +169,9 @@ function CheckedPaperRow({
 
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={paperAccessibilityLabel(paper, formatDate(paper.updated_at || paper.created_at))}
-      accessibilityHint="Opens the checked paper report."
+      accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
+      accessibilityLabel={paperAccessibilityLabel(paper, formatDate(paper.updated_at || paper.created_at), needsRecovery)}
+      accessibilityHint={needsRecovery ? 'Opens the issue that paused checking.' : needsInput ? 'Opens the scanned answer for confirmation.' : 'Opens the checked paper report.'}
       onPress={onPress}
       style={({ pressed }) => [styles.paperCard, featured && styles.paperCardFeatured, pressed && styles.paperCardPressed, opening && styles.paperCardOpening]}
     >
@@ -181,8 +189,8 @@ function CheckedPaperRow({
           </Text>
         </View>
         <View style={styles.scoreTile}>
-          <Text style={styles.scorePercent}>{paper.total_score ?? '--'}</Text>
-          <Text style={styles.scoreFraction}>{paper.max_score == null ? 'pending' : `/ ${paper.max_score}`}</Text>
+          <Text style={[styles.scorePercent, needsInput && styles.scorePercentNeedsInput]}>{paper.total_score ?? (needsInput ? '!' : '--')}</Text>
+          <Text style={[styles.scoreFraction, needsInput && styles.scoreFractionNeedsInput]}>{needsInput ? (paper.max_score == null ? 'review' : `/ ${paper.max_score} suggested`) : paper.max_score == null ? 'pending' : `/ ${paper.max_score}`}</Text>
         </View>
       </View>
 
@@ -193,7 +201,7 @@ function CheckedPaperRow({
       <View style={styles.paperFooter}>
         <Text style={styles.paperInsight} numberOfLines={2}>{paperInsight(paper)}</Text>
         <View style={styles.paperActions}>
-          {!isPaperChecking(paper) ? (
+          {canDownload ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Download ${title} as PDF`}
@@ -221,7 +229,7 @@ function CheckedPaperRow({
             </Pressable>
           ) : null}
           <View style={styles.openAction}>
-            <Text style={styles.openActionText}>{opening ? 'Opening' : 'View'}</Text>
+            <Text style={styles.openActionText}>{opening ? 'Opening' : needsInput ? `Check ${reviewCount || ''}`.trim() : 'View'}</Text>
             {opening ? <ActivityIndicator color={colors.accentStrong} size="small" /> : <Ionicons name="chevron-forward" size={13} color={colors.accentStrong} />}
           </View>
         </View>
@@ -765,9 +773,22 @@ export default function CheckedPapersLibraryScreen() {
       if (!canOpenPaper(paper.id, openingPaperRef.current)) return
       openingPaperRef.current = paper.id
       setOpeningPaperId(paper.id)
+      if (isStaff && paperNeedsRecovery(paper)) {
+        navigation.navigate('CheckedPaperStatus', { checkedPaperId: paper.id })
+        return
+      }
+      if (isStaff && paperNeedsInput(paper)) {
+        const firstReview = getQuestionReviewItems(paper)[0]
+        navigation.navigate('CheckedPaperWorkspace', {
+          checkedPaperId: paper.id,
+          questionId: firstReview?.item.question_id || firstReview?.item.result_id || undefined,
+          questionIndex: firstReview?.index,
+        })
+        return
+      }
       navigation.navigate('ResultDetail', { checkedPaperId: paper.id })
     },
-    [navigation],
+    [isStaff, navigation],
   )
 
   const downloadPaper = useCallback(async (paper: CheckedPaper) => {
@@ -1554,11 +1575,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 19,
   },
+  scorePercentNeedsInput: {
+    color: colors.accentStrong,
+  },
   scoreFraction: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
     fontSize: 8,
     letterSpacing: 0,
+  },
+  scoreFractionNeedsInput: {
+    color: colors.accentStrong,
+    textTransform: 'uppercase',
   },
   progressTrack: {
     height: 4,

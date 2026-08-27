@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const test = require('node:test')
 
 const modelPath = process.env.GENERATE_PAPER_SETTINGS_MODEL_PATH
@@ -87,6 +89,16 @@ test('keeps flat lists when the role has no section assignments', () => {
     division: 'C',
     subjectId: 'sub-maths',
   })
+})
+
+test('defaults flat teacher options to a valid standard and division', () => {
+  const scope = resolvePaperScope(
+    { standards: ['Std 10', 'Std 5'], divisions: ['B', 'A'], subjects: [maths], sections: [] },
+    { standard: '', division: '', subjectId: '' },
+  )
+
+  assert.equal(scope.selection.standard, 'Std 5')
+  assert.equal(scope.selection.division, 'A')
 })
 
 test('narrows divisions and subjects to the selected standard', () => {
@@ -247,4 +259,28 @@ test('keeps an unrecognized status renderable', () => {
   assert.equal(view.headline, 'Working on your paper')
   assert.equal(view.percent, null)
   assert.equal(view.isActive, false)
+})
+
+test('paper setup reuses the exam selector and keeps contextual topic guidance', () => {
+  const screen = fs.readFileSync(
+    path.join(__dirname, '..', 'src/screens/papers/GeneratePaperScreen.tsx'),
+    'utf8',
+  )
+  const selectField = fs.readFileSync(
+    path.join(__dirname, '..', 'src/components/ui/SelectField.tsx'),
+    'utf8',
+  )
+
+  assert.match(screen, /import \{ SelectField \} from "\.\.\/\.\.\/components\/ui\/SelectField"/)
+  assert.doesNotMatch(screen, /function CompactSelect/)
+  assert.match(screen, /accessibilityLiveRegion="polite"/)
+  assert.match(screen, /chapterSource === "ai" \? aiSyllabusError : chaptersError/)
+  assert.match(screen, /Your class and subject are safe; retry below\./)
+  assert.match(screen, /Refine with subtopics, or continue with the full chapter scope\./)
+  assert.match(screen, /Build the learning scope/)
+  assert.match(screen, /activeChapters\.length > 0/)
+  assert.match(screen, /showsVerticalScrollIndicator=\{false\}/)
+  assert.match(selectField, /accessibilityState=\{\{ disabled: !canOpen, expanded: open \}\}/)
+  assert.match(selectField, /accessibilityRole="radio"/)
+  assert.match(selectField, /const closeSheet = \(\) => \{[\s\S]*setQuery\(''\)/)
 })

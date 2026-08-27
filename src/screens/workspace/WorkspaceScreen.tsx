@@ -102,6 +102,10 @@ export default function WorkspaceScreen() {
     const parent = navigation.getParent?.()
     const parentRoutes: string[] = parent?.getState?.().routeNames ?? []
 
+    if (control.id === 'dashboard') {
+      navigation.navigate('Dashboard')
+      return
+    }
     if (control.id === 'class-teacher') {
       navigation.navigate('ClassTeacherOverview')
       return
@@ -139,8 +143,14 @@ export default function WorkspaceScreen() {
       const isStaffTabs = parentRoutes.includes('StaffHome')
       if (isStaffTabs) {
         if (control.target.tab === 'AIStudio') navigation.navigate('StaffAIStudio')
-        else if (control.target.tab === 'Papers' && control.target.screen === 'GeneratePaper') navigation.navigate('StaffGeneratePaper')
-        else if (control.target.tab === 'Papers') navigation.navigate('StaffPapers')
+        else if (control.target.tab === 'Papers') {
+          parent.navigate(
+            'StaffPapers',
+            control.target.screen
+              ? { screen: control.target.screen, params: control.target.params }
+              : undefined,
+          )
+        }
         else if (control.target.tab === 'Results') navigation.navigate('StaffResults')
         else if (control.target.tab === 'PreviousPapers' && parentRoutes.includes('StaffPreviousPapers')) parent.navigate('StaffPreviousPapers')
         else if (control.target.tab === 'Profile' && parentRoutes.includes('StaffProfile')) parent.navigate('StaffProfile')

@@ -26,6 +26,7 @@ import { papersApi } from "../../api/papers";
 import { AuthLogoMark } from "../../components/ui/AuthLogoMark";
 import { PrimaryButton } from "../../components/ui/PrimaryButton";
 import { Screen } from "../../components/ui/Screen";
+import { SelectField } from "../../components/ui/SelectField";
 import type { PapersStackParamList } from "../../navigation";
 import { useAuthStore } from "../../stores/authStore";
 import { colors } from "../../theme/colors";
@@ -376,92 +377,10 @@ function buildBlueprintSections(
 }
 
 function defaultPaperName(subjectName?: string, standard?: string) {
-  return [subjectName, standard ? `Std ${standard}` : "", "Paper"]
+  const normalizedStandard = normalizeStandard(standard);
+  return [subjectName, normalizedStandard ? `Std ${normalizedStandard}` : "", "Paper"]
     .filter(Boolean)
     .join(" ");
-}
-
-function CompactSelect({
-  label,
-  value,
-  placeholder,
-  options,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  placeholder: string;
-  options: Array<{ value: string; label: string }>;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const selectedLabel = options.find((option) => option.value === value)?.label;
-
-  return (
-    <View style={[styles.field, disabled && styles.disabledBlock]}>
-      <TouchableOpacity
-        activeOpacity={0.88}
-        disabled={disabled}
-        style={styles.selectTrigger}
-        onPress={() => setOpen((current) => !current)}
-      >
-        <View style={styles.selectTextBlock}>
-          <Text style={styles.fieldLabel}>{label}</Text>
-          <Text
-            style={[styles.selectValue, !selectedLabel && styles.placeholder]}
-            numberOfLines={1}
-          >
-            {selectedLabel || placeholder}
-          </Text>
-        </View>
-        <Ionicons
-          name={open ? "chevron-up" : "chevron-down"}
-          size={17}
-          color={colors.textMuted}
-        />
-      </TouchableOpacity>
-      {open ? (
-        <View style={styles.menu}>
-          {options.length === 0 ? (
-            <Text style={styles.emptyText}>No options available</Text>
-          ) : (
-            options.map((option) => {
-              const active = option.value === value;
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  activeOpacity={0.86}
-                  style={[styles.menuItem, active && styles.menuItemActive]}
-                  onPress={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.menuItemText,
-                      active && styles.menuItemTextActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                  {active ? (
-                    <Ionicons
-                      name="checkmark"
-                      size={16}
-                      color={colors.accentStrong}
-                    />
-                  ) : null}
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </View>
-      ) : null}
-    </View>
-  );
 }
 
 function Stepper({
@@ -671,7 +590,7 @@ function GenerateStudioHeader({
     {
       pill: "Build",
       title: "Generate.",
-      body: "Pick exam, subject, source, and chapters. No hidden page.",
+      body: "Choose the learning scope. Eduraa prepares the paper from there.",
     },
     {
       pill: "Mix",
@@ -855,6 +774,23 @@ export default function GeneratePaperScreen() {
   const topicSummary = topicDone
     ? `${selectedSubject?.name ?? "Subject"} - ${chapterIds.length} chapter${chapterIds.length === 1 ? "" : "s"}`
     : undefined;
+  const topicChaptersLoading =
+    chapterSource === "ai" ? aiSyllabusLoading : chaptersLoading;
+  const topicChaptersError =
+    chapterSource === "ai" ? aiSyllabusError : chaptersError;
+  const topicGuide = topicChaptersLoading
+    ? `Finding indexed chapters for ${selectedSubject?.name ?? "this subject"}...`
+    : topicChaptersError
+      ? "The chapter list could not be loaded. Your class and subject are safe; retry below."
+      : !subjectId
+        ? "Choose a subject. Eduraa will prepare only the chapters available for this class."
+        : chapterIds.length === 0
+          ? activeChapters.length > 0
+            ? `${activeChapters.length} chapter${activeChapters.length === 1 ? " is" : "s are"} ready. Choose one or more to continue.`
+            : "No indexed chapters are available for this subject yet."
+          : derivedSubtopics.length > 0
+            ? `${chapterIds.length} chapter${chapterIds.length === 1 ? "" : "s"} selected. Refine with subtopics, or continue with the full chapter scope.`
+            : `${chapterIds.length} chapter${chapterIds.length === 1 ? "" : "s"} selected. Your topic scope is ready.`;
   const questionSummary = questionsDone
     ? `${totals.questions} questions - ${totals.marks} marks`
     : undefined;
@@ -1313,8 +1249,72 @@ export default function GeneratePaperScreen() {
           done={topicConfirmed && stage !== 0}
           onPress={() => setStage(0)}
         >
+          <View
+            style={[
+              styles.topicGuide,
+              topicChaptersError && styles.topicGuideError,
+              topicDone && styles.topicGuideReady,
+            ]}
+            accessibilityLiveRegion="polite"
+          >
+            <View
+              style={[
+                styles.topicGuideIcon,
+                topicChaptersError && styles.topicGuideIconError,
+                topicDone && styles.topicGuideIconReady,
+              ]}
+            >
+              {topicChaptersLoading ? (
+                <ActivityIndicator size="small" color={colors.accentStrong} />
+              ) : (
+                <Ionicons
+                  name={
+                    topicChaptersError
+                      ? "cloud-offline-outline"
+                      : topicDone
+                        ? "checkmark"
+                        : "sparkles-outline"
+                  }
+                  size={15}
+                  color={
+                    topicChaptersError
+                      ? colors.dangerText
+                      : topicDone
+                        ? colors.nav
+                        : colors.accentStrong
+                  }
+                />
+              )}
+            </View>
+            <Text
+              style={[
+                styles.topicGuideText,
+                topicChaptersError && styles.topicGuideTextError,
+              ]}
+            >
+              {topicGuide}
+            </Text>
+            {topicChaptersError ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Retry chapter choices"
+                activeOpacity={0.86}
+                style={styles.topicGuideRetry}
+                onPress={() => {
+                  if (chapterSource === "ai") {
+                    void refetchAiSyllabus();
+                  } else {
+                    setChapterLoadKey((current) => current + 1);
+                  }
+                }}
+              >
+                <Ionicons name="refresh" size={14} color={colors.white} />
+                <Text style={styles.topicGuideRetryText}>Retry</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
           {(options?.courses ?? []).length > 1 ? (
-            <CompactSelect
+            <SelectField
               label={isCompetitive ? "Competitive exam" : "Board"}
               value={board}
               placeholder={isCompetitive ? "Select exam" : "Select board"}
@@ -1329,7 +1329,7 @@ export default function GeneratePaperScreen() {
             />
           ) : null}
           {!isCompetitive && scope.standards.length > 0 ? (
-            <CompactSelect
+            <SelectField
               label="Standard"
               value={standard}
               placeholder="Select standard"
@@ -1347,7 +1347,7 @@ export default function GeneratePaperScreen() {
             />
           ) : null}
           {!isCompetitive && scope.divisions.length > 0 ? (
-            <CompactSelect
+            <SelectField
               label="Division"
               value={division}
               placeholder="Select division"
@@ -1362,35 +1362,16 @@ export default function GeneratePaperScreen() {
               }}
             />
           ) : null}
-          {isCompetitive ? (
-            <View style={styles.examModeCard}>
-              <View style={styles.examModeIcon}>
-                <Ionicons
-                  name="trophy-outline"
-                  size={17}
-                  color={colors.accentStrong}
-                />
-              </View>
-              <View style={styles.examModeCopy}>
-                <Text style={styles.examModeTitle}>
-                  {board || "Competitive exam"} mode
-                </Text>
-                <Text style={styles.examModeBody}>
-                  Standard and division are handled as Individual, matching the
-                  website flow.
-                </Text>
-              </View>
-            </View>
-          ) : null}
-          <CompactSelect
+          <SelectField
             label="Subject"
             value={subjectId}
-            placeholder="Select subject"
+            placeholder={subjects.length > 0 ? "Select subject" : "No subjects available"}
             options={subjects.map((subject) => ({
               value: subject.id,
               label: subject.name,
             }))}
             onChange={setSubjectId}
+            disabled={subjects.length === 0}
           />
           {subjectId && isCompetitive ? (
             <View style={styles.sourcePanel}>
@@ -1445,155 +1426,171 @@ export default function GeneratePaperScreen() {
               </View>
             </View>
           ) : null}
-          <View style={styles.boxField}>
-            <View style={styles.boxHeader}>
-              <View>
-                <Text style={styles.fieldLabel}>
-                  {chapterSource === "ai" ? "AI syllabus chapters" : "Chapters"}
+          <View style={styles.scopeWorkspace}>
+            <View style={styles.scopeWorkspaceHeader}>
+              <View style={styles.scopeWorkspaceMark}>
+                <Ionicons name="layers-outline" size={17} color={colors.white} />
+              </View>
+              <View style={styles.scopeWorkspaceCopy}>
+                <Text style={styles.scopeWorkspaceTitle}>Build the learning scope</Text>
+                <Text style={styles.scopeWorkspaceBody}>
+                  Chapters set the paper. Subtopics can narrow it further.
                 </Text>
-                {subjectId && activeChapters.length > 0 ? (
-                  <Text style={styles.selectionMeta}>
-                    {chapterIds.length} of {activeChapters.length} selected
+              </View>
+            </View>
+            <View style={styles.scopeSection}>
+              <View style={styles.boxHeader}>
+                <View>
+                  <Text style={styles.fieldLabel}>
+                    {chapterSource === "ai" ? "AI syllabus chapters" : "Chapters"}
                   </Text>
+                  {subjectId && activeChapters.length > 0 ? (
+                    <Text style={styles.selectionMeta}>
+                      {chapterIds.length} of {activeChapters.length} selected
+                    </Text>
+                  ) : null}
+                </View>
+                {activeChapters.length > 0 ? (
+                  <View style={styles.rowActions}>
+                    {chapterIds.length < activeChapters.length ? (
+                      <TouchableOpacity
+                        activeOpacity={0.86}
+                        onPress={selectAllChapters}
+                      >
+                        <Text style={styles.linkText}>Select all</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {chapterIds.length > 0 ? (
+                      <TouchableOpacity activeOpacity={0.86} onPress={clearChapters}>
+                        <Text style={styles.linkText}>Clear</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 ) : null}
               </View>
-              <View style={styles.rowActions}>
-                <TouchableOpacity
-                  activeOpacity={0.86}
-                  onPress={selectAllChapters}
-                >
-                  <Text style={styles.linkText}>All</Text>
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.86} onPress={clearChapters}>
-                  <Text style={styles.linkText}>Clear</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            {(chapterSource === "ai" ? aiSyllabusLoading : chaptersLoading) ? (
-              <View style={styles.inlineLoading}>
-                <ActivityIndicator color={colors.accentStrong} />
-                <Text style={styles.emptyText}>Loading chapters</Text>
-              </View>
-            ) : chapterSource === "ai" && aiSyllabusError ? (
-              <InlineRecovery
-                title="AI syllabus unavailable"
-                body="Your selections are safe. Check the connection and retry this syllabus."
-                onRetry={() => void refetchAiSyllabus()}
-              />
-            ) : chapterSource === "books" && chaptersError ? (
-              <InlineRecovery
-                title="Chapters unavailable"
-                body="Your subject is still selected. Retry the indexed chapter list."
-                onRetry={() => setChapterLoadKey((current) => current + 1)}
-              />
-            ) : !subjectId ? (
-              <Text style={styles.emptyText}>Select subject first</Text>
-            ) : chapterSource === "ai" && !aiSourceAvailable ? (
-              <Text style={styles.emptyText}>
-                AI source needs MH-CET/JEE and Physics, Chemistry, or
-                Mathematics.
-              </Text>
-            ) : activeChapters.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {chapterSource === "ai"
-                  ? "No AI syllabus available for this exam and subject."
-                  : "No indexed books for this subject yet."}
-              </Text>
-            ) : (
-              <ScrollView
-                nestedScrollEnabled
-                showsVerticalScrollIndicator
-                style={styles.optionList}
-                contentContainerStyle={styles.optionListContent}
-              >
-                {activeChapters.map((chapter) => {
-                  const active = chapterIds.includes(chapter.id);
-                  return (
-                    <TouchableOpacity
-                      key={chapter.id}
-                      activeOpacity={0.86}
-                      style={[styles.checkRow, active && styles.checkRowActive]}
-                      onPress={() => toggleChapter(chapter.id)}
-                    >
-                      <View
-                        style={[
-                          styles.checkbox,
-                          active && styles.checkboxActive,
-                        ]}
-                      >
-                        {active ? (
-                          <Ionicons
-                            name="checkmark"
-                            size={12}
-                            color={colors.white}
-                          />
-                        ) : null}
-                      </View>
-                      <Text
-                        style={[
-                          styles.checkText,
-                          active && styles.checkTextActive,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {chapter.title}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
-          </View>
-          <View style={styles.boxField}>
-            <View style={styles.boxHeader}>
-              <Text style={styles.fieldLabel}>Subtopics</Text>
-              {derivedSubtopics.length > 0 ? (
-                <View style={styles.rowActions}>
-                  <TouchableOpacity
-                    activeOpacity={0.86}
-                    onPress={() => setSubtopicNames(derivedSubtopics)}
-                  >
-                    <Text style={styles.linkText}>All</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.86}
-                    onPress={() => setSubtopicNames([])}
-                  >
-                    <Text style={styles.linkText}>Clear</Text>
-                  </TouchableOpacity>
+              {topicChaptersLoading ? (
+                <View style={styles.scopeSkeletonList} accessibilityLabel="Loading chapters">
+                  {[0, 1, 2].map((item) => (
+                    <View key={item} style={styles.scopeSkeletonRow} />
+                  ))}
                 </View>
-              ) : null}
-            </View>
-            {chapterIds.length === 0 ? (
-              <Text style={styles.emptyText}>Select chapters first</Text>
-            ) : derivedSubtopics.length === 0 ? (
-              <Text style={styles.emptyText}>
-                No subtopics detected for selected chapters
-              </Text>
-            ) : (
-              <View style={styles.chipWrap}>
-                {derivedSubtopics.map((topic) => {
-                  const active = subtopicNames.includes(topic);
-                  return (
-                    <TouchableOpacity
-                      key={topic}
-                      activeOpacity={0.86}
-                      style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => toggleSubtopic(topic)}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          active && styles.chipTextActive,
-                        ]}
+              ) : topicChaptersError ? null : !subjectId ? (
+                <Text style={styles.emptyText}>Choose a subject to see its chapters.</Text>
+              ) : chapterSource === "ai" && !aiSourceAvailable ? (
+                <Text style={styles.emptyText}>
+                  AI source needs MH-CET/JEE and Physics, Chemistry, or Mathematics.
+                </Text>
+              ) : activeChapters.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  {chapterSource === "ai"
+                    ? "No AI syllabus is available for this exam and subject."
+                    : "No indexed books are available for this subject yet."}
+                </Text>
+              ) : (
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  style={styles.optionList}
+                  contentContainerStyle={styles.optionListContent}
+                >
+                  {activeChapters.map((chapter) => {
+                    const active = chapterIds.includes(chapter.id);
+                    return (
+                      <TouchableOpacity
+                        key={chapter.id}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: active }}
+                        activeOpacity={0.86}
+                        style={[styles.checkRow, active && styles.checkRowActive]}
+                        onPress={() => toggleChapter(chapter.id)}
                       >
-                        {topic}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <View
+                          style={[
+                            styles.checkbox,
+                            active && styles.checkboxActive,
+                          ]}
+                        >
+                          {active ? (
+                            <Ionicons
+                              name="checkmark"
+                              size={12}
+                              color={colors.white}
+                            />
+                          ) : null}
+                        </View>
+                        <Text
+                          style={[
+                            styles.checkText,
+                            active && styles.checkTextActive,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {chapter.title}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+            <View style={styles.scopeDivider} />
+            <View style={styles.scopeSection}>
+              <View style={styles.boxHeader}>
+                <Text style={styles.fieldLabel}>Subtopics · optional</Text>
+                {derivedSubtopics.length > 0 ? (
+                  <View style={styles.rowActions}>
+                    {subtopicNames.length < derivedSubtopics.length ? (
+                      <TouchableOpacity
+                        activeOpacity={0.86}
+                        onPress={() => setSubtopicNames(derivedSubtopics)}
+                      >
+                        <Text style={styles.linkText}>Select all</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {subtopicNames.length > 0 ? (
+                      <TouchableOpacity
+                        activeOpacity={0.86}
+                        onPress={() => setSubtopicNames([])}
+                      >
+                        <Text style={styles.linkText}>Clear</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
-            )}
+              {chapterIds.length === 0 ? (
+                <Text style={styles.emptyText}>Available after a chapter is selected.</Text>
+              ) : derivedSubtopics.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  The selected chapters have no separate subtopic tags.
+                </Text>
+              ) : (
+                <View style={styles.chipWrap}>
+                  {derivedSubtopics.map((topic) => {
+                    const active = subtopicNames.includes(topic);
+                    return (
+                      <TouchableOpacity
+                        key={topic}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: active }}
+                        activeOpacity={0.86}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => toggleSubtopic(topic)}
+                      >
+                        <Text
+                          style={[
+                            styles.chipText,
+                            active && styles.chipTextActive,
+                          ]}
+                        >
+                          {topic}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
           </View>
           <PrimaryButton
             label="Next: Questions"
@@ -1755,7 +1752,6 @@ export default function GeneratePaperScreen() {
           index={3}
           title="Settings & generate"
           active={stage === 2}
-          locked={!topicDone || !questionsDone}
           onPress={() => {
             setMaxStageReached((current) => Math.max(current, 2));
             setStage(2);
@@ -1801,7 +1797,7 @@ export default function GeneratePaperScreen() {
                 )}
               </View>
             )}
-            <CompactSelect
+            <SelectField
               label="Difficulty"
               value={difficulty}
               placeholder="Select difficulty"
@@ -1856,7 +1852,8 @@ export default function GeneratePaperScreen() {
             <Text style={styles.generateTitle}>{effectivePaperName}</Text>
             <Text style={styles.generateBody}>
               {selectedSubject?.name ?? "Subject"} - {chapterIds.length}{" "}
-              chapters - {totals.questions} questions - {totals.marks} marks
+              {chapterIds.length === 1 ? "chapter" : "chapters"} -{" "}
+              {totals.questions} questions - {totals.marks} marks
             </Text>
           </View>
           {generationError ? (
@@ -1938,6 +1935,11 @@ export default function GeneratePaperScreen() {
             disabled={!topicDone || !questionsDone || isGenerating}
             onPress={handleGenerate}
           />
+          {!topicDone || !questionsDone ? (
+            <Text style={styles.fieldHelper}>
+              Complete Topic and Questions to generate.
+            </Text>
+          ) : null}
         </StageCard>
       </Screen>
     </KeyboardAvoidingView>
@@ -2473,72 +2475,68 @@ const styles = StyleSheet.create({
   selectionMeta: {
     color: colors.textMuted,
     fontFamily: fonts.medium,
-    fontSize: 10,
+    fontSize: 11,
+    lineHeight: 16,
     marginTop: 3,
   },
-  selectTrigger: {
-    minHeight: 58,
+  topicGuide: {
+    minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[3],
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.slate[50],
-    paddingHorizontal: spacing[3],
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accentStrong,
+    paddingLeft: spacing[3],
+    paddingRight: spacing[1],
+    paddingVertical: spacing[2],
   },
-  selectTextBlock: {
-    flex: 1,
-    gap: 2,
+  topicGuideError: {
+    borderLeftColor: colors.danger,
   },
-  selectValue: {
-    color: colors.text,
-    fontFamily: fonts.bold,
-    fontSize: 15,
+  topicGuideReady: {
+    borderLeftColor: colors.nav,
   },
-  examModeCard: {
-    minHeight: 70,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
-    backgroundColor: colors.accentSurface,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    padding: spacing[3],
-  },
-  examModeIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+  topicGuideIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
+    backgroundColor: colors.accentSurface,
   },
-  examModeCopy: {
+  topicGuideIconError: {
+    backgroundColor: colors.dangerSurface,
+  },
+  topicGuideIconReady: {
+    backgroundColor: "#FFF7ED",
+  },
+  topicGuideText: {
     flex: 1,
-    gap: 2,
-  },
-  examModeTitle: {
-    color: colors.text,
+    color: colors.textSecondary,
     fontFamily: fonts.bold,
-    fontSize: 14,
-  },
-  examModeBody: {
-    color: colors.textMuted,
-    fontFamily: fonts.regular,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
+  },
+  topicGuideTextError: {
+    color: colors.dangerText,
+  },
+  topicGuideRetry: {
+    minHeight: 44,
+    borderRadius: radius.full,
+    backgroundColor: colors.nav,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+  },
+  topicGuideRetryText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 11,
   },
   sourcePanel: {
     gap: spacing[2],
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.slate[50],
-    padding: spacing[3],
   },
   sourceHeader: {
     flexDirection: "row",
@@ -2586,43 +2584,63 @@ const styles = StyleSheet.create({
   placeholder: {
     color: colors.textSubtle,
   },
-  menu: {
-    borderRadius: 16,
+  scopeWorkspace: {
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
+    borderColor: colors.nav,
+    backgroundColor: colors.white,
     overflow: "hidden",
   },
-  menuItem: {
-    minHeight: 44,
+  scopeWorkspaceHeader: {
+    minHeight: 76,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: spacing[3],
+    backgroundColor: colors.nav,
     paddingHorizontal: spacing[3],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
+    paddingVertical: spacing[3],
   },
-  menuItemActive: {
-    backgroundColor: colors.accentSurfaceStrong,
+  scopeWorkspaceMark: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accentStrong,
   },
-  menuItemText: {
+  scopeWorkspaceCopy: {
     flex: 1,
-    color: colors.text,
+    gap: 2,
+  },
+  scopeWorkspaceTitle: {
+    color: colors.white,
+    fontFamily: fonts.displaySemibold,
+    fontSize: 15,
+    lineHeight: 19,
+  },
+  scopeWorkspaceBody: {
+    color: colors.slate[200],
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 11,
+    lineHeight: 16,
   },
-  menuItemTextActive: {
-    color: colors.accentStrong,
-    fontFamily: fonts.bold,
-  },
-  boxField: {
+  scopeSection: {
     gap: spacing[2],
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.slate[50],
     padding: spacing[3],
-    overflow: "hidden",
+  },
+  scopeDivider: {
+    height: 1,
+    backgroundColor: colors.borderSubtle,
+    marginHorizontal: spacing[3],
+  },
+  scopeSkeletonList: {
+    gap: spacing[2],
+    paddingVertical: spacing[1],
+  },
+  scopeSkeletonRow: {
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: colors.backgroundMuted,
   },
   boxHeader: {
     minHeight: 24,
@@ -2639,13 +2657,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 12,
   },
-  inlineLoading: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing[2],
-  },
   emptyText: {
     color: colors.textMuted,
     fontFamily: fonts.medium,
@@ -2655,20 +2666,20 @@ const styles = StyleSheet.create({
   },
   optionList: {
     maxHeight: 228,
-    borderRadius: 14,
     overflow: "hidden",
   },
   optionListContent: {
-    gap: spacing[1],
     paddingBottom: spacing[1],
   },
   checkRow: {
-    minHeight: 46,
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
-    borderRadius: 14,
     paddingHorizontal: spacing[2],
+    paddingVertical: spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
   checkRowActive: {
     backgroundColor: colors.accentSurface,
@@ -2691,8 +2702,8 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text,
     fontFamily: fonts.medium,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
   },
   checkTextActive: {
     color: colors.accentStrong,
