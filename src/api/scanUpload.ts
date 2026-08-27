@@ -1,7 +1,18 @@
 import { File as ExpoFile } from 'expo-file-system'
 import { Platform } from 'react-native'
 import apiClient, { API_BASE_URL, authenticatedFetch } from './client'
-import type { CheckedPaper, Exam, Subject } from '../types'
+import type { Exam, Subject } from '../types'
+import {
+  parseScanUploadReceipt,
+  pollScanUpload,
+  type ScanUploadReceipt,
+} from './scanUploadPolling'
+
+export {
+  isAcceptedScanUploadError,
+  parseScanUploadReceipt,
+  type ScanUploadReceipt,
+} from './scanUploadPolling'
 
 export const SCAN_UPLOAD_OPTIONS_QUERY_KEY = ['scan-upload', 'options'] as const
 
@@ -51,7 +62,7 @@ export interface ScanUploadPayload {
   onPhase?: (phase: ScanUploadPhase) => void
 }
 
-export type ScanUploadPhase = 'preparing' | 'uploading' | 'confirming'
+export type ScanUploadPhase = 'preparing' | 'uploading' | 'confirming' | 'checking'
 
 function appendOptional(formData: FormData, key: string, value?: string | null) {
   if (value) formData.append(key, value)
@@ -129,7 +140,9 @@ async function uploadNative(payload: ScanUploadPayload) {
     if (!response.ok) {
       throw uploadError(responseDetail(data, 'The upload was not accepted. Please check the selections and try again.'), response.status)
     }
-    return data as CheckedPaper
+    const receipt = parseScanUploadReceipt(data)
+    if (!receipt) throw uploadError('The server accepted the request but returned an invalid upload receipt.')
+    return receipt
   } catch (error) {
     if (controller.signal.aborted) {
       if (payload.signal?.aborted) {
@@ -151,14 +164,14 @@ export const scanUploadApi = {
     return response.data
   },
 
-  async upload(payload: ScanUploadPayload) {
+  async upload(payload: ScanUploadPayload): Promise<ScanUploadReceipt> {
     if (Platform.OS !== 'web') return uploadNative(payload)
 
     payload.onPhase?.('preparing')
     const formData = buildFormData(payload, false)
     payload.onPhase?.('uploading')
 
-    const response = await apiClient.post<CheckedPaper>('/checked-papers/scan', formData, {
+    const response = await apiClient.post<ScanUploadReceipt>('/checked-papers/scan', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -168,6 +181,32 @@ export const scanUploadApi = {
         payload.onPhase?.(event.loaded < (event.total ?? Number.POSITIVE_INFINITY) ? 'uploading' : 'confirming')
       },
     })
-    return response.data
+    const receipt = parseScanUploadReceipt(response.data)
+    if (!receipt) throw uploadError('The server returned an invalid upload receipt.')
+    return receipt
+  },
+
+  async getUpload(uploadId: string): Promise<ScanUploadReceipt> {
+    const response = await apiClient.get<ScanUploadReceipt>(
+      `/checked-papers/uploads/${uploadId}`,
+    )
+    const receipt = parseScanUploadReceipt(response.data)
+    if (!receipt) throw uploadError('The server returned an invalid upload status.')
+    return receipt
+  },
+
+  /** Resolve the checked paper id once the queued scan has been processed. */
+  async awaitCheckedPaper(
+    receipt: ScanUploadReceipt,
+    options: { signal?: AbortSignal; onPhase?: (phase: ScanUploadPhase) => void } = {},
+  ): Promise<string> {
+    if (receipt.status === 'completed' && receipt.checked_paper_id) {
+      return receipt.checked_paper_id
+    }
+    options.onPhase?.('checking')
+    return pollScanUpload(receipt, {
+      signal: options.signal,
+      load: scanUploadApi.getUpload,
+    })
   },
 }

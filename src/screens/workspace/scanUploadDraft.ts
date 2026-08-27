@@ -1,7 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Directory, File, Paths } from 'expo-file-system'
 import { Platform } from 'react-native'
-import type { ScanUploadFile } from '../../api/scanUpload'
+import {
+  parseScanUploadReceipt,
+  type ScanUploadFile,
+  type ScanUploadReceipt,
+} from '../../api/scanUpload'
 import type { StaffScanUploadMode } from './checkedPaperPipelineModel'
 
 const STORAGE_PREFIX = 'eduraa:scan-upload-draft:v1'
@@ -13,6 +17,7 @@ export type ScanUploadDraft = {
   selectedSubjectId: string
   selectedStudentId: string
   files: ScanUploadFile[]
+  pendingUpload: ScanUploadReceipt | null
   savedAt: string
 }
 
@@ -86,6 +91,7 @@ export async function loadScanUploadDraft(userId: string): Promise<ScanUploadDra
       selectedSubjectId: String(parsed.selectedSubjectId ?? ''),
       selectedStudentId: String(parsed.selectedStudentId ?? ''),
       files,
+      pendingUpload: parseScanUploadReceipt(parsed.pendingUpload),
       savedAt: String(parsed.savedAt ?? ''),
     }
   } catch {
