@@ -70,7 +70,10 @@ test('native scan uploads use Expo file-backed multipart while web keeps Axios',
   assert.match(scanApi, /new ExpoFile\(file\.uri\)/)
   assert.match(scanApi, /authenticatedFetch\(`\$\{API_BASE_URL\}\/api\/v1\/checked-papers\/scan`/)
   assert.match(scanApi, /if \(Platform\.OS !== 'web'\) return uploadNative\(payload\)/)
-  assert.match(scanApi, /apiClient\.post<CheckedPaper>\('\/checked-papers\/scan'/)
+  assert.match(scanApi, /apiClient\.post<ScanUploadReceipt>\('\/checked-papers\/scan'/)
+  // The scan is queued server-side, so the client resolves the paper by polling.
+  assert.match(scanApi, /checked-papers\/uploads\/\$\{uploadId\}/)
+  assert.match(scanApi, /async awaitCheckedPaper\(/)
   assert.match(client, /response\.status !== 401/)
   assert.match(client, /refreshAccessToken\(\)/)
   assert.match(scanApi, /Your selections are still here/)

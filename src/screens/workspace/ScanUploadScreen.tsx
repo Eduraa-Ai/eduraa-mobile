@@ -259,18 +259,22 @@ export default function ScanUploadScreen() {
 
   const openPaperStatus = (paper: CheckedPaper) => {
     queryClient.setQueryData(['checked-paper', paper.id], paper)
+    openPaperStatusById(paper.id)
+  }
+
+  const openPaperStatusById = (checkedPaperId: string) => {
     void queryClient.invalidateQueries({ queryKey: ['checked-papers'] })
     if (!staff) {
       const parent = navigation.getParent?.()
-      if (routeNames(navigation).includes('Results')) return navigation.navigate('Results', { screen: 'ResultDetail', params: { checkedPaperId: paper.id } })
-      if (routeNames(parent).includes('Results')) return parent.navigate('Results', { screen: 'ResultDetail', params: { checkedPaperId: paper.id } })
-      return navigation.navigate('ResultDetail', { checkedPaperId: paper.id })
+      if (routeNames(navigation).includes('Results')) return navigation.navigate('Results', { screen: 'ResultDetail', params: { checkedPaperId } })
+      if (routeNames(parent).includes('Results')) return parent.navigate('Results', { screen: 'ResultDetail', params: { checkedPaperId } })
+      return navigation.navigate('ResultDetail', { checkedPaperId })
     }
     const parent = navigation.getParent?.()
-    if (routeNames(navigation).includes('CheckedPaperStatus')) return navigation.navigate('CheckedPaperStatus', { checkedPaperId: paper.id })
-    if (routeNames(navigation).includes('StaffHome')) return navigation.navigate('StaffHome', { screen: 'CheckedPaperStatus', params: { checkedPaperId: paper.id } })
-    if (routeNames(parent).includes('StaffHome')) return parent.navigate('StaffHome', { screen: 'CheckedPaperStatus', params: { checkedPaperId: paper.id } })
-    return navigation.navigate('CheckedPaperStatus', { checkedPaperId: paper.id })
+    if (routeNames(navigation).includes('CheckedPaperStatus')) return navigation.navigate('CheckedPaperStatus', { checkedPaperId })
+    if (routeNames(navigation).includes('StaffHome')) return navigation.navigate('StaffHome', { screen: 'CheckedPaperStatus', params: { checkedPaperId } })
+    if (routeNames(parent).includes('StaffHome')) return parent.navigate('StaffHome', { screen: 'CheckedPaperStatus', params: { checkedPaperId } })
+    return navigation.navigate('CheckedPaperStatus', { checkedPaperId })
   }
 
   const reconcileAmbiguousUpload = async () => {
@@ -292,23 +296,27 @@ export default function ScanUploadScreen() {
   }
 
   const uploadMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       uploadControllerRef.current = new AbortController()
       uploadStartedAtRef.current = Date.now()
       setUploadError(null)
       setRecoveredPaper(null)
-      return scanUploadApi.upload({
+      const receipt = await scanUploadApi.upload({
         paperId: uploadLink.paperId, examId: uploadLink.examId, subjectId: effectiveSubjectId,
         studentId: resolveScanUploadStudentId({ isStaff: staff, selectedStudentId, authenticatedUserId: userId }),
         uploadMode: uploadLink.uploadMode, files, signal: uploadControllerRef.current.signal, onPhase: setUploadPhase,
       })
+      return scanUploadApi.awaitCheckedPaper(receipt, {
+        signal: uploadControllerRef.current.signal,
+        onPhase: setUploadPhase,
+      })
     },
-    onSuccess: async (paper) => {
+    onSuccess: async (checkedPaperId) => {
       uploadSucceededRef.current = true
       setUploadPhase(null)
       setFiles([])
       await clearScanUploadDraft(userId).catch(() => undefined)
-      openPaperStatus(paper)
+      openPaperStatusById(checkedPaperId)
     },
     onError: async (error) => {
       setUploadPhase(null)
@@ -438,7 +446,7 @@ export default function ScanUploadScreen() {
   const assessmentComplete = assessmentSelected && Boolean(effectiveSubjectId)
   const identityComplete = isStudentRole(role) ? assessmentComplete : assessmentComplete && Boolean(selectedStudentId)
   const phaseCopy: Record<ScanUploadPhase, string> = {
-    preparing: 'Preparing your pages…', uploading: 'Uploading pages securely…', confirming: 'Upload sent. Waiting for confirmation…',
+    preparing: 'Preparing your pages…', uploading: 'Uploading pages securely…', confirming: 'Upload sent. Waiting for confirmation…', checking: 'Pages received. Checking has started…',
   }
 
   return (
