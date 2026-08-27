@@ -151,6 +151,10 @@ const suites = [
     env: {},
   },
   {
+    file: 'scripts/checked-paper-delete-contract.test.cjs',
+    env: {},
+  },
+  {
     file: 'scripts/paper-results-navigation.test.cjs',
     env: { PAPER_RESULTS_NAVIGATION_PATH: path.join(outDir, 'navigation/paperResultsNavigation.js') },
   },

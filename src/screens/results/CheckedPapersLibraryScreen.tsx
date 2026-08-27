@@ -17,7 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import Svg, { Circle } from 'react-native-svg'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { isLearnerRole } from '../../auth/roles'
@@ -76,8 +76,11 @@ function getPaperIcon(paper: CheckedPaper): { name: keyof typeof Ionicons.glyphM
 }
 
 function errorMessage(error: unknown) {
-  const anyError = error as { response?: { data?: { detail?: string } }; message?: string }
-  return anyError.response?.data?.detail || anyError.message || 'Unable to load checked papers right now.'
+  const anyError = error as { response?: { data?: { detail?: string | { message?: string } } }; message?: string }
+  const detail = anyError.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail?.message) return detail.message
+  return anyError.message || 'Unable to load checked papers right now.'
 }
 
 function ScoreRing({ percent, compact }: { percent: number | null; compact: boolean }) {
@@ -127,8 +130,11 @@ function CheckedPaperRow({
   paper,
   onPress,
   onDownload,
+  onDelete,
   opening,
   downloading,
+  deleting,
+  deleteBlocked,
   downloadBlocked,
   featured,
   isStaff,
@@ -137,8 +143,11 @@ function CheckedPaperRow({
   paper: CheckedPaper
   onPress: () => void
   onDownload: () => void
+  onDelete: () => void
   opening: boolean
   downloading: boolean
+  deleting: boolean
+  deleteBlocked: boolean
   downloadBlocked: boolean
   featured: boolean
   isStaff: boolean
@@ -148,6 +157,7 @@ function CheckedPaperRow({
   const needsInput = isStaff && paperNeedsInput(paper)
   const needsRecovery = isStaff && paperNeedsRecovery(paper)
   const canDownload = canDownloadPaperReport(paper)
+  const canDelete = isStaff && paper.can_delete === true
   const icon = getPaperIcon(paper)
   const title = getPaperTitle(paper)
   const subject = getPaperSubject(paper)
@@ -201,6 +211,32 @@ function CheckedPaperRow({
       <View style={styles.paperFooter}>
         <Text style={styles.paperInsight} numberOfLines={2}>{paperInsight(paper)}</Text>
         <View style={styles.paperActions}>
+          {canDelete ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${title}`}
+              accessibilityHint={deleteBlocked ? 'Another checked paper is being deleted.' : 'Opens a confirmation before permanently deleting this checked paper.'}
+              accessibilityState={{ busy: deleting, disabled: deleting || deleteBlocked }}
+              hitSlop={4}
+              onPress={(event) => {
+                event.stopPropagation()
+                if (deleting || deleteBlocked) return
+                onDelete()
+              }}
+              style={({ pressed }) => [
+                styles.deleteAction,
+                pressed && !deleting && !deleteBlocked && styles.deleteActionPressed,
+                (deleting || deleteBlocked) && styles.deleteActionDisabled,
+              ]}
+            >
+              {deleting ? (
+                <ActivityIndicator color={colors.danger} size="small" />
+              ) : (
+                <Ionicons name="trash-outline" size={16} color={deleteBlocked ? colors.textSoft : colors.danger} />
+              )}
+              <Text style={[styles.deleteActionText, deleteBlocked && styles.deleteActionTextBlocked]}>Delete</Text>
+            </Pressable>
+          ) : null}
           {canDownload ? (
             <Pressable
               accessibilityRole="button"
@@ -606,6 +642,81 @@ function FilterSheet({
   )
 }
 
+function DeleteCheckedPaperSheet({
+  paper,
+  deleting,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  paper: CheckedPaper | null
+  deleting: boolean
+  error: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const title = paper ? getPaperTitle(paper) : 'this checked paper'
+
+  return (
+    <Modal
+      visible={Boolean(paper)}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        if (!deleting) onCancel()
+      }}
+    >
+      <View style={styles.deleteSheetBackdrop}>
+        <Pressable
+          accessibilityLabel="Cancel checked paper deletion"
+          disabled={deleting}
+          style={StyleSheet.absoluteFill}
+          onPress={onCancel}
+        />
+        <View accessibilityRole="alert" style={styles.deleteSheet}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.deleteSheetIcon}>
+            <Ionicons name="trash-outline" size={23} color={colors.danger} />
+          </View>
+          <Text style={styles.deleteSheetEyebrow}>Remove checked result</Text>
+          <Text style={styles.deleteSheetTitle}>Delete checked paper?</Text>
+          <Text style={styles.deleteSheetBody}>
+            “{title}” and its scan, marks, feedback, and review history will be permanently deleted. This cannot be undone.
+          </Text>
+          {error ? (
+            <View accessibilityRole="alert" style={styles.deleteSheetError}>
+              <Ionicons name="alert-circle-outline" size={17} color={colors.danger} />
+              <Text style={styles.deleteSheetErrorText}>{error}</Text>
+            </View>
+          ) : null}
+          <View style={styles.deleteSheetActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Keep checked paper"
+              disabled={deleting}
+              onPress={onCancel}
+              style={({ pressed }) => [styles.deleteSheetCancel, pressed && styles.deleteSheetButtonPressed, deleting && styles.deleteSheetButtonDisabled]}
+            >
+              <Text style={styles.deleteSheetCancelText}>Keep paper</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Confirm delete checked paper"
+              accessibilityState={{ busy: deleting, disabled: deleting }}
+              disabled={deleting}
+              onPress={onConfirm}
+              style={({ pressed }) => [styles.deleteSheetConfirm, pressed && styles.deleteSheetButtonPressed, deleting && styles.deleteSheetButtonDisabled]}
+            >
+              {deleting ? <ActivityIndicator size="small" color={colors.textOnDark} /> : <Ionicons name="trash-outline" size={16} color={colors.textOnDark} />}
+              <Text style={styles.deleteSheetConfirmText}>{deleting ? 'Deleting…' : 'Delete paper'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
 function countActiveFilters(filters: CheckedPapersFilterValue) {
   return [
     filters.subject,
@@ -624,6 +735,7 @@ function countActiveFilters(filters: CheckedPapersFilterValue) {
 
 export default function CheckedPapersLibraryScreen() {
   const navigation = useNavigation<any>()
+  const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const isStaff = Boolean(user && !isLearnerRole(user.role))
   const { width } = useWindowDimensions()
@@ -634,6 +746,8 @@ export default function CheckedPapersLibraryScreen() {
   const [openingPaperId, setOpeningPaperId] = useState<string | null>(null)
   const [downloadingPaperId, setDownloadingPaperId] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<CheckedPaper | null>(null)
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null)
   const [seenReviewResponseKeys, setSeenReviewResponseKeys] = useState<Set<string>>(new Set())
   const [seenReviewResponseKeysLoaded, setSeenReviewResponseKeysLoaded] = useState(false)
   const openingPaperRef = useRef<string | null>(null)
@@ -650,6 +764,19 @@ export default function CheckedPapersLibraryScreen() {
     ),
     refetchIntervalInBackground: false,
     refetchOnMount: 'always',
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: checkedPapersApi.delete,
+    onSuccess: (_result, deletedId) => {
+      const deletedTitle = deleteTarget ? getPaperTitle(deleteTarget) : 'Checked paper'
+      queryClient.setQueryData<CheckedPaper[]>(['checked-papers'], (current) => (
+        current?.filter((paper) => paper.id !== deletedId) ?? []
+      ))
+      queryClient.removeQueries({ queryKey: ['checked-paper', deletedId] })
+      setDeleteTarget(null)
+      setDeleteNotice(`${deletedTitle} was deleted.`)
+    },
   })
 
   useFocusEffect(
@@ -764,8 +891,13 @@ export default function CheckedPapersLibraryScreen() {
   const isSearchEmpty = totalCount > 0 && visibleCount === 0
   const hasCacheAndError = isError && totalCount > 0
   const listExtraData = useMemo(
-    () => ({ downloadingPaperId, notificationPaperById, seenReviewResponseKeys }),
-    [downloadingPaperId, notificationPaperById, seenReviewResponseKeys],
+    () => ({
+      deletingPaperId: deleteMutation.isPending ? deleteMutation.variables : null,
+      downloadingPaperId,
+      notificationPaperById,
+      seenReviewResponseKeys,
+    }),
+    [deleteMutation.isPending, deleteMutation.variables, downloadingPaperId, notificationPaperById, seenReviewResponseKeys],
   )
 
   const openPaper = useCallback(
@@ -805,6 +937,24 @@ export default function CheckedPapersLibraryScreen() {
       setDownloadingPaperId(null)
     }
   }, [])
+
+  const requestDeletePaper = useCallback((paper: CheckedPaper) => {
+    if (!isStaff || paper.can_delete !== true || deleteMutation.isPending) return
+    deleteMutation.reset()
+    setDeleteNotice(null)
+    setDeleteTarget(paper)
+  }, [deleteMutation, isStaff])
+
+  const cancelDeletePaper = useCallback(() => {
+    if (deleteMutation.isPending) return
+    deleteMutation.reset()
+    setDeleteTarget(null)
+  }, [deleteMutation])
+
+  const confirmDeletePaper = useCallback(() => {
+    if (!deleteTarget || deleteMutation.isPending) return
+    deleteMutation.mutate(deleteTarget.id)
+  }, [deleteMutation, deleteTarget])
 
   const clearSearch = () => setQuery('')
   const clearFilters = () => {
@@ -961,6 +1111,15 @@ export default function CheckedPapersLibraryScreen() {
           </Pressable>
         </View>
       ) : null}
+      {deleteNotice ? (
+        <View style={styles.deleteSuccessBanner} accessibilityRole="alert">
+          <Ionicons name="checkmark-circle-outline" size={17} color={colors.success} />
+          <Text style={styles.deleteSuccessText}>{deleteNotice}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Dismiss deletion confirmation" hitSlop={8} onPress={() => setDeleteNotice(null)}>
+            <Ionicons name="close" size={17} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   )
 
@@ -1022,6 +1181,13 @@ export default function CheckedPapersLibraryScreen() {
         }}
         onClose={() => setFilterVisible(false)}
       />
+      <DeleteCheckedPaperSheet
+        paper={deleteTarget}
+        deleting={deleteMutation.isPending}
+        error={deleteMutation.isError ? errorMessage(deleteMutation.error) : null}
+        onCancel={cancelDeletePaper}
+        onConfirm={confirmDeletePaper}
+      />
 
       <View style={styles.warmSurface}>
         <FlatList
@@ -1043,9 +1209,12 @@ export default function CheckedPapersLibraryScreen() {
               seenReviewResponseKeys={seenReviewResponseKeys}
               opening={openingPaperId === item.id}
               downloading={downloadingPaperId === item.id}
+              deleting={deleteMutation.isPending && deleteMutation.variables === item.id}
+              deleteBlocked={deleteMutation.isPending && deleteMutation.variables !== item.id}
               downloadBlocked={Boolean(downloadingPaperId && downloadingPaperId !== item.id)}
               onPress={() => openPaper(item)}
               onDownload={() => void downloadPaper(item)}
+              onDelete={() => requestDeletePaper(item)}
             />
           )}
         />
@@ -1721,6 +1890,32 @@ const styles = StyleSheet.create({
   downloadActionTextBlocked: {
     color: colors.textSoft,
   },
+  deleteAction: {
+    width: 44,
+    minHeight: 44,
+    paddingHorizontal: 0,
+    borderRadius: radius.full,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 0,
+  },
+  deleteActionPressed: {
+    backgroundColor: colors.dangerSurface,
+  },
+  deleteActionDisabled: {
+    opacity: 0.5,
+  },
+  deleteActionText: {
+    color: colors.danger,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 7,
+    lineHeight: 9,
+    letterSpacing: 0.15,
+  },
+  deleteActionTextBlocked: {
+    color: colors.textSoft,
+  },
   downloadErrorBanner: {
     minHeight: 48,
     marginHorizontal: spacing[4],
@@ -1733,6 +1928,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[2],
+  },
+  deleteSuccessBanner: {
+    minHeight: 48,
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[2],
+    paddingHorizontal: spacing[3],
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: `${colors.success}35`,
+    backgroundColor: `${colors.success}0D`,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  deleteSuccessText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodySemibold,
+    fontSize: 10,
+    lineHeight: 14,
   },
   downloadErrorText: {
     flex: 1,
@@ -1988,6 +2203,119 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: radius.full,
     backgroundColor: colors.nav,
+  },
+  deleteSheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing[3],
+    backgroundColor: 'rgba(2, 6, 23, 0.58)',
+  },
+  deleteSheet: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    gap: spacing[3],
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[6],
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.borderSubtle,
+    ...shadows.lg,
+  },
+  deleteSheetIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.dangerSurface,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  deleteSheetEyebrow: {
+    color: colors.danger,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  deleteSheetTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 22,
+    lineHeight: 27,
+    letterSpacing: -0.3,
+  },
+  deleteSheetBody: {
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  deleteSheetError: {
+    minHeight: 46,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSurface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  deleteSheetErrorText: {
+    flex: 1,
+    color: colors.danger,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  deleteSheetActions: {
+    flexDirection: 'row',
+    gap: spacing[2],
+    marginTop: spacing[1],
+  },
+  deleteSheetCancel: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  deleteSheetCancelText: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  deleteSheetConfirm: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: radius.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    backgroundColor: colors.danger,
+  },
+  deleteSheetConfirmText: {
+    color: colors.textOnDark,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  deleteSheetButtonPressed: {
+    opacity: 0.82,
+  },
+  deleteSheetButtonDisabled: {
+    opacity: 0.62,
   },
   sheetBackdrop: {
     flex: 1,

@@ -104,6 +104,15 @@ export const checkedPapersApi = {
     return response.data
   },
 
+  delete: async (id: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/checked-papers/${encodeURIComponent(id)}`)
+    } catch (error) {
+      if ((error as { response?: { status?: number } }).response?.status === 404) return
+      throw error
+    }
+  },
+
   getScannedPageCount: async (id: string): Promise<number> => {
     const response = await apiClient.get<CheckedPaperScannedPageCount>(
       `/checked-papers/${encodeURIComponent(id)}/scanned/pages`,

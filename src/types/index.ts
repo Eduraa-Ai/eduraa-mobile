@@ -573,6 +573,7 @@ export interface CheckedPaper {
   can_save_review?: boolean;
   can_approve?: boolean;
   can_publish?: boolean;
+  can_delete?: boolean;
   legacy_read_only?: boolean;
   vlm_streaming_enabled?: boolean;
 }
