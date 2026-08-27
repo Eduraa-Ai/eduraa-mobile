@@ -11,6 +11,7 @@ const root = path.join(__dirname, '..')
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'eduraa-model-tests-'))
 
 const models = [
+  'src/api/scanUploadPolling.ts',
   'src/screens/results/checkedPapersLibraryModel.ts',
   'src/screens/results/checkedPaperDetailModel.ts',
   'src/screens/results/checkedPaperWorkspaceModel.ts',
@@ -104,6 +105,10 @@ const suites = [
   {
     file: 'scripts/scan-upload-model.test.cjs',
     env: { SCAN_UPLOAD_MODEL_PATH: path.join(outDir, 'screens/workspace/scanUploadModel.js') },
+  },
+  {
+    file: 'scripts/scan-upload-polling.test.cjs',
+    env: { SCAN_UPLOAD_POLLING_PATH: path.join(outDir, 'api/scanUploadPolling.js') },
   },
   {
     file: 'scripts/exam-workspace-contract.test.cjs',

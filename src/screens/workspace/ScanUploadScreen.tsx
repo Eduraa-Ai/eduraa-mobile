@@ -11,7 +11,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatedButton, AppScreen, ErrorState, SelectField } from '../../components/ui'
 import { checkedPapersApi } from '../../api/checkedPapers'
-import { SCAN_UPLOAD_OPTIONS_QUERY_KEY, scanUploadApi, type ScanUploadFile, type ScanUploadPhase } from '../../api/scanUpload'
+import {
+  isAcceptedScanUploadError,
+  SCAN_UPLOAD_OPTIONS_QUERY_KEY,
+  scanUploadApi,
+  type ScanUploadFile,
+  type ScanUploadPhase,
+  type ScanUploadReceipt,
+} from '../../api/scanUpload'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
 import type { CheckedPaper, Role } from '../../types'
@@ -67,6 +74,7 @@ function extractDetail(error: unknown, fallback: string) {
     if (typeof code === 'string') return code
     if (typeof message === 'string') return message
   }
+  if (error instanceof Error && error.message) return error.message
   return fallback
 }
 
@@ -161,8 +169,11 @@ export default function ScanUploadScreen() {
   const staff = !isStudentRole(role)
   const insets = useSafeAreaInsets()
   const uploadControllerRef = useRef<AbortController | null>(null)
+  const uploadMutationGuardRef = useRef(false)
   const uploadStartedAtRef = useRef<number | null>(null)
   const uploadSucceededRef = useRef(false)
+  const pendingUploadRef = useRef<ScanUploadReceipt | null>(null)
+  const didResumePendingUploadRef = useRef(false)
   const [staffUploadMode, setStaffUploadMode] = useState<StaffScanUploadMode>('ai_generation_system')
   const [selectedPaperId, setSelectedPaperId] = useState(initial?.initialPaperId ?? '')
   const [selectedExamId, setSelectedExamId] = useState(initial?.initialExamId ?? '')
@@ -178,6 +189,7 @@ export default function ScanUploadScreen() {
   const [uploadPhase, setUploadPhase] = useState<ScanUploadPhase | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [recoveredPaper, setRecoveredPaper] = useState<CheckedPaper | null>(null)
+  const [pendingUpload, setPendingUpload] = useState<ScanUploadReceipt | null>(null)
 
   const optionsQuery = useQuery({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY, queryFn: scanUploadApi.getOptions })
   const options = optionsQuery.data
@@ -219,21 +231,24 @@ export default function ScanUploadScreen() {
 
   useEffect(() => {
     if (!userId || !options || draftHydrated) return
-    if (initial?.initialPaperId || initial?.initialExamId || initial?.initialStudentId) {
-      setDraftHydrated(true)
-      return
-    }
+    const hasInitialContext = Boolean(
+      initial?.initialPaperId || initial?.initialExamId || initial?.initialStudentId,
+    )
     void loadScanUploadDraft(userId).then((draft) => {
       if (draft) {
-        const paperExists = options.papers.some((paper) => paper.id === draft.selectedPaperId)
-        const examExists = options.exams.some((exam) => exam.id === draft.selectedExamId)
-        setStaffUploadMode(draft.staffUploadMode)
-        setSelectedPaperId(paperExists ? draft.selectedPaperId : '')
-        setSelectedExamId(examExists ? draft.selectedExamId : '')
-        setSelectedSubjectId(draft.selectedSubjectId)
-        setSelectedStudentId(draft.selectedStudentId)
-        setFiles(draft.files)
-        setDraftRestored(Boolean(paperExists || examExists || draft.files.length))
+        if (!hasInitialContext || draft.pendingUpload) {
+          const paperExists = options.papers.some((paper) => paper.id === draft.selectedPaperId)
+          const examExists = options.exams.some((exam) => exam.id === draft.selectedExamId)
+          setStaffUploadMode(draft.staffUploadMode)
+          setSelectedPaperId(paperExists ? draft.selectedPaperId : '')
+          setSelectedExamId(examExists ? draft.selectedExamId : '')
+          setSelectedSubjectId(draft.selectedSubjectId)
+          setSelectedStudentId(draft.selectedStudentId)
+          setFiles(draft.files)
+          setDraftRestored(Boolean(paperExists || examExists || draft.files.length || draft.pendingUpload))
+        }
+        pendingUploadRef.current = draft.pendingUpload
+        setPendingUpload(draft.pendingUpload)
       }
       setDraftHydrated(true)
     })
@@ -242,10 +257,20 @@ export default function ScanUploadScreen() {
   useEffect(() => {
     if (!draftHydrated || !userId || uploadSucceededRef.current) return undefined
     const timer = setTimeout(() => {
-      void saveScanUploadDraft(userId, { staffUploadMode, selectedPaperId, selectedExamId, selectedSubjectId, selectedStudentId, files })
+      void saveScanUploadDraft(userId, {
+        staffUploadMode,
+        selectedPaperId,
+        selectedExamId,
+        selectedSubjectId,
+        selectedStudentId,
+        files,
+        pendingUpload,
+      })
     }, 250)
     return () => clearTimeout(timer)
-  }, [draftHydrated, files, selectedExamId, selectedPaperId, selectedStudentId, selectedSubjectId, staffUploadMode, userId])
+  }, [draftHydrated, files, pendingUpload, selectedExamId, selectedPaperId, selectedStudentId, selectedSubjectId, staffUploadMode, userId])
+
+  useEffect(() => () => uploadControllerRef.current?.abort(), [])
 
   useEffect(() => {
     if (staff && selectedStudentId && !studentOptions.some((option) => option.value === selectedStudentId)) setSelectedStudentId('')
@@ -296,16 +321,30 @@ export default function ScanUploadScreen() {
   }
 
   const uploadMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (resumeReceipt?: ScanUploadReceipt) => {
       uploadControllerRef.current = new AbortController()
-      uploadStartedAtRef.current = Date.now()
+      if (!resumeReceipt) uploadStartedAtRef.current = Date.now()
       setUploadError(null)
       setRecoveredPaper(null)
-      const receipt = await scanUploadApi.upload({
+      const receipt = resumeReceipt ?? await scanUploadApi.upload({
         paperId: uploadLink.paperId, examId: uploadLink.examId, subjectId: effectiveSubjectId,
         studentId: resolveScanUploadStudentId({ isStaff: staff, selectedStudentId, authenticatedUserId: userId }),
         uploadMode: uploadLink.uploadMode, files, signal: uploadControllerRef.current.signal, onPhase: setUploadPhase,
       })
+      didResumePendingUploadRef.current = true
+      pendingUploadRef.current = receipt
+      setPendingUpload(receipt)
+      if (!resumeReceipt) {
+        await saveScanUploadDraft(userId, {
+          staffUploadMode,
+          selectedPaperId,
+          selectedExamId,
+          selectedSubjectId,
+          selectedStudentId,
+          files,
+          pendingUpload: receipt,
+        }).catch(() => undefined)
+      }
       return scanUploadApi.awaitCheckedPaper(receipt, {
         signal: uploadControllerRef.current.signal,
         onPhase: setUploadPhase,
@@ -313,6 +352,8 @@ export default function ScanUploadScreen() {
     },
     onSuccess: async (checkedPaperId) => {
       uploadSucceededRef.current = true
+      pendingUploadRef.current = null
+      setPendingUpload(null)
       setUploadPhase(null)
       setFiles([])
       await clearScanUploadDraft(userId).catch(() => undefined)
@@ -321,13 +362,45 @@ export default function ScanUploadScreen() {
     onError: async (error) => {
       setUploadPhase(null)
       const message = friendlyUploadError(extractDetail(error, ''), 'Unable to upload this scan.')
-      const recovered = /too long|connection|receive|abort/i.test(message) ? await reconcileAmbiguousUpload() : null
+      const acceptedError = isAcceptedScanUploadError(error) ? error : null
+      const acceptedReceipt = pendingUploadRef.current
+      if (acceptedError?.terminal) {
+        pendingUploadRef.current = null
+        setPendingUpload(null)
+        await saveScanUploadDraft(userId, {
+          staffUploadMode,
+          selectedPaperId,
+          selectedExamId,
+          selectedSubjectId,
+          selectedStudentId,
+          files,
+          pendingUpload: null,
+        }).catch(() => undefined)
+      }
+      const recovered = !acceptedReceipt && /too long|connection|receive|abort/i.test(message)
+        ? await reconcileAmbiguousUpload()
+        : null
       setUploadError(recovered
         ? 'The connection ended before confirmation, but your upload was found safely. Open its status instead of uploading again.'
         : message)
     },
-    onSettled: () => { uploadControllerRef.current = null },
+    onSettled: () => {
+      uploadControllerRef.current = null
+      uploadMutationGuardRef.current = false
+    },
   })
+
+  const startUpload = (receipt?: ScanUploadReceipt) => {
+    if (uploadMutationGuardRef.current) return
+    uploadMutationGuardRef.current = true
+    uploadMutation.mutate(receipt)
+  }
+
+  useEffect(() => {
+    if (!draftHydrated || !pendingUpload || didResumePendingUploadRef.current || uploadMutation.isPending) return
+    didResumePendingUploadRef.current = true
+    startUpload(pendingUpload)
+  }, [draftHydrated, pendingUpload?.id])
 
   const addFiles = async (items: ScanUploadFile[]) => {
     setFileIssue(null)
@@ -448,6 +521,7 @@ export default function ScanUploadScreen() {
   const phaseCopy: Record<ScanUploadPhase, string> = {
     preparing: 'Preparing your pages…', uploading: 'Uploading pages securely…', confirming: 'Upload sent. Waiting for confirmation…', checking: 'Pages received. Checking has started…',
   }
+  const uploadLocked = uploadMutation.isPending || Boolean(pendingUpload)
 
   return (
     <View style={styles.root}>
@@ -469,7 +543,7 @@ export default function ScanUploadScreen() {
       <View style={styles.workflowSurface}>
       <View style={styles.stepCard}>
         <StepHeader number={1} title="Choose paper or exam" complete={assessmentComplete} />
-        <SelectField label="Assessment" value={selectedAssessmentKey} placeholder={assessmentOptions.length ? 'Choose paper or exam' : 'No eligible assessments'} options={assessmentOptions} disabled={!assessmentOptions.length || uploadMutation.isPending} onChange={(value) => {
+        <SelectField label="Assessment" value={selectedAssessmentKey} placeholder={assessmentOptions.length ? 'Choose paper or exam' : 'No eligible assessments'} options={assessmentOptions} disabled={!assessmentOptions.length || uploadLocked} onChange={(value) => {
           setUploadError(null); setRecoveredPaper(null); setSelectedStudentId('')
           if (value.startsWith('paper:')) {
             const paperId = value.slice('paper:'.length); const paper = options.papers.find((item) => item.id === paperId)
@@ -487,7 +561,7 @@ export default function ScanUploadScreen() {
         <StepHeader number={2} title="Confirm student" complete={identityComplete} />
         {!assessmentComplete ? <Text style={styles.lockedCopy}>Choose the assessment first so Eduraa can show the correct roster.</Text> : isStudentRole(role) ? (
           <View style={styles.identityRow}><Ionicons name="person-circle-outline" size={24} color={colors.accent} /><Text style={styles.identityText}>{user?.display_name || user?.identifier || 'Your account'}</Text></View>
-        ) : <SelectField label="Student" value={selectedStudentId} placeholder={studentOptions.length ? 'Choose student' : 'No eligible students for this assessment'} options={studentOptions} disabled={!studentOptions.length || uploadMutation.isPending} onChange={setSelectedStudentId} />}
+        ) : <SelectField label="Student" value={selectedStudentId} placeholder={studentOptions.length ? 'Choose student' : 'No eligible students for this assessment'} options={studentOptions} disabled={!studentOptions.length || uploadLocked} onChange={setSelectedStudentId} />}
       </View>
 
       <View style={[styles.stepCard, styles.stepDivider, !identityComplete && styles.stepCardLocked]}>
@@ -495,9 +569,9 @@ export default function ScanUploadScreen() {
         {!identityComplete ? <Text style={styles.lockedCopy}>Confirm the assessment and student before adding pages.</Text> : <>
           <Text style={styles.pageHelp}>The order below becomes page order. Use arrows to fix it before uploading.</Text>
           <View style={styles.pickGrid}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Capture page with camera" disabled={uploadMutation.isPending} onPress={capturePhoto} style={({ pressed }) => [styles.pickTile, pressed && styles.pressed]}><Ionicons name="camera" size={22} color={colors.accent} /><Text style={styles.pickTitle}>Camera</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Add images from gallery" disabled={uploadMutation.isPending} onPress={pickGallery} style={({ pressed }) => [styles.pickTile, pressed && styles.pressed]}><Ionicons name="images" size={22} color={colors.accent} /><Text style={styles.pickTitle}>Gallery</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Add PDF or images from files" disabled={uploadMutation.isPending} onPress={pickDocuments} style={({ pressed }) => [styles.pickTile, pressed && styles.pressed]}><Ionicons name="folder-open" size={22} color={colors.accent} /><Text style={styles.pickTitle}>Files</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Capture page with camera" disabled={uploadLocked} onPress={capturePhoto} style={({ pressed }) => [styles.pickTile, pressed && styles.pressed]}><Ionicons name="camera" size={22} color={colors.accent} /><Text style={styles.pickTitle}>Camera</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Add images from gallery" disabled={uploadLocked} onPress={pickGallery} style={({ pressed }) => [styles.pickTile, pressed && styles.pressed]}><Ionicons name="images" size={22} color={colors.accent} /><Text style={styles.pickTitle}>Gallery</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Add PDF or images from files" disabled={uploadLocked} onPress={pickDocuments} style={({ pressed }) => [styles.pickTile, pressed && styles.pressed]}><Ionicons name="folder-open" size={22} color={colors.accent} /><Text style={styles.pickTitle}>Files</Text></Pressable>
           </View>
           <Text style={styles.limitCopy}>Up to 20 files · 50 MB each · 100 MB combined. PDF page count is verified securely after upload.</Text>
           {fileIssue ? <View accessibilityRole="alert" style={styles.issueBanner}><Ionicons name="alert-circle-outline" size={18} color={colors.danger} /><Text style={styles.issueText}>{fileIssue}</Text></View> : null}
@@ -511,16 +585,16 @@ export default function ScanUploadScreen() {
     </AppScreen>
 
       <View style={[styles.submitDock, { bottom: layout.bottomTabHeight + insets.bottom }]}>
-        <View style={[styles.submitSurface, uploadMutation.isPending && styles.submitSurfaceActive, uploadError && styles.submitSurfaceError]}>
+        <View style={[styles.submitSurface, uploadMutation.isPending && styles.submitSurfaceActive, uploadError && !pendingUpload && styles.submitSurfaceError]}>
           {uploadError ? <>
-            <View style={styles.submitStatusRow}><View style={[styles.submitStatusIcon, recoveredPaper ? styles.submitStatusIconReady : styles.submitStatusIconError]}><Ionicons name={recoveredPaper ? 'shield-checkmark' : 'cloud-offline-outline'} size={18} color={recoveredPaper ? colors.success : colors.danger} /></View><View style={styles.submitCopy}><Text style={styles.submitTitle}>{recoveredPaper ? 'Upload found safely' : 'Upload needs attention'}</Text><Text style={styles.submitErrorText} numberOfLines={2}>{uploadError}</Text></View></View>
-            {recoveredPaper ? <AnimatedButton label="Open upload status" onPress={() => openPaperStatus(recoveredPaper)} /> : <AnimatedButton label="Try upload again" variant="secondary" disabled={!readiness.ready} onPress={() => uploadMutation.mutate()} />}
+            <View style={styles.submitStatusRow}><View style={[styles.submitStatusIcon, (pendingUpload || recoveredPaper) ? styles.submitStatusIconReady : styles.submitStatusIconError]}><Ionicons name={pendingUpload ? 'time-outline' : recoveredPaper ? 'shield-checkmark' : 'cloud-offline-outline'} size={18} color={(pendingUpload || recoveredPaper) ? colors.success : colors.danger} /></View><View style={styles.submitCopy}><Text style={styles.submitTitle}>{pendingUpload ? 'Upload received safely' : recoveredPaper ? 'Upload found safely' : 'Upload needs attention'}</Text><Text style={styles.submitErrorText} numberOfLines={2}>{uploadError}</Text></View></View>
+            {pendingUpload ? <AnimatedButton label="Resume checking" onPress={() => startUpload(pendingUpload)} /> : recoveredPaper ? <AnimatedButton label="Open upload status" onPress={() => openPaperStatus(recoveredPaper)} /> : <AnimatedButton label="Try upload again" variant="secondary" disabled={!readiness.ready} onPress={() => startUpload()} />}
           </> : <>
             <View style={styles.submitStatusRow}>
               <View style={[styles.submitStatusIcon, readiness.ready && styles.submitStatusIconReady]}><Ionicons name={readiness.ready ? 'shield-checkmark' : 'lock-closed-outline'} size={18} color={readiness.ready ? colors.success : colors.textMuted} /></View>
               <View style={styles.submitCopy}><Text style={styles.submitTitle}>{uploadPhase ? phaseCopy[uploadPhase] : readiness.message}</Text><Text style={styles.submitMeta}>{files.length ? `${files.length} ${files.length === 1 ? 'file' : 'files'} · ${formatBytes(files.reduce((sum, file) => sum + (file.size ?? 0), 0))}` : 'Your draft is saved on this device.'}</Text></View>
             </View>
-            {uploadMutation.isPending ? <AnimatedButton label="Cancel upload" variant="ghost" onPress={() => uploadControllerRef.current?.abort()} /> : <AnimatedButton label="Upload answer sheet" disabled={!readiness.ready} onPress={() => uploadMutation.mutate()} />}
+            {uploadMutation.isPending ? uploadPhase === 'confirming' ? <AnimatedButton label="Confirming receipt…" variant="ghost" disabled onPress={() => undefined} /> : <AnimatedButton label={uploadPhase === 'checking' ? 'Stop waiting' : 'Cancel upload'} variant="ghost" onPress={() => uploadControllerRef.current?.abort()} /> : <AnimatedButton label="Upload answer sheet" disabled={!readiness.ready} onPress={() => startUpload()} />}
           </>}
         </View>
       </View>

@@ -2,6 +2,17 @@ import { File as ExpoFile } from 'expo-file-system'
 import { Platform } from 'react-native'
 import apiClient, { API_BASE_URL, authenticatedFetch } from './client'
 import type { Exam, Subject } from '../types'
+import {
+  parseScanUploadReceipt,
+  pollScanUpload,
+  type ScanUploadReceipt,
+} from './scanUploadPolling'
+
+export {
+  isAcceptedScanUploadError,
+  parseScanUploadReceipt,
+  type ScanUploadReceipt,
+} from './scanUploadPolling'
 
 export const SCAN_UPLOAD_OPTIONS_QUERY_KEY = ['scan-upload', 'options'] as const
 
@@ -52,19 +63,6 @@ export interface ScanUploadPayload {
 }
 
 export type ScanUploadPhase = 'preparing' | 'uploading' | 'confirming' | 'checking'
-
-export interface ScanUploadReceipt {
-  id: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
-  checked_paper_id?: string | null
-  error_code?: string | null
-  error_message?: string | null
-}
-
-export const SCAN_UPLOAD_POLL_INTERVAL_MS = 2000
-// The scan is queued server-side, so this only has to outlast the queue, not
-// the page processing itself.
-export const SCAN_UPLOAD_POLL_TIMEOUT_MS = 10 * 60 * 1000
 
 function appendOptional(formData: FormData, key: string, value?: string | null) {
   if (value) formData.append(key, value)
@@ -142,7 +140,9 @@ async function uploadNative(payload: ScanUploadPayload) {
     if (!response.ok) {
       throw uploadError(responseDetail(data, 'The upload was not accepted. Please check the selections and try again.'), response.status)
     }
-    return data as ScanUploadReceipt
+    const receipt = parseScanUploadReceipt(data)
+    if (!receipt) throw uploadError('The server accepted the request but returned an invalid upload receipt.')
+    return receipt
   } catch (error) {
     if (controller.signal.aborted) {
       if (payload.signal?.aborted) {
@@ -181,14 +181,18 @@ export const scanUploadApi = {
         payload.onPhase?.(event.loaded < (event.total ?? Number.POSITIVE_INFINITY) ? 'uploading' : 'confirming')
       },
     })
-    return response.data
+    const receipt = parseScanUploadReceipt(response.data)
+    if (!receipt) throw uploadError('The server returned an invalid upload receipt.')
+    return receipt
   },
 
   async getUpload(uploadId: string): Promise<ScanUploadReceipt> {
     const response = await apiClient.get<ScanUploadReceipt>(
       `/checked-papers/uploads/${uploadId}`,
     )
-    return response.data
+    const receipt = parseScanUploadReceipt(response.data)
+    if (!receipt) throw uploadError('The server returned an invalid upload status.')
+    return receipt
   },
 
   /** Resolve the checked paper id once the queued scan has been processed. */
@@ -200,26 +204,9 @@ export const scanUploadApi = {
       return receipt.checked_paper_id
     }
     options.onPhase?.('checking')
-    const deadline = Date.now() + SCAN_UPLOAD_POLL_TIMEOUT_MS
-    let current = receipt
-    while (Date.now() < deadline) {
-      if (options.signal?.aborted) {
-        throw uploadError('Upload cancelled. Your selections and pages are still here.')
-      }
-      if (current.status === 'failed') {
-        throw uploadError(
-          current.error_message
-          || 'The scan could not be checked. Please try the upload again.',
-        )
-      }
-      if (current.status === 'completed' && current.checked_paper_id) {
-        return current.checked_paper_id
-      }
-      await new Promise((resolve) => setTimeout(resolve, SCAN_UPLOAD_POLL_INTERVAL_MS))
-      current = await scanUploadApi.getUpload(receipt.id)
-    }
-    throw uploadError(
-      'Checking is taking longer than usual. Your pages are saved — open the paper list shortly to see the result.',
-    )
+    return pollScanUpload(receipt, {
+      signal: options.signal,
+      load: scanUploadApi.getUpload,
+    })
   },
 }

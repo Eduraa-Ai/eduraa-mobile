@@ -66,6 +66,7 @@ test('native scan uploads use Expo file-backed multipart while web keeps Axios',
   const client = read('src/api/client.ts')
   const scanApi = read('src/api/scanUpload.ts')
   const scanScreen = read('src/screens/workspace/ScanUploadScreen.tsx')
+  const scanDraft = read('src/screens/workspace/scanUploadDraft.ts')
 
   assert.match(scanApi, /new ExpoFile\(file\.uri\)/)
   assert.match(scanApi, /authenticatedFetch\(`\$\{API_BASE_URL\}\/api\/v1\/checked-papers\/scan`/)
@@ -74,6 +75,12 @@ test('native scan uploads use Expo file-backed multipart while web keeps Axios',
   // The scan is queued server-side, so the client resolves the paper by polling.
   assert.match(scanApi, /checked-papers\/uploads\/\$\{uploadId\}/)
   assert.match(scanApi, /async awaitCheckedPaper\(/)
+  assert.match(scanDraft, /pendingUpload: ScanUploadReceipt \| null/)
+  assert.match(scanScreen, /pendingUpload: receipt/)
+  assert.match(scanScreen, /Resume checking/)
+  assert.match(scanScreen, /Stop waiting/)
+  assert.match(scanScreen, /Confirming receipt…/)
+  assert.match(scanScreen, /if \(uploadMutationGuardRef\.current\) return/)
   assert.match(client, /response\.status !== 401/)
   assert.match(client, /refreshAccessToken\(\)/)
   assert.match(scanApi, /Your selections are still here/)
