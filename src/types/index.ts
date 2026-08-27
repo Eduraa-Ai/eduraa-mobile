@@ -113,6 +113,7 @@ export type PaperStatus = "draft" | "published" | "archived";
 export interface MCQOption {
   id: string;
   text: string;
+  is_correct?: boolean;
 }
 
 export interface MatchColumnsOptions {
@@ -148,7 +149,7 @@ export interface QuestionInPaper {
   difficulty: Difficulty;
   marks: number;
   options?: MCQOption[] | MatchColumnsOptions;
-  answer_key?: string | Record<string, string>;
+  answer_key?: string | Record<string, string> | unknown[];
   marking_rubric?: RubricItem[];
   topic_id?: string;
   topic_name?: string;
@@ -180,6 +181,16 @@ export interface Paper {
   generation_config?: Record<string, unknown>;
   created_at: string;
   questions: QuestionInPaper[];
+  clarify?: {
+    pending_action?: string;
+    pending_spec?: Record<string, unknown>;
+    questions: Array<{
+      field: string;
+      prompt: string;
+      chips?: Array<{ label: string; value: string }>;
+      allow_custom?: boolean;
+    }>;
+  } | null;
 }
 
 export interface PaperListItem {

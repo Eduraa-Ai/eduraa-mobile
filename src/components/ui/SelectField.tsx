@@ -44,11 +44,19 @@ export function SelectField({
   }, [options, query])
 
   const canOpen = !disabled && !loading && options.length > 0
+  const closeSheet = () => {
+    setOpen(false)
+    setQuery('')
+  }
 
   return (
     <View style={styles.root}>
       <Text style={styles.label}>{label}</Text>
       <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${selected?.label ?? placeholder}`}
+        accessibilityHint={`Opens ${label.toLowerCase()} choices`}
+        accessibilityState={{ disabled: !canOpen, expanded: open }}
         activeOpacity={0.88}
         disabled={!canOpen}
         onPress={() => setOpen(true)}
@@ -61,13 +69,18 @@ export function SelectField({
       </TouchableOpacity>
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)} />
-        <View style={styles.sheet}>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={closeSheet}>
+        <Pressable style={styles.backdrop} onPress={closeSheet} />
+        <View accessibilityViewIsModal style={styles.sheet}>
           <View style={styles.sheetGrabber} />
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{label}</Text>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setOpen(false)}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`Close ${label.toLowerCase()} choices`}
+              style={styles.closeButton}
+              onPress={closeSheet}
+            >
               <Ionicons name="close" size={18} color={colors.text} />
             </TouchableOpacity>
           </View>
@@ -93,12 +106,13 @@ export function SelectField({
               const active = item.value === value
               return (
                 <TouchableOpacity
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: active }}
                   activeOpacity={0.86}
                   style={[styles.option, active && styles.optionActive]}
                   onPress={() => {
                     onChange(item.value)
-                    setOpen(false)
-                    setQuery('')
+                    closeSheet()
                   }}
                 >
                   <Text style={[styles.optionText, active && styles.optionTextActive]}>{item.label}</Text>
@@ -169,8 +183,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius['2xl'],
     borderTopRightRadius: radius['2xl'],
     backgroundColor: colors.backgroundElevated,
-    padding: spacing[5],
-    gap: spacing[4],
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[5],
+    gap: spacing[3],
     ...shadows.lg,
   },
   sheetGrabber: {
@@ -220,17 +236,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   list: {
-    marginHorizontal: -spacing[1],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
   },
   option: {
     minHeight: 52,
-    borderRadius: radius.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing[3],
-    paddingHorizontal: spacing[4],
-    marginBottom: spacing[2],
+    paddingHorizontal: spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
   optionActive: {
     backgroundColor: colors.accentSurfaceStrong,
