@@ -27,10 +27,9 @@ export function validateDoubtDraft(draft: DoubtDraft): DoubtDraftErrors {
   const title = draft.title.trim()
   const details = draft.details.trim()
   if (!draft.teacherId || !draft.subject) errors.teacher = 'Choose the subject teacher for this doubt.'
-  if (title.length < 4) errors.title = 'Use at least 4 characters so the doubt is easy to find.'
+  if (!title) errors.title = 'Add a title so the doubt is easy to find.'
   else if (title.length > 160) errors.title = 'Keep the title within 160 characters.'
-  if (details.length < 12) errors.details = 'Add at least 12 characters about where you are stuck.'
-  else if (details.length > 5000) errors.details = 'Keep the question within 5,000 characters.'
+  if (!details) errors.details = 'Add your question before sending.'
   if (unsafePattern.test(`${title}\n${details}`)) {
     errors.guardrail = 'Keep this desk safe, respectful, and focused on schoolwork.'
   }
@@ -47,7 +46,27 @@ export function selectTeacher(draft: DoubtDraft, option: DoubtTeacherOption): Do
 }
 
 export function filterDoubts(items: DoubtSummary[], status: DoubtStatus | 'all') {
-  return status === 'all' ? items : items.filter((item) => item.status === status)
+  if (status === 'all') return items
+  if (status === 'pending') return items.filter((item) => item.status !== 'resolved')
+  return items.filter((item) => item.status === status)
+}
+
+export interface DoubtRoleFilters {
+  personId: string | null
+  classLabel: string | null
+}
+
+export function filterDoubtsForRole(
+  items: DoubtSummary[],
+  status: DoubtStatus | 'all',
+  isTeacher: boolean,
+  filters: DoubtRoleFilters,
+) {
+  return filterDoubts(items, status).filter((item) => {
+    if (isTeacher && filters.classLabel && item.class_label !== filters.classLabel) return false
+    if (!filters.personId) return true
+    return isTeacher ? item.student_id === filters.personId : item.teacher_id === filters.personId
+  })
 }
 
 type UnknownRecord = Record<string, unknown>
@@ -61,7 +80,7 @@ function stringValue(value: unknown, fallback = '') {
 }
 
 export function normalizeDoubtStatus(value: unknown): DoubtStatus {
-  if (value === 'answered' || value === 'resolved') return value
+  if (value === 'resolved') return value
   if (value === 'closed') return 'resolved'
   return 'pending'
 }
@@ -89,6 +108,7 @@ export function normalizeDoubtSummary(value: unknown): DoubtSummary {
     latest_message_at: latestMessageAt,
     created_at: createdAt,
     updated_at: stringValue(raw.updated_at, latestMessageAt),
+    resolved_at: typeof raw.resolved_at === 'string' ? raw.resolved_at : null,
     last_message: typeof raw.last_message === 'string' ? raw.last_message : null,
   }
 }
@@ -97,7 +117,12 @@ export function normalizeDoubtDetail(value: unknown): DoubtDetail {
   const raw = asRecord(value)
   return {
     doubt: normalizeDoubtSummary(raw.doubt),
-    messages: Array.isArray(raw.messages) ? raw.messages as DoubtMessage[] : [],
+    messages: Array.isArray(raw.messages)
+      ? (raw.messages as DoubtMessage[]).map((message) => ({
+        ...message,
+        attachments: Array.isArray(message.attachments) ? message.attachments : [],
+      }))
+      : [],
     history: Array.isArray(raw.history) ? raw.history as DoubtEvent[] : [],
   }
 }

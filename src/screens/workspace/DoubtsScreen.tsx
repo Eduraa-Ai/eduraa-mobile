@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,10 +15,14 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useNetInfo } from '@react-native-community/netinfo'
 import { Ionicons } from '@expo/vector-icons'
+import * as DocumentPicker from 'expo-document-picker'
+import { File as ExpoFile } from 'expo-file-system'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AppScreen, EmptyState, ErrorState, SkeletonCard } from '../../components/ui'
+import { AppScreen, AuthenticatedImage, EmptyState, ErrorState, SkeletonCard } from '../../components/ui'
 import {
+  type DoubtAttachment,
+  type DoubtAttachmentInput,
   doubtErrorCode,
   doubtErrorMessage,
   doubtHttpStatus,
@@ -28,11 +33,12 @@ import {
 } from '../../api/doubts'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
+import { downloadProtectedDocument, openProtectedDocument } from '../../utils/openProtectedDocument'
 import {
   createClientRequestId,
   doubtDraftStorageKey,
   emptyDoubtDraft,
-  filterDoubts,
+  filterDoubtsForRole,
   returnFromDoubts,
   selectTeacher,
   validateDoubtDraft,
@@ -42,16 +48,24 @@ import {
 
 const statusTheme: Record<DoubtStatus, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; surface: string }> = {
   pending: { label: 'Pending', icon: 'time-outline', color: colors.warning, surface: colors.warningSurface },
-  answered: { label: 'Answered', icon: 'checkmark-circle-outline', color: colors.info, surface: colors.infoSurface },
   resolved: { label: 'Resolved', icon: 'shield-checkmark-outline', color: colors.success, surface: colors.successSurface },
 }
 
 const filterOptions: Array<{ key: DoubtStatus | 'all'; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'pending', label: 'Pending' },
-  { key: 'answered', label: 'Answered' },
   { key: 'resolved', label: 'Resolved' },
 ]
+
+const MAX_DOUBT_ATTACHMENTS = 5
+const MAX_DOUBT_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+function formatFileSize(bytes: number) {
+  if (!bytes) return ''
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${bytes} B`
+}
 
 function relativeDate(value: string) {
   const date = new Date(value)
@@ -102,10 +116,10 @@ function StatusPill({ status }: { status: DoubtStatus }) {
 }
 
 function FocusPanel({ items, isTeacher }: { items: DoubtSummary[]; isTeacher: boolean }) {
-  const pending = items.filter((item) => item.status === 'pending').length
-  const answered = items.filter((item) => item.status === 'answered').length
+  const pending = items.filter((item) => item.status !== 'resolved').length
+  const resolved = items.filter((item) => item.status === 'resolved').length
   return (
-    <View style={styles.focusPanel} accessible accessibilityLabel={`${pending} pending and ${answered} answered doubts`}>
+    <View style={styles.focusPanel} accessible accessibilityLabel={`${pending} pending and ${resolved} resolved doubts`}>
       <View style={styles.focusGlow} />
       <View style={styles.focusTop}>
         <View style={styles.focusIcon}>
@@ -169,6 +183,169 @@ function InlineNotice({ message, offline = false, onRetry }: { message: string; 
   )
 }
 
+function inferredContentType(asset: DocumentPicker.DocumentPickerAsset) {
+  const explicit = asset.mimeType || asset.file?.type
+  if (explicit) return explicit
+  const extension = asset.name.split('.').pop()?.toLowerCase()
+  const common: Record<string, string> = {
+    csv: 'text/csv', gif: 'image/gif', jpeg: 'image/jpeg', jpg: 'image/jpeg',
+    mp3: 'audio/mpeg', mp4: 'video/mp4', pdf: 'application/pdf', png: 'image/png',
+    txt: 'text/plain', webm: 'video/webm', webp: 'image/webp',
+  }
+  return (extension && common[extension]) || 'application/octet-stream'
+}
+
+function browserFileBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the selected file.'))
+    reader.onload = () => {
+      const value = typeof reader.result === 'string' ? reader.result : ''
+      const comma = value.indexOf(',')
+      if (comma < 0) reject(new Error('Could not encode the selected file.'))
+      else resolve(value.slice(comma + 1))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function normalizeBase64(value: string) {
+  const encoded = value.includes(',') && /^data:/i.test(value.trim())
+    ? value.slice(value.indexOf(',') + 1)
+    : value
+  const normalized = encoded.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')
+  return normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
+}
+
+async function attachmentFromAsset(asset: DocumentPicker.DocumentPickerAsset): Promise<DoubtAttachmentInput> {
+  const contentType = inferredContentType(asset)
+  const rawBase64 = Platform.OS === 'web'
+    ? asset.base64 || (asset.file ? await browserFileBase64(asset.file) : '')
+    : await new ExpoFile(asset.uri).base64()
+  const dataBase64 = normalizeBase64(rawBase64)
+  if (!dataBase64) throw new Error('The selected file was empty.')
+  return {
+    file_name: asset.name || 'attachment',
+    content_type: contentType,
+    data_base64: dataBase64,
+    file_size: asset.size ?? 0,
+    preview_uri: contentType.startsWith('image/')
+      ? Platform.OS === 'web' ? `data:${contentType};base64,${dataBase64}` : asset.uri
+      : undefined,
+  }
+}
+
+async function pickDoubtAttachments(
+  currentCount: number,
+  onPicked: (attachments: DoubtAttachmentInput[]) => void,
+  onError: (message: string) => void,
+) {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: '*/*',
+    multiple: true,
+    copyToCacheDirectory: true,
+    base64: Platform.OS === 'web',
+  })
+  if (result.canceled || !result.assets?.length) return
+  if (currentCount + result.assets.length > MAX_DOUBT_ATTACHMENTS) {
+    onError('Attach no more than five files.')
+    return
+  }
+  const oversized = result.assets.find((asset) => (asset.size ?? 0) > MAX_DOUBT_ATTACHMENT_BYTES)
+  if (oversized) {
+    onError(`${oversized.name || 'This file'} is larger than 10 MB.`)
+    return
+  }
+  try {
+    const attachments = await Promise.all(result.assets.map(attachmentFromAsset))
+    const encodedOversized = attachments.find((attachment) => {
+      const decodedSize = attachment.file_size || Math.floor((attachment.data_base64.length * 3) / 4)
+      return decodedSize > MAX_DOUBT_ATTACHMENT_BYTES
+    })
+    if (encodedOversized) {
+      onError(`${encodedOversized.file_name} is larger than 10 MB.`)
+      return
+    }
+    onPicked(attachments)
+  } catch (error) {
+    onError(error instanceof Error ? error.message : 'This file could not be prepared. Choose it again.')
+  }
+}
+
+function AttachmentList({
+  attachments,
+  mine,
+  onRemove,
+  onError,
+}: {
+  attachments: DoubtAttachmentInput[] | DoubtAttachment[]
+  mine?: boolean
+  onRemove?: (index: number) => void
+  onError?: (message: string) => void
+}) {
+  if (!attachments.length) return null
+  return (
+    <View style={styles.attachmentList}>
+      {attachments.map((attachment, index) => {
+        const readableSize = 'file_size' in attachment ? formatFileSize(attachment.file_size ?? 0) : ''
+        const isImage = attachment.content_type.startsWith('image/')
+        const remoteUrl = 'url' in attachment ? attachment.url : null
+        const previewUri = 'preview_uri' in attachment ? attachment.preview_uri : null
+        return (
+          <View key={`${attachment.file_name}-${index}`} style={[styles.attachmentItem, mine && styles.attachmentItemMine]}>
+            {remoteUrl && isImage ? (
+              <AuthenticatedImage
+                uri={remoteUrl}
+                accessibilityLabel={attachment.file_name}
+                containerStyle={styles.attachmentPreview}
+                imageStyle={styles.attachmentImage}
+              />
+            ) : previewUri && isImage ? (
+              <Image source={{ uri: previewUri }} accessibilityLabel={attachment.file_name} resizeMode="cover" style={[styles.attachmentPreview, styles.attachmentImage]} />
+            ) : (
+              <View style={[styles.attachmentIcon, mine && styles.attachmentIconMine]}>
+                <Ionicons name={isImage ? 'image-outline' : 'document-attach-outline'} size={17} color={mine ? colors.white : colors.accent} />
+              </View>
+            )}
+            <Pressable
+              disabled={!remoteUrl}
+              onPress={() => remoteUrl
+                ? void openProtectedDocument(remoteUrl, attachment.file_name, attachment.content_type)
+                  .catch(() => onError?.('This attachment could not be opened. Try downloading it again.'))
+                : undefined}
+              accessibilityRole={remoteUrl ? 'button' : undefined}
+              accessibilityLabel={remoteUrl ? `Open ${attachment.file_name}` : attachment.file_name}
+              style={styles.attachmentCopy}
+            >
+              <Text style={[styles.attachmentName, mine && styles.attachmentNameMine]} numberOfLines={1}>{attachment.file_name}</Text>
+              <Text style={[styles.attachmentMeta, mine && styles.attachmentMetaMine]} numberOfLines={1}>
+                {readableSize || attachment.content_type}
+              </Text>
+            </Pressable>
+            {remoteUrl ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Download ${attachment.file_name}`}
+                onPress={() => void downloadProtectedDocument(remoteUrl, attachment.file_name, attachment.content_type)
+                  .catch(() => onError?.('This attachment could not be downloaded. Check your connection and try again.'))}
+                hitSlop={8}
+                style={styles.attachmentAction}
+              >
+                <Ionicons name="download-outline" size={19} color={mine ? colors.white : colors.accent} />
+              </Pressable>
+            ) : null}
+            {onRemove ? (
+              <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${attachment.file_name}`} onPress={() => onRemove(index)} hitSlop={8}>
+                <Ionicons name="close-circle" size={20} color={mine ? '#aab5c6' : colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
 function LabeledInput({
   label,
   value,
@@ -184,13 +361,12 @@ function LabeledInput({
   placeholder: string
   error?: string
   multiline?: boolean
-  maxLength: number
+  maxLength?: number
 }) {
   return (
     <View style={styles.inputGroup}>
       <View style={styles.inputLabelRow}>
         <Text style={styles.inputLabel}>{label}</Text>
-        <Text style={styles.inputCount}>{value.length}/{maxLength}</Text>
       </View>
       <TextInput
         value={value}
@@ -211,6 +387,57 @@ function LabeledInput({
   )
 }
 
+type DoubtFilterOption = { value: string; label: string; count: number }
+
+function uniqueFilterOptions(items: DoubtSummary[], value: (item: DoubtSummary) => string, label: (item: DoubtSummary) => string) {
+  const options = new Map<string, DoubtFilterOption>()
+  items.forEach((item) => {
+    const key = value(item)
+    if (!key) return
+    const existing = options.get(key)
+    options.set(key, existing ? { ...existing, count: existing.count + 1 } : { value: key, label: label(item), count: 1 })
+  })
+  return [...options.values()].sort((left, right) => left.label.localeCompare(right.label))
+}
+
+function ContextFilterRow({
+  label,
+  allLabel,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string
+  allLabel: string
+  options: DoubtFilterOption[]
+  selected: string | null
+  onSelect: (value: string | null) => void
+}) {
+  if (options.length < 2) return null
+  return (
+    <View style={styles.contextFilterGroup}>
+      <Text style={styles.contextFilterLabel}>{label}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contextFilterChoices}>
+        {[{ value: '', label: allLabel, count: options.reduce((total, option) => total + option.count, 0) }, ...options].map((option) => {
+          const active = (selected ?? '') === option.value
+          return (
+            <Pressable
+              key={option.value || 'all'}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => onSelect(option.value || null)}
+              style={({ pressed }) => [styles.contextFilterChip, active && styles.contextFilterChipActive, pressed && styles.pressed]}
+            >
+              <Text style={[styles.contextFilterChipText, active && styles.contextFilterChipTextActive]}>{option.label}</Text>
+              <Text style={[styles.contextFilterCount, active && styles.contextFilterChipTextActive]}>{option.count}</Text>
+            </Pressable>
+          )
+        })}
+      </ScrollView>
+    </View>
+  )
+}
+
 function ComposeView({ onBack, onCreated }: { onBack: () => void; onCreated: (detail: DoubtDetail) => void }) {
   const user = useAuthStore((state) => state.user)
   const netInfo = useNetInfo()
@@ -218,6 +445,8 @@ function ComposeView({ onBack, onCreated }: { onBack: () => void; onCreated: (de
   const storageKey = doubtDraftStorageKey(user?.id ?? 'unknown')
   const [draft, setDraft] = useState<DoubtDraft>(() => emptyDoubtDraft(createClientRequestId()))
   const [errors, setErrors] = useState<DoubtDraftErrors>({})
+  const [attachments, setAttachments] = useState<DoubtAttachmentInput[]>([])
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const hydrated = useRef(false)
   const accepted = useRef(false)
@@ -275,6 +504,7 @@ function ComposeView({ onBack, onCreated }: { onBack: () => void; onCreated: (de
       await queryClient.invalidateQueries({ queryKey: ['doubts', user?.id] })
       await AsyncStorage.removeItem(storageKey)
       setDraft(emptyDoubtDraft(createClientRequestId()))
+      setAttachments([])
       onCreated(detail)
     },
     onError: (error) => {
@@ -299,7 +529,17 @@ function ComposeView({ onBack, onCreated }: { onBack: () => void; onCreated: (de
       title: draft.title.trim(),
       description: draft.details.trim(),
       client_request_id: draft.clientRequestId,
+      attachments,
     })
+  }
+
+  const addAttachments = async () => {
+    setAttachmentError(null)
+    await pickDoubtAttachments(
+      attachments.length,
+      (picked) => setAttachments((current) => [...current, ...picked]),
+      setAttachmentError,
+    )
   }
 
   return (
@@ -310,7 +550,7 @@ function ComposeView({ onBack, onCreated }: { onBack: () => void; onCreated: (de
         <View style={styles.composeStep}><Text style={styles.composeStepText}>1</Text></View>
         <View style={styles.composeIntroCopy}>
           <Text style={styles.composeTitle}>Give your teacher the context they need.</Text>
-          <Text style={styles.composeBody}>Your draft stays on this device until it is accepted. Attachments are intentionally unavailable.</Text>
+          <Text style={styles.composeBody}>Your draft stays on this device until it is accepted. Add a file, photo, or screenshot when it helps.</Text>
         </View>
       </View>
 
@@ -377,6 +617,22 @@ function ComposeView({ onBack, onCreated }: { onBack: () => void; onCreated: (de
         maxLength={5000}
       />
 
+      <View style={styles.formSection}>
+        <Text style={styles.inputLabel}>Attachments</Text>
+        <AttachmentList attachments={attachments} onRemove={(index) => setAttachments((current) => current.filter((_, fileIndex) => fileIndex !== index))} />
+        <Pressable
+          onPress={() => void addAttachments()}
+          accessibilityRole="button"
+          accessibilityLabel="Add file or photo"
+          style={({ pressed }) => [styles.addFileAction, pressed && styles.pressed]}
+        >
+          <Ionicons name="add" size={19} color={colors.accent} />
+          <Text style={styles.addFileText}>Add file or photo</Text>
+          <Text style={styles.addFileMeta}>Any file up to 10 MB</Text>
+        </Pressable>
+        {attachmentError ? <Text style={styles.errorText} accessibilityRole="alert">{attachmentError}</Text> : null}
+      </View>
+
       {errors.guardrail ? <InlineNotice message={errors.guardrail} /> : null}
       {submitError ? <InlineNotice offline={netInfo.isConnected === false} message={submitError} /> : null}
 
@@ -391,7 +647,7 @@ function ComposeView({ onBack, onCreated }: { onBack: () => void; onCreated: (de
         {createMutation.isPending ? <ActivityIndicator color={colors.white} /> : <Ionicons name="arrow-up-circle" size={20} color={colors.white} />}
         <Text style={styles.primaryButtonText}>{createMutation.isPending ? 'Sending once…' : 'Send to teacher'}</Text>
       </Pressable>
-      <Text style={styles.formFootnote}>Private by design · no group chat · no attachments</Text>
+      <Text style={styles.formFootnote}>Private by design · no group chat</Text>
     </AppScreen>
     </KeyboardAvoidingView>
   )
@@ -403,6 +659,8 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
   const netInfo = useNetInfo()
   const queryClient = useQueryClient()
   const [reply, setReply] = useState('')
+  const [replyAttachments, setReplyAttachments] = useState<DoubtAttachmentInput[]>([])
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const screenRef = useRef<ScrollView>(null)
 
@@ -424,8 +682,8 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
   }
 
   const replyMutation = useMutation({
-    mutationFn: ({ body, revision }: { body: string; revision: number | null }) => doubtsApi.reply(id, body, revision),
-    onSuccess: (detail) => { acceptDetail(detail); setReply(''); setActionError(null) },
+    mutationFn: ({ body, revision, attachments }: { body: string; revision: number | null; attachments: DoubtAttachmentInput[] }) => doubtsApi.reply(id, body, revision, attachments),
+    onSuccess: (detail) => { acceptDetail(detail); setReply(''); setReplyAttachments([]); setActionError(null); setAttachmentError(null) },
     onError: async (error) => {
       if (doubtErrorCode(error) === 'stale_doubt') await detailQuery.refetch()
       setActionError(doubtErrorMessage(error, 'Your reply is still here. Refresh and try again.'))
@@ -433,7 +691,7 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
   })
 
   const resolveMutation = useMutation({
-    mutationFn: (revision: number) => doubtsApi.resolve(id, revision),
+    mutationFn: (revision: number | null) => doubtsApi.resolve(id, revision),
     onSuccess: (detail) => { acceptDetail(detail); setActionError(null) },
     onError: async (error) => {
       if (doubtErrorCode(error) === 'stale_doubt') await detailQuery.refetch()
@@ -472,19 +730,27 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
   const detail = detailQuery.data
   const doubt = detail.doubt
   const resolved = doubt.status === 'resolved'
-  const answeredAt = detail.history.find((item) => item.to_status === 'answered')?.created_at
-  const resolvedAt = detail.history.find((item) => item.to_status === 'resolved')?.created_at
+  const resolvedAt = doubt.resolved_at ?? detail.history.find((item) => item.to_status === 'resolved')?.created_at
   const activity = [
     `Asked ${relativeDate(doubt.created_at)}`,
-    answeredAt ? `Answered ${relativeDate(answeredAt)}` : 'Waiting for an answer',
+    resolved ? 'Resolved' : 'Pending',
     ...(resolvedAt ? [`Resolved ${relativeDate(resolvedAt)}`] : []),
   ].join('  ·  ')
   const sendReply = () => {
     const body = reply.trim()
-    if (body.length < 2) { setActionError('Write a little more before sending.'); return }
+    if (!body && !replyAttachments.length) { setActionError('Add a message or attachment before sending.'); return }
     if (netInfo.isConnected === false) { setActionError('You are offline. Your reply is still here.'); return }
     if (replyMutation.isPending) return
-    replyMutation.mutate({ body, revision: doubt.revision })
+    replyMutation.mutate({ body, revision: doubt.revision, attachments: replyAttachments })
+  }
+
+  const addReplyAttachments = async () => {
+    setAttachmentError(null)
+    await pickDoubtAttachments(
+      replyAttachments.length,
+      (picked) => setReplyAttachments((current) => [...current, ...picked]),
+      setAttachmentError,
+    )
   }
 
   return (
@@ -522,7 +788,8 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
           return (
             <View key={message.id} style={[styles.message, mine ? styles.messageMine : styles.messageOther]} accessible accessibilityLabel={`${message.sender_name}, ${relativeDate(message.created_at)}: ${message.body}`}>
               <Text style={[styles.messageAuthor, mine && styles.messageAuthorMine]}>{mine ? 'You' : message.sender_name}</Text>
-              <Text style={[styles.messageBody, mine && styles.messageBodyMine]} selectable>{message.body}</Text>
+              {message.body ? <Text style={[styles.messageBody, mine && styles.messageBodyMine]} selectable>{message.body}</Text> : null}
+              <AttachmentList attachments={message.attachments} mine={mine} onError={setActionError} />
               <Text style={[styles.messageTime, mine && styles.messageTimeMine]}>{relativeDate(message.created_at)}</Text>
             </View>
           )
@@ -537,6 +804,8 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
         </View>
       </View>
 
+      {resolved && actionError ? <InlineNotice message={actionError} offline={netInfo.isConnected === false} /> : null}
+
       {resolved ? (
         <View style={styles.resolvedPanel}>
           <Ionicons name="shield-checkmark" size={24} color={colors.success} />
@@ -549,7 +818,6 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
         <View style={styles.replyPanel}>
           <View style={styles.replyLabelRow}>
             <Text style={styles.inputLabel}>{isTeacher ? 'Answer the student' : 'Add useful context'}</Text>
-            <Text style={styles.inputCount}>{reply.length}/5000</Text>
           </View>
           <TextInput
             value={reply}
@@ -562,28 +830,36 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
             accessibilityLabel={isTeacher ? 'Answer the student' : 'Add context to your doubt'}
             style={styles.replyInput}
           />
+          <AttachmentList attachments={replyAttachments} onRemove={(index) => setReplyAttachments((current) => current.filter((_, fileIndex) => fileIndex !== index))} />
+          <Pressable
+            onPress={() => void addReplyAttachments()}
+            accessibilityRole="button"
+            accessibilityLabel="Add file or photo to reply"
+            style={({ pressed }) => [styles.addFileAction, pressed && styles.pressed]}
+          >
+            <Ionicons name="add" size={19} color={colors.accent} />
+            <Text style={styles.addFileText}>Add file or photo</Text>
+            <Text style={styles.addFileMeta}>Any file up to 10 MB</Text>
+          </Pressable>
+          {attachmentError ? <Text style={styles.errorText} accessibilityRole="alert">{attachmentError}</Text> : null}
           {actionError ? <InlineNotice message={actionError} offline={netInfo.isConnected === false} /> : null}
           <View style={styles.replyActions}>
-            {isTeacher && doubt.revision != null ? (
-              <Pressable
-                onPress={() => {
-                  if (doubt.revision != null) resolveMutation.mutate(doubt.revision)
-                }}
-                disabled={resolveMutation.isPending || replyMutation.isPending}
-                accessibilityRole="button"
-                accessibilityLabel="Resolve this doubt"
-                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-              >
-                {resolveMutation.isPending ? <ActivityIndicator color={colors.success} /> : <Ionicons name="checkmark-done" size={19} color={colors.success} />}
-                <Text style={styles.secondaryButtonText}>Resolve</Text>
-              </Pressable>
-            ) : null}
+            <Pressable
+              onPress={() => resolveMutation.mutate(doubt.revision)}
+              disabled={resolveMutation.isPending || replyMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Resolve this doubt"
+              style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+            >
+              {resolveMutation.isPending ? <ActivityIndicator color={colors.success} /> : <Ionicons name="checkmark-done" size={19} color={colors.success} />}
+              <Text style={styles.secondaryButtonText}>Resolve</Text>
+            </Pressable>
             <Pressable
               onPress={sendReply}
-              disabled={replyMutation.isPending}
+              disabled={replyMutation.isPending || resolveMutation.isPending}
               accessibilityRole="button"
               accessibilityLabel={replyMutation.isPending ? 'Sending reply' : 'Send reply'}
-              style={({ pressed }) => [styles.replyButton, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [styles.replyButton, (replyMutation.isPending || resolveMutation.isPending) && styles.buttonDisabled, pressed && styles.buttonPressed]}
             >
               {replyMutation.isPending ? <ActivityIndicator color={colors.white} /> : <Ionicons name="send" size={17} color={colors.white} />}
               <Text style={styles.replyButtonText}>{isTeacher ? 'Send answer' : 'Send context'}</Text>
@@ -602,6 +878,9 @@ export default function DoubtsScreen() {
   const isTeacher = user?.role === 'teacher'
   const netInfo = useNetInfo()
   const [filter, setFilter] = useState<DoubtStatus | 'all'>('all')
+  const [personFilter, setPersonFilter] = useState<string | null>(null)
+  const [classFilter, setClassFilter] = useState<string | null>(null)
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(route.params?.doubtId ?? null)
   const [composing, setComposing] = useState(false)
   const screenRef = useRef<ScrollView>(null)
@@ -622,7 +901,33 @@ export default function DoubtsScreen() {
     if (route.params?.doubtId) setActiveId(route.params.doubtId)
   }, [route.params?.doubtId])
 
-  const filtered = useMemo(() => filterDoubts(listQuery.data ?? [], filter), [filter, listQuery.data])
+  const allDoubts = listQuery.data ?? []
+  const classOptions = useMemo(
+    () => isTeacher ? uniqueFilterOptions(allDoubts, (item) => item.class_label ?? '', (item) => item.class_label ?? '') : [],
+    [allDoubts, isTeacher],
+  )
+  const personSource = useMemo(
+    () => isTeacher && classFilter ? allDoubts.filter((item) => item.class_label === classFilter) : allDoubts,
+    [allDoubts, classFilter, isTeacher],
+  )
+  const personOptions = useMemo(
+    () => uniqueFilterOptions(
+      personSource,
+      (item) => isTeacher ? item.student_id : item.teacher_id,
+      (item) => isTeacher ? item.student_name : item.teacher_name,
+    ),
+    [isTeacher, personSource],
+  )
+  const filtered = useMemo(
+    () => filterDoubtsForRole(allDoubts, filter, isTeacher, { personId: personFilter, classLabel: classFilter }),
+    [allDoubts, classFilter, filter, isTeacher, personFilter],
+  )
+  const hasContextFilters = classOptions.length > 1 || personOptions.length > 1
+  const activeContextFilterCount = Number(Boolean(classFilter)) + Number(Boolean(personFilter))
+
+  useEffect(() => {
+    if (personFilter && !personOptions.some((option) => option.value === personFilter)) setPersonFilter(null)
+  }, [personFilter, personOptions])
   const closeThread = () => {
     setActiveId(null)
     if (route.params?.doubtId) navigation.replace?.('Doubts')
@@ -695,6 +1000,41 @@ export default function DoubtsScreen() {
                 )
               })}
             </View>
+            {hasContextFilters ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: filtersExpanded }}
+                  onPress={() => setFiltersExpanded((current) => !current)}
+                  style={({ pressed }) => [styles.contextFilterToggle, activeContextFilterCount > 0 && styles.contextFilterToggleActive, pressed && styles.pressed]}
+                >
+                  <Ionicons name="funnel-outline" size={16} color={activeContextFilterCount ? colors.accentStrong : colors.textSecondary} />
+                  <Text style={[styles.contextFilterToggleText, activeContextFilterCount > 0 && styles.contextFilterToggleTextActive]}>
+                    {activeContextFilterCount ? `Filters (${activeContextFilterCount})` : 'Filter'}
+                  </Text>
+                  <Ionicons name={filtersExpanded ? 'chevron-up' : 'chevron-down'} size={15} color={colors.textMuted} />
+                </Pressable>
+                {filtersExpanded ? (
+                  <View style={styles.contextFilters}>
+                    {isTeacher ? (
+                      <ContextFilterRow label="Class" allLabel="All classes" options={classOptions} selected={classFilter} onSelect={(value) => { setClassFilter(value); setPersonFilter(null) }} />
+                    ) : null}
+                    <ContextFilterRow
+                      label={isTeacher ? 'Student' : 'Teacher'}
+                      allLabel={isTeacher ? 'All students' : 'All teachers'}
+                      options={personOptions}
+                      selected={personFilter}
+                      onSelect={setPersonFilter}
+                    />
+                    {activeContextFilterCount ? (
+                      <Pressable accessibilityRole="button" onPress={() => { setClassFilter(null); setPersonFilter(null) }} style={styles.clearContextFilters}>
+                        <Text style={styles.clearContextFiltersText}>Clear filters</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+              </>
+            ) : null}
             {filtered.length ? (
               <View style={styles.threadList}>{filtered.map((item) => <DoubtRow key={item.id} item={item} isTeacher={isTeacher} onPress={() => setActiveId(item.id)} />)}</View>
             ) : (
@@ -761,6 +1101,21 @@ const styles = StyleSheet.create({
   filterSelected: { backgroundColor: colors.white, ...shadows.xs },
   filterText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   filterTextSelected: { color: colors.nav },
+  contextFilterToggle: { alignSelf: 'flex-start', minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderWidth: 1, borderColor: '#d8cdbf', borderRadius: radius.sm, backgroundColor: colors.white },
+  contextFilterToggleActive: { borderColor: colors.accent, backgroundColor: '#fff7ed' },
+  contextFilterToggleText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  contextFilterToggleTextActive: { color: colors.accentStrong },
+  contextFilters: { gap: spacing[3], paddingVertical: spacing[3], borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#ded4c7' },
+  contextFilterGroup: { gap: spacing[2] },
+  contextFilterLabel: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  contextFilterChoices: { gap: spacing[2], paddingRight: spacing[3] },
+  contextFilterChip: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderWidth: 1, borderColor: '#ddd2c5', borderRadius: radius.full, backgroundColor: colors.white },
+  contextFilterChipActive: { borderColor: colors.nav, backgroundColor: colors.nav },
+  contextFilterChipText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
+  contextFilterChipTextActive: { color: colors.white },
+  contextFilterCount: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  clearContextFilters: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing[2] },
+  clearContextFiltersText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   threadList: { overflow: 'hidden', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#d8cdbf' },
   threadRow: { minHeight: 150, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[4], borderBottomWidth: 1, borderBottomColor: '#e8dfd3' },
   threadPressed: { backgroundColor: '#fff7ed' },
@@ -797,6 +1152,22 @@ const styles = StyleSheet.create({
   textArea: { minHeight: 150, paddingTop: spacing[4], lineHeight: 21 },
   inputError: { borderColor: colors.danger, backgroundColor: colors.dangerSurface },
   errorText: { color: colors.danger, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
+  addFileAction: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[4], borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.accent, backgroundColor: colors.accentSurface },
+  addFileText: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
+  addFileMeta: { marginLeft: 'auto', color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  attachmentList: { gap: spacing[2] },
+  attachmentItem: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[2], padding: spacing[2], borderRadius: radius.sm, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
+  attachmentItemMine: { borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.08)' },
+  attachmentIcon: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  attachmentIconMine: { backgroundColor: 'rgba(255,255,255,0.14)' },
+  attachmentCopy: { flex: 1, minWidth: 0 },
+  attachmentName: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  attachmentNameMine: { color: colors.white },
+  attachmentMeta: { marginTop: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9 },
+  attachmentMetaMine: { color: '#aab5c6' },
+  attachmentAction: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  attachmentPreview: { width: 52, height: 52, overflow: 'hidden', borderRadius: radius.xs, backgroundColor: colors.backgroundMuted },
+  attachmentImage: { width: '100%', height: '100%' },
   primaryButton: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, backgroundColor: colors.nav, ...shadows.sm },
   primaryButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   buttonDisabled: { opacity: 0.46 },

@@ -5,6 +5,7 @@ const {
   createClientRequestId,
   emptyDoubtDraft,
   filterDoubts,
+  filterDoubtsForRole,
   normalizeDoubtDetail,
   normalizeDoubtSummary,
   returnFromDoubts,
@@ -58,12 +59,38 @@ test('status filtering never leaks another state into the selected queue', () =>
   }
   const items = [
     { ...base, id: '1', status: 'pending' },
-    { ...base, id: '2', status: 'answered' },
     { ...base, id: '3', status: 'resolved' },
   ]
 
-  assert.deepEqual(filterDoubts(items, 'answered').map((item) => item.id), ['2'])
-  assert.equal(filterDoubts(items, 'all').length, 3)
+  assert.deepEqual(filterDoubts(items, 'pending').map((item) => item.id), ['1'])
+  assert.deepEqual(filterDoubts(items, 'resolved').map((item) => item.id), ['3'])
+  assert.equal(filterDoubts(items, 'all').length, 2)
+})
+
+test('legacy answered doubts are normalized into pending', () => {
+  const summary = normalizeDoubtSummary({
+    id: 'legacy-answered',
+    subject: 'Math',
+    status: 'answered',
+    latest_message_at: '2026-08-25T10:00:00Z',
+    created_at: '2026-08-25T09:00:00Z',
+  })
+
+  assert.equal(summary.status, 'pending')
+})
+
+test('role filters separate teachers for students and class plus student for teachers', () => {
+  const base = {
+    subject: 'Physics', title: 'Question', status: 'pending', revision: 1,
+    latest_message_at: '2026-08-19T10:00:00Z', created_at: '2026-08-19T10:00:00Z', updated_at: '2026-08-19T10:00:00Z',
+  }
+  const items = [
+    { ...base, id: '1', teacher_id: 't1', teacher_name: 'Teacher One', student_id: 's1', student_name: 'Student One', class_label: 'Std 8 - A' },
+    { ...base, id: '2', teacher_id: 't2', teacher_name: 'Teacher Two', student_id: 's2', student_name: 'Student Two', class_label: 'Std 8 - B' },
+  ]
+
+  assert.deepEqual(filterDoubtsForRole(items, 'all', false, { personId: 't2', classLabel: null }).map((item) => item.id), ['2'])
+  assert.deepEqual(filterDoubtsForRole(items, 'all', true, { personId: 's1', classLabel: 'Std 8 - A' }).map((item) => item.id), ['1'])
 })
 
 test('legacy backend doubt records are normalized without blanking the screen', () => {

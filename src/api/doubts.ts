@@ -2,7 +2,23 @@ import axios from 'axios'
 import apiClient from './client'
 import { normalizeDoubtDetail, normalizeDoubtSummary } from '../screens/workspace/doubtWorkspaceModel'
 
-export type DoubtStatus = 'pending' | 'answered' | 'resolved'
+export type DoubtStatus = 'pending' | 'resolved'
+
+export interface DoubtAttachmentInput {
+  file_name: string
+  content_type: string
+  data_base64: string
+  file_size?: number
+  preview_uri?: string
+}
+
+export interface DoubtAttachment {
+  id: string
+  file_name: string
+  content_type: string
+  file_size: number
+  url: string
+}
 
 export interface DoubtTeacherOption {
   teacher_id: string
@@ -28,6 +44,7 @@ export interface DoubtSummary {
   latest_message_at: string
   created_at: string
   updated_at: string
+  resolved_at?: string | null
   last_message?: string | null
 }
 
@@ -37,6 +54,7 @@ export interface DoubtMessage {
   sender_role: 'student' | 'teacher'
   sender_name: string
   body: string
+  attachments: DoubtAttachment[]
   created_at: string
 }
 
@@ -65,6 +83,7 @@ export interface CreateDoubtInput {
   title: string
   description: string
   client_request_id: string
+  attachments?: DoubtAttachmentInput[]
 }
 
 type ApiDetail = string | { message?: string; code?: string }
@@ -105,23 +124,29 @@ export const doubtsApi = {
   },
 
   async create(input: CreateDoubtInput) {
-    const response = await apiClient.post<unknown>('/communication/doubts', input, {
+    const response = await apiClient.post<unknown>('/communication/doubts', {
+      ...input,
+      attachments: input.attachments?.map(({ file_size: _size, preview_uri: _preview, ...attachment }) => attachment),
+    }, {
       headers: { 'Idempotency-Key': input.client_request_id },
     })
     return normalizeDoubtDetail(response.data)
   },
 
-  async reply(id: string, body: string, expectedRevision: number | null) {
-    const payload: { body: string; expected_revision?: number } = { body }
+  async reply(id: string, body: string, expectedRevision: number | null, attachments: DoubtAttachmentInput[] = []) {
+    const payload: { body: string; expected_revision?: number; attachments?: DoubtAttachmentInput[] } = {
+      body,
+      attachments: attachments.map(({ file_size: _size, preview_uri: _preview, ...attachment }) => attachment),
+    }
     if (expectedRevision != null) payload.expected_revision = expectedRevision
     const response = await apiClient.post<unknown>(`/communication/doubts/${id}/messages`, payload)
     return normalizeDoubtDetail(response.data)
   },
 
-  async resolve(id: string, expectedRevision: number) {
-    const response = await apiClient.patch<DoubtDetail>(`/communication/doubts/${id}/resolve`, {
-      expected_revision: expectedRevision,
-    })
+  async resolve(id: string, expectedRevision?: number | null) {
+    const payload: { expected_revision?: number } = {}
+    if (expectedRevision != null) payload.expected_revision = expectedRevision
+    const response = await apiClient.patch<DoubtDetail>(`/communication/doubts/${id}/resolve`, payload)
     return normalizeDoubtDetail(response.data)
   },
 }
