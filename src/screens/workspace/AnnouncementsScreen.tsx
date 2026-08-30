@@ -310,6 +310,7 @@ function StudentAnnouncements({ announcementId }: { announcementId?: string }) {
     queryKey: ['announcements', 'student'],
     queryFn: announcementsApi.list,
     select: (items) => reconcileAnnouncements([], items),
+    retry: 1,
   })
   const detailQuery = useQuery({
     queryKey: ['announcement', announcementId],
@@ -321,7 +322,12 @@ function StudentAnnouncements({ announcementId }: { announcementId?: string }) {
     mutationFn: announcementsApi.markRead,
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['announcements', 'student'] })
+      const previous = queryClient.getQueryData<Announcement[]>(['announcements', 'student'])
       queryClient.setQueryData<Announcement[]>(['announcements', 'student'], (items = []) => items.map((item) => item.id === id ? { ...item, is_read: true } : item))
+      return { previous }
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['announcements', 'student'], context.previous)
     },
     onSuccess: (item) => {
       queryClient.setQueryData<Announcement[]>(['announcements', 'student'], (items = []) => reconcileAnnouncements(items, items.map((current) => current.id === item.id ? item : current)))
@@ -341,7 +347,7 @@ function StudentAnnouncements({ announcementId }: { announcementId?: string }) {
   }
 
   if (listQuery.isLoading) return <AppScreen><LoadingAnnouncements /></AppScreen>
-  if (listQuery.isError && !listQuery.data?.length) return <AppScreen><ErrorPane error={listQuery.error} onRetry={() => void listQuery.refetch()} /></AppScreen>
+  if ((listQuery.isError || listQuery.failureCount > 0) && !listQuery.data?.length) return <AppScreen><ErrorPane error={listQuery.error} onRetry={() => void listQuery.refetch()} /></AppScreen>
   const items = listQuery.data ?? []
   const unread = items.filter((item) => item.is_read === false).length
   return (
@@ -501,12 +507,11 @@ function TeacherComposer({
     }
   }
 
-  const isPrincipal = user?.role === 'principal'
-  const audienceTitle = isPrincipal ? 'All school classes' : 'All my classes'
-  const audienceBody = isPrincipal ? 'Every active student in your branch.' : 'Every active student across your authorized class-teacher sections.'
+  const audienceTitle = 'All my classes'
+  const audienceBody = 'Every active student across your authorized class-teacher sections.'
 
   const audienceLabel = draft.target_scope === 'all_classes'
-    ? isPrincipal ? 'All school classes' : `All ${classesQuery.data?.length || ''} authorized classes`.replace('All  authorized', 'All authorized')
+    ? `All ${classesQuery.data?.length || ''} authorized classes`.replace('All  authorized', 'All authorized')
     : classesQuery.data?.find((entry) => entry.id === draft.class_section_id)
       ? `Std ${classesQuery.data?.find((entry) => entry.id === draft.class_section_id)?.standard} · Division ${classesQuery.data?.find((entry) => entry.id === draft.class_section_id)?.division}`
       : 'Class not selected'
@@ -522,7 +527,7 @@ function TeacherComposer({
       <View style={styles.composeHeader}>
         <IconButton label="Close composer" icon="close" onPress={onClose} />
         <View style={styles.composeHeaderCopy}>
-          <Text style={styles.sectionEyebrow}>{isPublishedEdit ? 'EDIT PUBLISHED UPDATE' : (isPrincipal ? 'PRINCIPAL PUBLICATION DESK' : 'TEACHER PUBLICATION DESK')}</Text>
+          <Text style={styles.sectionEyebrow}>{isPublishedEdit ? 'EDIT PUBLISHED UPDATE' : 'TEACHER PUBLICATION DESK'}</Text>
           <Text style={styles.composeHeaderTitle}>{isPublishedEdit ? 'Keep the message precise.' : 'Say it once. Make it clear.'}</Text>
         </View>
       </View>
@@ -593,7 +598,7 @@ function TeacherAnnouncements() {
   const [state, setState] = useState<AnnouncementState>('published')
   const [mode, setMode] = useState<'list' | 'compose' | 'detail'>('list')
   const [selected, setSelected] = useState<Announcement | undefined>()
-  const listQuery = useQuery({ queryKey: ['announcements', 'teacher'], queryFn: announcementsApi.list })
+  const listQuery = useQuery({ queryKey: ['announcements', 'teacher'], queryFn: announcementsApi.list, retry: 1 })
   const archiveMutation = useMutation({
     mutationFn: announcementsApi.archive,
     onSuccess: async () => {
@@ -606,7 +611,7 @@ function TeacherAnnouncements() {
   if (mode === 'compose') return <TeacherComposer item={selected} onClose={() => { setMode('list'); setSelected(undefined) }} />
   if (mode === 'detail' && selected) return <AnnouncementDetail item={selected} onBack={() => setMode('list')} onEdit={selected.publish_state === 'archived' ? undefined : () => setMode('compose')} onArchive={selected.publish_state === 'published' ? () => archiveMutation.mutate(selected.id) : undefined} />
   if (listQuery.isLoading) return <AppScreen><LoadingAnnouncements /></AppScreen>
-  if (listQuery.isError && !listQuery.data?.length) return <AppScreen><ErrorPane error={listQuery.error} onRetry={() => void listQuery.refetch()} /></AppScreen>
+  if ((listQuery.isError || listQuery.failureCount > 0) && !listQuery.data?.length) return <AppScreen><ErrorPane error={listQuery.error} onRetry={() => void listQuery.refetch()} /></AppScreen>
   const allItems = listQuery.data ?? []
   const items = announcementsForState(allItems, state)
   return (
@@ -630,7 +635,7 @@ function TeacherAnnouncements() {
 export default function AnnouncementsScreen() {
   const route = useRoute<any>()
   const role = useAuthStore((state) => state.user?.role)
-  if (role === 'teacher' || role === 'principal') return <TeacherAnnouncements />
+  if (role === 'teacher') return <TeacherAnnouncements />
   if (role === 'student') return <StudentAnnouncements announcementId={route.params?.announcementId} />
   return <AppScreen><ErrorPane kind="permission" onRetry={() => undefined} /></AppScreen>
 }

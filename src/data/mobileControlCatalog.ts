@@ -125,7 +125,7 @@ export const mobileControls: MobileControl[] = [
     id: 'announcements',
     label: 'Announcements',
     webPath: '/announcements',
-    roles: ['student', 'teacher', 'principal'],
+    roles: ['student', 'teacher'],
     description: 'Publish class updates or read the announcements intended for your school enrollment.',
     icon: 'megaphone',
     section: 'operations',
