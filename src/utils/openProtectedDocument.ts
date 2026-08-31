@@ -20,14 +20,20 @@ function mimeType(extension: string) {
   if (extension === '.png') return 'image/png'
   if (extension === '.jpg') return 'image/jpeg'
   if (extension === '.webp') return 'image/webp'
+  if (extension === '.doc') return 'application/msword'
+  if (extension === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  if (extension === '.xls') return 'application/vnd.ms-excel'
+  if (extension === '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  if (extension === '.csv') return 'text/csv'
   return 'application/pdf'
 }
 
-export async function openProtectedDocument(value: string, fileStem: string) {
+async function accessProtectedDocument(value: string, fileName: string, contentType?: string, download = false) {
   const url = resolveDocumentUrl(value, API_BASE_URL)
-  const extension = documentFileExtension(url)
+  const extension = documentFileExtension(fileName)
   const needsAuth = requiresApiAuthorization(url, API_BASE_URL)
-  const safeStem = safeDocumentFileStem(fileStem)
+  const stem = fileName.replace(/\.[^.]+$/, '')
+  const safeStem = safeDocumentFileStem(stem, 'attachment')
 
   if (Platform.OS === 'web') {
     const response = needsAuth
@@ -36,7 +42,8 @@ export async function openProtectedDocument(value: string, fileStem: string) {
     const objectUrl = URL.createObjectURL(response.data)
     const anchor = document.createElement('a')
     anchor.href = objectUrl
-    anchor.target = '_blank'
+    if (download) anchor.download = fileName
+    else anchor.target = '_blank'
     anchor.rel = 'noopener noreferrer'
     anchor.click()
     setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
@@ -55,10 +62,18 @@ export async function openProtectedDocument(value: string, fileStem: string) {
   }
 
   await Sharing.shareAsync(downloaded.uri, {
-    dialogTitle: 'Open original checked paper',
-    mimeType: mimeType(extension),
+    dialogTitle: download ? 'Save attachment' : 'Open attachment',
+    mimeType: contentType || mimeType(extension),
     UTI: extension === '.pdf' ? 'com.adobe.pdf' : 'public.image',
   })
+}
+
+export function openProtectedDocument(value: string, fileName: string, contentType?: string) {
+  return accessProtectedDocument(value, fileName, contentType, false)
+}
+
+export function downloadProtectedDocument(value: string, fileName: string, contentType?: string) {
+  return accessProtectedDocument(value, fileName, contentType, true)
 }
 
 export function openCheckedPaperScan(checkedPaperId: string) {

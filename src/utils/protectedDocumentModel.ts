@@ -7,7 +7,8 @@ export function resolveDocumentUrl(value: string, apiBaseUrl: string) {
 
 export function documentFileExtension(url: string) {
   try {
-    const match = new URL(url).pathname.match(/\.(pdf|png|jpe?g|webp)$/i)
+    const path = /^https?:\/\//i.test(url) ? new URL(url).pathname : url.split(/[?#]/, 1)[0]
+    const match = path.match(/\.([a-z0-9]{1,10})$/i)
     return match ? `.${match[1].toLowerCase().replace('jpeg', 'jpg')}` : '.pdf'
   } catch {
     return '.pdf'
