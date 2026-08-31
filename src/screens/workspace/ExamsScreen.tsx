@@ -981,6 +981,7 @@ function StaffCardActionButton({
   label,
   icon,
   primary = false,
+  danger = false,
   disabled,
   loading,
   onPress,
@@ -988,11 +989,12 @@ function StaffCardActionButton({
   label: string
   icon: keyof typeof Ionicons.glyphMap
   primary?: boolean
+  danger?: boolean
   disabled?: boolean
   loading?: boolean
   onPress: () => void
 }) {
-  const tintColor = primary ? colors.textOnBrand : colors.text
+  const tintColor = primary ? colors.textOnBrand : danger ? colors.danger : colors.text
 
   return (
     <Pressable
@@ -1004,6 +1006,7 @@ function StaffCardActionButton({
       style={({ pressed }) => [
         styles.staffCardActionButton,
         primary ? styles.staffCardActionButtonPrimary : styles.staffCardActionButtonSecondary,
+        danger && styles.staffCardActionButtonDelete,
         disabled && styles.staffCardActionButtonDisabled,
         pressed && !disabled && styles.pressed,
       ]}
@@ -1026,16 +1029,20 @@ function StaffExamCard({
   selected,
   syllabus,
   sharingSyllabus,
+  deleting,
   onPress,
   onShareSyllabus,
+  onDelete,
 }: {
   exam: Exam
   linkedPapers: PaperListItem[]
   selected: boolean
   syllabus?: CheatSheetSyllabus
   sharingSyllabus?: boolean
+  deleting?: boolean
   onPress: () => void
   onShareSyllabus: () => void
+  onDelete: () => void
 }) {
   const paperCount = exam.paper_ids?.length ?? 0
   const durationLabel = exam.duration_minutes ? `${exam.duration_minutes} min` : 'No time limit'
@@ -1107,7 +1114,16 @@ function StaffExamCard({
           label={syllabus ? 'Update syllabus' : 'Share syllabus'}
           icon="share-social-outline"
           loading={sharingSyllabus}
+          disabled={Boolean(deleting)}
           onPress={onShareSyllabus}
+        />
+        <StaffCardActionButton
+          label="Delete exam"
+          icon="trash-outline"
+          danger
+          loading={deleting}
+          disabled={Boolean(deleting || sharingSyllabus)}
+          onPress={onDelete}
         />
       </View>
     </AnimatedCard>
@@ -1186,6 +1202,7 @@ function StaffExamsView({ role }: { role?: Role }) {
   const [form, setForm] = useState<ExamFormState>(emptyForm)
   const [paperAssistError, setPaperAssistError] = useState('')
   const [paperDefaultsLoadingId, setPaperDefaultsLoadingId] = useState('')
+  const [deletingExamId, setDeletingExamId] = useState<string | null>(null)
   const scrollRef = useRef<ScrollView>(null)
 
   const examsQuery = useQuery({ queryKey: ['exams', 'staff'], queryFn: examsApi.listStaffExams })
@@ -1453,6 +1470,39 @@ function StaffExamsView({ role }: { role?: Role }) {
       notify('Share failed', extractDetail(error, 'Unable to share this exam syllabus.'))
     },
   })
+
+  const deleteExamMutation = useMutation({
+    mutationFn: async (exam: Exam) => {
+      await examsApi.delete(exam.id)
+      return exam
+    },
+    onMutate: (exam) => {
+      setDeletingExamId(exam.id)
+      setPaperAssistError('')
+    },
+    onSuccess: async (exam) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['exams', 'staff'] }),
+        queryClient.invalidateQueries({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY }),
+      ])
+      if (selectedExam?.id === exam.id) resetForm()
+      notify('Exam deleted', `“${exam.name}” was permanently removed.`)
+    },
+    onError: (error) => {
+      notify('Delete failed', extractDetail(error, 'Unable to delete this exam.'))
+    },
+    onSettled: () => setDeletingExamId(null),
+  })
+
+  const requestDeleteExam = (exam: Exam) => {
+    if (deleteExamMutation.isPending) return
+    confirmDestructive(
+      'Delete exam?',
+      `“${exam.name}” will be permanently removed. Linked papers will stay in your paper library.`,
+      'Delete exam',
+      () => deleteExamMutation.mutate(exam),
+    )
+  }
 
   const isLoading = examsQuery.isLoading || subjectsQuery.isLoading || papersQuery.isLoading || teachersQuery.isLoading
   const isError = examsQuery.isError || subjectsQuery.isError || papersQuery.isError
@@ -1739,12 +1789,14 @@ function StaffExamsView({ role }: { role?: Role }) {
               selected={selectedExam?.id === exam.id}
               syllabus={syllabiByExamId.get(exam.id)}
               sharingSyllabus={shareSyllabusMutation.isPending && shareSyllabusMutation.variables?.id === exam.id}
+              deleting={deletingExamId === exam.id}
               onPress={() => {
                 setSelectedExam(exam)
                 setForm(formFromExam(exam))
                 scrollRef.current?.scrollTo({ y: 0, animated: true })
               }}
               onShareSyllabus={() => shareSyllabusMutation.mutate(exam)}
+              onDelete={() => requestDeleteExam(exam)}
             />
           ))
         )}

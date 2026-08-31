@@ -90,18 +90,8 @@ export const approvalsApi = {
     return response.data
   },
 
-  async rejectPrincipal(id: string, password: string) {
-    const response = await apiClient.post<PendingAccount>(`/approvals/principals/${id}/reject`, { password })
-    return response.data
-  },
-
   async approveTeacher(id: string) {
     const response = await apiClient.post<PendingAccount>(`/approvals/teachers/${id}/approve`)
-    return response.data
-  },
-
-  async rejectTeacher(id: string) {
-    const response = await apiClient.post<PendingAccount>(`/approvals/teachers/${id}/reject`, {})
     return response.data
   },
 
@@ -110,18 +100,8 @@ export const approvalsApi = {
     return response.data
   },
 
-  async rejectStudent(id: string) {
-    const response = await apiClient.post<PendingAccount>(`/approvals/students/${id}/reject`, {})
-    return response.data
-  },
-
   async approveClassTeacherRequest(id: string) {
     const response = await apiClient.post<ClassTeacherApproval>(`/approvals/class-teacher-requests/${id}/approve`)
-    return response.data
-  },
-
-  async rejectClassTeacherRequest(id: string) {
-    const response = await apiClient.post<ClassTeacherApproval>(`/approvals/class-teacher-requests/${id}/reject`, {})
     return response.data
   },
 
@@ -130,8 +110,10 @@ export const approvalsApi = {
     return response.data
   },
 
-  async rejectTeacherProfileUpdate(id: string) {
-    const response = await apiClient.post<TeacherProfileApproval>(`/approvals/teacher-profile-updates/${id}/reject`, {})
-    return response.data
-  },
+  async rejectPrincipal(id: string, reason: string, password: string) { return (await apiClient.post<PendingAccount>(`/approvals/principals/${id}/reject`, { reason, password })).data },
+  async rejectTeacher(id: string, reason: string) { return (await apiClient.post<PendingAccount>(`/approvals/teachers/${id}/reject`, { reason })).data },
+  async rejectStudent(id: string, reason: string) { return (await apiClient.post<PendingAccount>(`/approvals/students/${id}/reject`, { reason })).data },
+  async rejectClassTeacherRequest(id: string, reason: string) { return (await apiClient.post<ClassTeacherApproval>(`/approvals/class-teacher-requests/${id}/reject`, { reason })).data },
+  async rejectTeacherProfileUpdate(id: string, reason: string) { return (await apiClient.post<TeacherProfileApproval>(`/approvals/teacher-profile-updates/${id}/reject`, { reason })).data },
+
 }

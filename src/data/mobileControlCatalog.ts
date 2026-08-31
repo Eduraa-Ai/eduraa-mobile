@@ -49,7 +49,7 @@ export const mobileControls: MobileControl[] = [
     label: 'Approvals',
     webPath: '/approvals',
     roles: ['school_super_admin', 'branch_admin', 'principal', 'teacher'],
-    description: 'Approve principals, teachers, students, class-teacher requests, and profile updates.',
+    description: 'Review only the approval requests that your school role and scope permit.',
     icon: 'checkmark-done-circle',
     section: 'operations',
     nativeStatus: 'native',

@@ -6,26 +6,44 @@ const { test } = require('node:test')
 const root = path.join(__dirname, '..')
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 
-test('approval API loads one targeted queue and implements approve and reject', () => {
+test('approval API exposes matching server-backed approve and reject decisions', () => {
   const source = read('src/api/approvals.ts')
   assert.match(source, /getQueue<K extends ApprovalQueueKey>/)
   assert.doesNotMatch(source, /async getQueues\(/)
   for (const method of [
-    'rejectPrincipal',
-    'rejectTeacher',
-    'rejectStudent',
-    'rejectClassTeacherRequest',
-    'rejectTeacherProfileUpdate',
+    'approvePrincipal',
+    'approveTeacher',
+    'approveStudent',
+    'approveClassTeacherRequest',
+    'approveTeacherProfileUpdate',
   ]) assert.match(source, new RegExp(`async ${method}\\(`))
+  for (const method of [
+    'rejectPrincipal', 'rejectTeacher', 'rejectStudent', 'rejectClassTeacherRequest', 'rejectTeacherProfileUpdate',
+  ]) assert.match(source, new RegExp(`async ${method}\\(`))
+  assert.match(source, /\/reject/)
+})
+
+test('approval language makes server scope authoritative for every reviewer role', () => {
+  const model = read('src/screens/workspace/approvalsModel.ts')
+  const catalog = read('src/data/mobileControlCatalog.ts')
+  assert.match(model, /class sections/)
+  assert.match(catalog, /school role and scope permit/)
 })
 
 test('approval screen gates API reads by role and targets retries', () => {
   const source = read('src/screens/workspace/ApprovalsScreen.tsx')
   assert.match(source, /enabled,/)
   assert.match(source, /getVisibleApprovalQueues\(user\?\.role\)/)
-  assert.match(source, /Try this queue again/)
+  assert.match(source, /Retry \$\{copy.title\}/)
+  assert.match(source, /outcomeUnknown/)
+  assert.match(source, /hasReceivedInitialQueueResult/)
+  assert.match(source, /loadingAny && !loadedAny && !hasReceivedInitialQueueResult/)
+  assert.match(source, /A review queue needs attention/)
+  assert.match(source, /No decision was made while a queue is unavailable/)
   assert.match(source, /retry: false/)
   assert.match(source, /removeCompletedApproval/)
+  assert.match(source, /Reject request/)
+  assert.match(source, /Reason for rejection/)
   assert.match(source, /Your identity, this target, the decision, and server time will be recorded/)
   assert.match(source, /Modal visible=\{Boolean\(pendingDecision\)\}/)
 })

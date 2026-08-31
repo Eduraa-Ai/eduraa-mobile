@@ -35,7 +35,11 @@ test('download, retest, and owned-paper deletion use the website production cont
   assert.match(screen, /reason:\s*'retest'/)
   assert.match(screen, /exam_id:\s*target\.examId/)
   assert.match(examsApi, /apiClient\.delete\(`\/papers\/\$\{paperId\}`\)/)
-  assert.doesNotMatch(examsApi, /delete\(`\/exams\/\$\{examId\}`/)
+  assert.match(examsApi, /apiClient\.delete\(`\/exams\/\$\{examId\}`\)/)
+  assert.match(screen, /label="Delete exam"/)
+  assert.match(screen, /confirmDestructive\(/)
+  assert.match(screen, /Linked papers will stay in your paper library\./)
+  assert.match(screen, /deleteExamMutation\.isPending/)
 })
 
 test('retest creates a fresh cached attempt and preserves the prior result', () => {
