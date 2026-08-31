@@ -33,6 +33,8 @@ test('doubt creation and replies support attachments while resolution stays inde
   assert.doesNotMatch(screen, /isTeacher && doubt\.revision != null/)
   assert.match(screen, /resolveMutation\.mutate\(\)/)
   assert.match(screen, /Mark as resolved/)
+  assert.match(screen, /Send follow-up/)
+  assert.match(screen, /Continue the discussion/)
   assert.doesNotMatch(screen, /Resolve this doubt/)
 })
 

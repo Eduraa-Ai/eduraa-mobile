@@ -807,11 +807,11 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
           <Ionicons name="shield-checkmark" size={24} color={colors.success} />
           <View style={styles.resolvedCopy}>
             <Text style={styles.resolvedTitle}>This doubt is resolved.</Text>
-            <Text style={styles.resolvedBody}>The full academic thread remains available. Start a new doubt for a different question.</Text>
+            <Text style={styles.resolvedBody}>Send a follow-up whenever the discussion needs to continue.</Text>
           </View>
         </View>
-      ) : (
-        <>
+      ) : null}
+      {!resolved ? (
           <View style={styles.resolveAction}>
             {resolveError ? <InlineNotice message={resolveError} offline={netInfo.isConnected === false} /> : null}
             <Pressable
@@ -825,9 +825,10 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
               <Text style={styles.markResolvedButtonText}>Mark as resolved</Text>
             </Pressable>
           </View>
-          <View style={styles.replyPanel}>
+      ) : null}
+      <View style={styles.replyPanel}>
           <View style={styles.replyLabelRow}>
-            <Text style={styles.inputLabel}>{isTeacher ? 'Answer the student' : 'Add useful context'}</Text>
+            <Text style={styles.inputLabel}>{resolved ? 'Continue the discussion' : isTeacher ? 'Answer the student' : 'Add useful context'}</Text>
           </View>
           <TextInput
             value={reply}
@@ -835,9 +836,9 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
             multiline
             maxLength={5000}
             textAlignVertical="top"
-            placeholder={isTeacher ? 'Explain the next step clearly and academically.' : 'Add the exact step or example you tried.'}
+            placeholder={resolved ? 'Ask a follow-up or add more context.' : isTeacher ? 'Explain the next step clearly and academically.' : 'Add the exact step or example you tried.'}
             placeholderTextColor={colors.textSoft}
-            accessibilityLabel={isTeacher ? 'Answer the student' : 'Add context to your doubt'}
+            accessibilityLabel={resolved ? 'Continue this doubt discussion' : isTeacher ? 'Answer the student' : 'Add context to your doubt'}
             style={styles.replyInput}
           />
           <AttachmentList attachments={replyAttachments} onRemove={(index) => setReplyAttachments((current) => current.filter((_, fileIndex) => fileIndex !== index))} />
@@ -858,16 +859,14 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
               onPress={sendReply}
               disabled={replyMutation.isPending}
               accessibilityRole="button"
-              accessibilityLabel={replyMutation.isPending ? 'Sending reply' : 'Send reply'}
+              accessibilityLabel={replyMutation.isPending ? 'Sending reply' : resolved ? 'Send follow-up' : 'Send reply'}
               style={({ pressed }) => [styles.replyButton, replyMutation.isPending && styles.buttonDisabled, pressed && styles.buttonPressed]}
             >
               {replyMutation.isPending ? <ActivityIndicator color={colors.white} /> : <Ionicons name="send" size={17} color={colors.white} />}
-              <Text style={styles.replyButtonText}>{isTeacher ? 'Send answer' : 'Send context'}</Text>
+              <Text style={styles.replyButtonText}>{resolved ? 'Send follow-up' : isTeacher ? 'Send answer' : 'Send context'}</Text>
             </Pressable>
           </View>
-          </View>
-        </>
-      )}
+      </View>
     </AppScreen>
   )
 }
