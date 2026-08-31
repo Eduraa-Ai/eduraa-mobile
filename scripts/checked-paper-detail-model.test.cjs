@@ -74,6 +74,85 @@ test('terminal score metadata without question results keeps polling', () => {
   })), true)
 })
 
+test('checking stopwatch derives elapsed time from the server start timestamp', () => {
+  const fixture = paper({
+    status: 'checking',
+    total_score: null,
+    max_score: null,
+    grading_results: null,
+    processing_timing: {
+      started_at: '2026-08-27T12:00:00.000Z',
+      completed_at: null,
+      total_seconds: null,
+      stages: [],
+    },
+  })
+
+  assert.equal(model.checkedPaperElapsedSeconds(fixture, Date.parse('2026-08-27T12:01:05.900Z')), 65)
+  assert.equal(model.formatCheckedPaperStopwatch(65), '01:05')
+  assert.equal(model.formatCheckedPaperStopwatch(3661), '01:01:01')
+})
+
+test('checking stopwatch freezes at the authoritative completed duration', () => {
+  const fixture = paper({
+    processing_timing: {
+      started_at: '2026-08-27T12:00:00.000Z',
+      completed_at: '2026-08-27T12:02:00.000Z',
+      total_seconds: 119.8,
+      stages: [],
+    },
+  })
+
+  assert.equal(model.checkedPaperElapsedSeconds(fixture, Date.parse('2026-08-27T13:00:00.000Z')), 120)
+  assert.equal(model.checkedPaperElapsedSeconds(paper({ processing_timing: null })), null)
+})
+
+test('stage timeline preserves server order and exposes per-stage timing states', () => {
+  const fixture = paper({
+    status: 'grading',
+    total_score: null,
+    max_score: null,
+    grading_results: null,
+    processing_timing: {
+      started_at: '2026-08-27T12:00:00.000Z',
+      completed_at: null,
+      total_seconds: null,
+      stages: [
+        { key: 'integrity', label: 'Integrity check', status: 'completed', queued_at: '2026-08-27T12:00:00.000Z', started_at: '2026-08-27T12:00:01.000Z', completed_at: '2026-08-27T12:00:05.000Z', total_seconds: 5 },
+        { key: 'evidence', label: 'Read answers', status: 'completed', queued_at: '2026-08-27T12:00:05.000Z', started_at: '2026-08-27T12:00:06.000Z', completed_at: '2026-08-27T12:00:20.000Z', total_seconds: 15 },
+        { key: 'grading', label: 'Grade answers', status: 'running', queued_at: '2026-08-27T12:00:20.000Z', started_at: '2026-08-27T12:00:22.000Z', completed_at: null, total_seconds: null },
+        { key: 'release', label: 'Prepare result', status: 'pending', queued_at: '2026-08-27T12:00:20.000Z', started_at: null, completed_at: null, total_seconds: null },
+      ],
+    },
+  })
+
+  const timeline = model.buildCheckedPaperStageTimeline(fixture, Date.parse('2026-08-27T12:00:30.000Z'))
+  assert.deepEqual(timeline.map(({ key, state, elapsedSeconds }) => ({ key, state, elapsedSeconds })), [
+    { key: 'integrity', state: 'complete', elapsedSeconds: 5 },
+    { key: 'evidence', state: 'complete', elapsedSeconds: 15 },
+    { key: 'grading', state: 'active', elapsedSeconds: 10 },
+    { key: 'release', state: 'queued', elapsedSeconds: null },
+  ])
+})
+
+test('stage timeline keeps blocked stages explicit and does not fabricate missing timing data', () => {
+  const fixture = paper({
+    processing_timing: {
+      stages: [
+        { key: 'mapping', label: 'Match questions', status: 'mapping_needs_review', queued_at: 'invalid', started_at: null, completed_at: null, total_seconds: null },
+      ],
+    },
+  })
+
+  assert.deepEqual(model.buildCheckedPaperStageTimeline(fixture), [{
+    key: 'mapping',
+    label: 'Match questions',
+    state: 'blocked',
+    elapsedSeconds: null,
+  }])
+  assert.deepEqual(model.buildCheckedPaperStageTimeline(paper({ processing_timing: null })), [])
+})
+
 test('blocked paper without a score explains the saved recovery action', () => {
   const report = model.buildCheckedPaperReport(paper({
     status: 'integrity_needs_review',

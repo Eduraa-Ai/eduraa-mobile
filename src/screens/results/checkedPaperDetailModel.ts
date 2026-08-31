@@ -1,4 +1,4 @@
-import type { CheckedPaper, GradingResultItem } from '../../types'
+import type { CheckedPaper, CheckedPaperStageTiming, GradingResultItem } from '../../types'
 import { normalizeMathContent } from '../../utils/mathContent'
 import { hasCheckedPaperReviewPayload } from '../workspace/checkedPaperPipelineModel'
 
@@ -236,6 +236,89 @@ export function isCheckedPaperChecking(paper: CheckedPaper) {
   }
   return ['submitted', 'checking', 'processing', 'uploaded'].includes(status)
     || !hasCheckedPaperReviewPayload(paper)
+}
+
+export function checkedPaperElapsedSeconds(paper: CheckedPaper, nowMs = Date.now()) {
+  const timing = paper.processing_timing
+  const reportedTotal = timing?.total_seconds
+  if (typeof reportedTotal === 'number' && Number.isFinite(reportedTotal) && reportedTotal >= 0) {
+    return Math.round(reportedTotal)
+  }
+
+  const startedAtMs = timing?.started_at ? new Date(timing.started_at).getTime() : Number.NaN
+  if (!Number.isFinite(startedAtMs)) return null
+
+  const completedAtMs = timing?.completed_at ? new Date(timing.completed_at).getTime() : Number.NaN
+  const endMs = Number.isFinite(completedAtMs)
+    ? completedAtMs
+    : isCheckedPaperChecking(paper)
+      ? nowMs
+      : Number.NaN
+  if (!Number.isFinite(endMs) || endMs < startedAtMs) return null
+  const elapsedSeconds = (endMs - startedAtMs) / 1000
+  return Number.isFinite(completedAtMs) ? Math.round(elapsedSeconds) : Math.floor(elapsedSeconds)
+}
+
+export function formatCheckedPaperStopwatch(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
+  const remainder = safeSeconds % 60
+  const clock = `${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`
+  return hours > 0 ? `${hours.toString().padStart(2, '0')}:${clock}` : clock
+}
+
+export type CheckedPaperTimelineStageState = 'complete' | 'active' | 'queued' | 'blocked'
+
+export interface CheckedPaperTimelineStage {
+  key: string
+  label: string
+  state: CheckedPaperTimelineStageState
+  elapsedSeconds: number | null
+}
+
+function stageElapsedSeconds(stage: CheckedPaperStageTiming, nowMs: number) {
+  if (typeof stage.total_seconds === 'number' && Number.isFinite(stage.total_seconds) && stage.total_seconds >= 0) {
+    return Math.round(stage.total_seconds)
+  }
+
+  const queuedAtMs = stage.queued_at ? new Date(stage.queued_at).getTime() : Number.NaN
+  if (!Number.isFinite(queuedAtMs)) return null
+  const completedAtMs = stage.completed_at ? new Date(stage.completed_at).getTime() : Number.NaN
+  const endMs = Number.isFinite(completedAtMs) ? completedAtMs : nowMs
+  if (!Number.isFinite(endMs) || endMs < queuedAtMs) return null
+  return Number.isFinite(completedAtMs)
+    ? Math.round((endMs - queuedAtMs) / 1000)
+    : Math.floor((endMs - queuedAtMs) / 1000)
+}
+
+export function buildCheckedPaperStageTimeline(paper: CheckedPaper, nowMs = Date.now()): CheckedPaperTimelineStage[] {
+  return (paper.processing_timing?.stages ?? []).map((stage, index, stages) => {
+    const status = normalizedToken(stage.status).replace(/[\s-]+/g, '_')
+    const blocked = status.includes('failed') || status.includes('needs_review') || status.includes('error')
+    const complete = Boolean(stage.completed_at)
+      || (typeof stage.total_seconds === 'number' && Number.isFinite(stage.total_seconds))
+      || ['completed', 'graded', 'ready', 'verified'].includes(status)
+    const started = Boolean(stage.started_at)
+      || ['running', 'processing', 'in_progress', 'started'].includes(status)
+    const laterStageStarted = stages.slice(index + 1).some((candidate) => Boolean(candidate.started_at || candidate.completed_at))
+    const state: CheckedPaperTimelineStageState = blocked
+      ? 'blocked'
+      : complete || laterStageStarted
+        ? 'complete'
+        : started
+          ? 'active'
+          : 'queued'
+
+    return {
+      key: stage.key || `stage-${index}`,
+      label: stage.label || `Stage ${index + 1}`,
+      state,
+      elapsedSeconds: state === 'queued' || (state === 'blocked' && !stage.completed_at && stage.total_seconds == null)
+        ? null
+        : stageElapsedSeconds(stage, nowMs),
+    }
+  })
 }
 
 export function isCheckedPaperCheckFailed(paper: CheckedPaper) {

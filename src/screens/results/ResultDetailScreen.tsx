@@ -20,9 +20,12 @@ import type { GradingResultItem } from '../../types'
 import { downloadCheckedPaperPdf } from '../../utils/openProtectedDocument'
 import {
   answerDisplay,
+  buildCheckedPaperStageTimeline,
   buildCheckedPaperReport,
   CHECKED_PAPER_POLL_INTERVAL_MS,
+  checkedPaperElapsedSeconds,
   checkedPaperTitle,
+  formatCheckedPaperStopwatch,
   formatReportDate,
   hasUnreadTeacherReviewResponse,
   isCheckedPaperCheckFailed,
@@ -120,6 +123,54 @@ function DistributionMetric({ label, value, tone }: { label: string; value: numb
   )
 }
 
+function ProcessingTimeline({
+  stages,
+}: {
+  stages: ReturnType<typeof buildCheckedPaperStageTimeline>
+}) {
+  if (!stages.length) return null
+  return (
+    <View style={styles.timelinePanel}>
+      <View style={styles.timelineHeader}>
+        <View>
+          <Text style={styles.timelineTitle}>Checking timeline</Text>
+          <Text style={styles.timelineHint}>Time spent at each processing stage</Text>
+        </View>
+        <Ionicons name="time-outline" size={18} color={colors.accentStrong} />
+      </View>
+      <View style={styles.timelineList}>
+        {stages.map((stage, index) => {
+          const isLast = index === stages.length - 1
+          const active = stage.state === 'active'
+          const blocked = stage.state === 'blocked'
+          const complete = stage.state === 'complete'
+          const tone = blocked ? colors.danger : active ? colors.accent : complete ? colors.success : colors.textSoft
+          const duration = stage.elapsedSeconds == null
+            ? blocked ? 'Needs attention' : active ? 'In progress' : 'Waiting'
+            : formatCheckedPaperStopwatch(stage.elapsedSeconds)
+          return (
+            <View
+              key={stage.key}
+              style={styles.timelineRow}
+              accessible
+              accessibilityLabel={`${stage.label}, ${blocked ? 'needs attention' : active ? 'in progress' : complete ? 'complete' : 'waiting'}, ${duration}`}
+            >
+              <View style={styles.timelineRail}>
+                <View style={[styles.timelineNode, { borderColor: tone, backgroundColor: complete ? tone : '#fffaf2' }]}>
+                  {complete ? <Ionicons name="checkmark" size={10} color={colors.white} /> : active ? <View style={[styles.timelinePulse, { backgroundColor: tone }]} /> : blocked ? <Ionicons name="alert" size={10} color={tone} /> : null}
+                </View>
+                {!isLast ? <View style={[styles.timelineConnector, complete && { backgroundColor: colors.success }]} /> : null}
+              </View>
+              <Text numberOfLines={1} style={[styles.timelineStageLabel, active && styles.timelineStageLabelActive]}>{stage.label}</Text>
+              <Text style={[styles.timelineDuration, { color: tone }]}>{duration}</Text>
+            </View>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
 function ReportQuestionRow({ item, index, teacherReplied, onPress }: { item: GradingResultItem; index: number; teacherReplied: boolean; onPress: () => void }) {
   const status = questionStatus(item)
   const meta = STATUS_META[status]
@@ -188,6 +239,7 @@ export default function ResultDetailScreen() {
   const [manualRefreshing, setManualRefreshing] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [stopwatchNow, setStopwatchNow] = useState(() => Date.now())
   const [seenReviewResponseKeys, setSeenReviewResponseKeys] = useState<Set<string>>(new Set())
   const [seenReviewResponseKeysLoaded, setSeenReviewResponseKeysLoaded] = useState(false)
   const { data, isLoading, isError, refetch } = useQuery({
@@ -242,6 +294,16 @@ export default function ResultDetailScreen() {
     : reportedCheckingPercent == null
       ? checkingStage
       : 'Checking'
+  const elapsedSeconds = data ? checkedPaperElapsedSeconds(data, stopwatchNow) : null
+  const stopwatchLabel = elapsedSeconds == null ? null : formatCheckedPaperStopwatch(elapsedSeconds)
+  const processingTimeline = data ? buildCheckedPaperStageTimeline(data, stopwatchNow) : []
+
+  useEffect(() => {
+    if (!isChecking || elapsedSeconds == null) return undefined
+    setStopwatchNow(Date.now())
+    const interval = setInterval(() => setStopwatchNow(Date.now()), 1000)
+    return () => clearInterval(interval)
+  }, [data?.processing_timing?.started_at, elapsedSeconds == null, isChecking])
 
   useEffect(() => {
     if (!data || isChecking || completionNotified.current || report?.percent == null) return
@@ -456,6 +518,18 @@ export default function ResultDetailScreen() {
               <View style={styles.scoreContext}>
                 <Text style={styles.scoreContextLabel}>{isChecking ? checkingContextLabel : isStaff ? (resultPublished ? 'Final score' : 'Suggested score') : needsInput ? 'Paper status' : report.provisional ? 'Provisional score' : 'Score signal'}</Text>
                 <Text style={styles.scoreContextValue}>{isChecking ? checkingContextValue : isStaff ? (resultPublished ? 'Visible to student' : marksApproved ? 'Ready to publish' : 'Waiting for confirmation') : needsInput ? 'Action needed' : report.percent != null && report.percent >= 65 ? 'Strong foundation' : 'Focused repair'}</Text>
+                {stopwatchLabel ? (
+                  <View
+                    style={[styles.stopwatchPill, !isChecking && styles.stopwatchPillComplete]}
+                    accessible
+                    accessibilityLabel={isChecking ? `Checking elapsed time ${stopwatchLabel}` : `Paper checked in ${stopwatchLabel}`}
+                  >
+                    <Ionicons name={isChecking ? 'stopwatch-outline' : 'checkmark-circle-outline'} size={13} color={isChecking ? '#5eead4' : '#93e2b7'} />
+                    <Text style={[styles.stopwatchText, !isChecking && styles.stopwatchTextComplete]}>
+                      {isChecking ? 'Elapsed' : 'Checked in'} {stopwatchLabel}
+                    </Text>
+                  </View>
+                ) : null}
                 {!isChecking ? (
                   <View style={styles.signalPill}>
                     <Ionicons name={isStaff ? 'checkmark-circle-outline' : 'analytics-outline'} size={13} color="#93e2b7" />
@@ -491,6 +565,8 @@ export default function ResultDetailScreen() {
               <DistributionMetric label="Incorrect" value={isChecking ? null : report.wrong} tone={colors.danger} />
               <DistributionMetric label="Missed" value={isChecking ? null : report.missed} tone={colors.warning} />
             </View>
+
+            <ProcessingTimeline stages={processingTimeline} />
 
             {!isChecking ? (
               <Pressable
@@ -594,6 +670,10 @@ const styles = StyleSheet.create({
   scoreContext: { width: 142, gap: spacing[1] },
   scoreContextLabel: { color: 'rgba(255,255,255,0.62)', fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 13 },
   scoreContextValue: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 15, lineHeight: 18 },
+  stopwatchPill: { alignSelf: 'flex-start', minHeight: 26, paddingHorizontal: spacing[2], borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(45,212,191,0.12)' },
+  stopwatchPillComplete: { backgroundColor: 'rgba(44,188,116,0.12)' },
+  stopwatchText: { color: '#99f6e4', fontFamily: typography.fonts.bodyBold, fontSize: 9, fontVariant: ['tabular-nums'] },
+  stopwatchTextComplete: { color: '#93e2b7' },
   signalPill: { alignSelf: 'flex-start', minHeight: 28, paddingHorizontal: spacing[2], borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(44,188,116,0.12)' },
   signalPillText: { color: '#93e2b7', fontFamily: typography.fonts.bodyBold, fontSize: 8 },
   reportSheet: { marginTop: -10, minHeight: 500, paddingHorizontal: spacing[4], paddingBottom: spacing[8], borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#fffaf2', gap: spacing[2] },
@@ -608,6 +688,19 @@ const styles = StyleSheet.create({
   metricRail: { width: 20, height: 2, borderRadius: 1, marginBottom: spacing[2] },
   distributionValue: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 16, lineHeight: 18, textAlign: 'center' },
   distributionLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 0.7, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
+  timelinePanel: { borderWidth: 1, borderColor: '#eadfd1', borderRadius: 16, backgroundColor: '#fffdf8', paddingHorizontal: spacing[3], paddingTop: spacing[3], paddingBottom: spacing[2] },
+  timelineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing[2] },
+  timelineTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 13, lineHeight: 17 },
+  timelineHint: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 12, marginTop: 1 },
+  timelineList: { gap: 0 },
+  timelineRow: { minHeight: 34, flexDirection: 'row', alignItems: 'flex-start' },
+  timelineRail: { width: 24, alignSelf: 'stretch', alignItems: 'center' },
+  timelineNode: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  timelinePulse: { width: 6, height: 6, borderRadius: 3 },
+  timelineConnector: { position: 'absolute', top: 18, bottom: 0, width: 2, backgroundColor: '#ded3c6' },
+  timelineStageLabel: { flex: 1, minWidth: 0, paddingTop: 1, paddingHorizontal: spacing[2], color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 16 },
+  timelineStageLabelActive: { color: colors.text },
+  timelineDuration: { minWidth: 66, paddingTop: 1, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 16, fontVariant: ['tabular-nums'], textAlign: 'right' },
   primaryAction: { minHeight: 44, borderRadius: 14, backgroundColor: '#07152d', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   primaryActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   reviewBanner: { minHeight: 58, borderRadius: 16, borderWidth: 1, borderColor: '#f8c979', backgroundColor: '#fff8e7', paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
