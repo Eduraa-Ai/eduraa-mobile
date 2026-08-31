@@ -45,7 +45,7 @@ const QUEUE_COPY: Record<ApprovalQueueKey, { title: string; subtitle: string; em
   },
   students: {
     title: 'Student access',
-    subtitle: 'Learners assigned to your class and division.',
+    subtitle: 'Learners in your assigned class sections.',
     empty: 'No students in your class are waiting for approval.',
   },
   classTeacherRequests: {
@@ -73,6 +73,7 @@ function queueErrorMessage(error: unknown) {
   if (candidate.code === 'ECONNABORTED') return 'This queue took too long to respond. Try only this queue again.'
   if (candidate.response?.status === 403) return 'Your account no longer has permission for this queue. Refresh your session or contact your school administrator.'
   if (candidate.response?.status === 401) return 'Your session expired. Sign in again to continue reviewing requests.'
+  if ((candidate.response?.status ?? 0) >= 500) return 'This secure queue is temporarily unavailable. Nothing was changed—try this queue again shortly.'
   return candidate.response?.data?.detail || 'This queue could not load. Your other queues are unaffected.'
 }
 
@@ -129,23 +130,10 @@ function DecisionActions({
       style={stacked ? styles.stackedAction : styles.approveButton}
     />
   )
-  const reject = (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Reject ${label}`}
-      accessibilityState={{ disabled, busy: busyAction === 'reject' }}
-      disabled={disabled}
-      onPress={onReject}
-      style={({ pressed }) => [styles.rejectButton, stacked && styles.stackedAction, pressed && !disabled && styles.buttonPressed, disabled && styles.buttonDisabled]}
-    >
-      {busyAction === 'reject' ? <ActivityIndicator color={colors.danger} /> : <Ionicons name="close" size={18} color={colors.danger} />}
-      <Text style={styles.rejectText}>Reject</Text>
-    </Pressable>
-  )
   return (
     <View style={[styles.actionRow, stacked && styles.actionColumn]} accessibilityRole="toolbar" accessibilityLabel={`Decision for ${label}`}>
       {approve}
-      {reject}
+      <AnimatedButton label="Reject" accessibilityLabel={`Reject ${label}`} icon={<Ionicons name="close" size={18} color={colors.danger} />} loading={busyAction === 'reject'} disabled={disabled} onPress={onReject} style={stacked ? styles.stackedRejectAction : styles.rejectButton} />
     </View>
   )
 }
@@ -154,6 +142,7 @@ function QueueSection({
   queueKey,
   count,
   error,
+  outcomeUnknown,
   loading,
   retrying,
   onRetry,
@@ -162,6 +151,7 @@ function QueueSection({
   queueKey: ApprovalQueueKey
   count: number
   error?: unknown
+  outcomeUnknown: boolean
   loading: boolean
   retrying: boolean
   onRetry: () => void
@@ -175,8 +165,8 @@ function QueueSection({
           <Text style={styles.sectionTitle}>{copy.title}</Text>
           <Text style={styles.sectionSubtitle}>{copy.subtitle}</Text>
         </View>
-        <View style={styles.countPill} accessibilityLabel={`${count} pending`}>
-          <Text style={styles.countText}>{count}</Text>
+        <View style={[styles.countPill, outcomeUnknown && styles.countPillUnavailable]} accessibilityLabel={outcomeUnknown ? `${copy.title} is unavailable` : `${count} pending`}>
+          <Text style={[styles.countText, outcomeUnknown && styles.countTextUnavailable]}>{outcomeUnknown ? 'Unavailable' : count}</Text>
         </View>
       </View>
       {loading ? (
@@ -190,7 +180,7 @@ function QueueSection({
             <Ionicons name="cloud-offline-outline" size={20} color={colors.danger} />
           </View>
           <View style={styles.queueStateCopy}>
-            <Text style={styles.queueStateTitle}>Only this queue needs attention</Text>
+            <Text style={styles.queueStateTitle}>{copy.title} needs attention</Text>
             <Text style={styles.queueStateBody}>{queueErrorMessage(error)}</Text>
             <Pressable
               accessibilityRole="button"
@@ -201,7 +191,7 @@ function QueueSection({
               style={styles.retryButton}
             >
               {retrying ? <ActivityIndicator color={colors.accentStrong} /> : <Ionicons name="refresh" size={17} color={colors.accentStrong} />}
-              <Text style={styles.retryText}>{retrying ? 'Retrying' : 'Try this queue again'}</Text>
+              <Text style={styles.retryText}>{retrying ? 'Retrying' : `Retry ${copy.title}`}</Text>
             </Pressable>
           </View>
         </View>
@@ -238,7 +228,6 @@ function AccountCard({
           <Text style={styles.cardTitle}>{item.display_name}</Text>
           <Text style={styles.cardMeta}>{item.identifier}</Text>
         </View>
-        <View style={styles.roleTag}><Text style={styles.roleTagText}>{item.role.replace(/_/g, ' ')}</Text></View>
       </View>
       <View style={styles.detailGrid}>
         <DetailLine label="Requested" value={formatDate(item.created_at)} />
@@ -353,6 +342,8 @@ export default function ApprovalsScreen() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [slow, setSlow] = useState(false)
   const [pendingDecision, setPendingDecision] = useState<DecisionVariables | null>(null)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [hasReceivedInitialQueueResult, setHasReceivedInitialQueueResult] = useState(false)
 
   const principals = useApprovalQueue('principals', visibleQueues.includes('principals'), user?.id)
   const teachers = useApprovalQueue('teachers', visibleQueues.includes('teachers'), user?.id)
@@ -364,6 +355,17 @@ export default function ApprovalsScreen() {
   const loadingAny = visibleQueryList.some((query) => query.isPending)
   const loadedAny = visibleQueryList.some((query) => query.data !== undefined)
   const refreshing = visibleQueryList.some((query) => query.isRefetching && !query.isPending)
+  const hasQueueResult = visibleQueryList.some((query) => query.data !== undefined || query.error)
+  const unavailableQueues = visibleQueues.filter((key) => queryMap[key].data === undefined && (queryMap[key].error || queryMap[key].isPending))
+  const hasUnavailableQueue = unavailableQueues.length > 0
+
+  useEffect(() => {
+    if (hasQueueResult) setHasReceivedInitialQueueResult(true)
+  }, [hasQueueResult])
+
+  useEffect(() => {
+    setHasReceivedInitialQueueResult(false)
+  }, [user?.id])
 
   useEffect(() => {
     if (!loadingAny) {
@@ -419,32 +421,35 @@ export default function ApprovalsScreen() {
     setPendingDecision(variables)
   }
 
-  const accountDecision = (queue: 'principals' | 'teachers' | 'students', item: PendingAccount, action: 'approve' | 'reject') => {
+  const accountDecision = (queue: 'principals' | 'teachers' | 'students', item: PendingAccount) => {
     const run = queue === 'principals'
-      ? action === 'approve' ? () => approvalsApi.approvePrincipal(item.id, principalPassword) : () => approvalsApi.rejectPrincipal(item.id, principalPassword)
+      ? () => approvalsApi.approvePrincipal(item.id, principalPassword)
       : queue === 'teachers'
-        ? action === 'approve' ? () => approvalsApi.approveTeacher(item.id) : () => approvalsApi.rejectTeacher(item.id)
-        : action === 'approve' ? () => approvalsApi.approveStudent(item.id) : () => approvalsApi.rejectStudent(item.id)
-    requestDecision({ queue, id: item.id, label: item.display_name, action, run })
+        ? () => approvalsApi.approveTeacher(item.id)
+        : () => approvalsApi.approveStudent(item.id)
+    requestDecision({ queue, id: item.id, label: item.display_name, action: 'approve', run })
   }
+  const accountRejection = (queue: 'principals' | 'teachers' | 'students', item: PendingAccount) => requestDecision({ queue, id: item.id, label: item.display_name, action: 'reject', run: () => queue === 'principals' ? approvalsApi.rejectPrincipal(item.id, rejectionReason, principalPassword) : queue === 'teachers' ? approvalsApi.rejectTeacher(item.id, rejectionReason) : approvalsApi.rejectStudent(item.id, rejectionReason) })
 
-  const requestPlanDecision = (item: ClassTeacherApproval, action: 'approve' | 'reject') => requestDecision({
+  const requestPlanDecision = (item: ClassTeacherApproval) => requestDecision({
     queue: 'classTeacherRequests',
     id: item.id,
     label: `${item.class_teacher_name}'s class-teacher plan`,
-    action,
-    run: action === 'approve' ? () => approvalsApi.approveClassTeacherRequest(item.id) : () => approvalsApi.rejectClassTeacherRequest(item.id),
+    action: 'approve',
+    run: () => approvalsApi.approveClassTeacherRequest(item.id),
   })
+  const requestPlanRejection = (item: ClassTeacherApproval) => requestDecision({ queue: 'classTeacherRequests', id: item.id, label: `${item.class_teacher_name}'s class-teacher plan`, action: 'reject', run: () => approvalsApi.rejectClassTeacherRequest(item.id, rejectionReason) })
 
-  const requestProfileDecision = (item: TeacherProfileApproval, action: 'approve' | 'reject') => requestDecision({
+  const requestProfileDecision = (item: TeacherProfileApproval) => requestDecision({
     queue: 'teacherProfileUpdates',
     id: item.id,
     label: `${item.teacher_name}'s profile update`,
-    action,
-    run: action === 'approve' ? () => approvalsApi.approveTeacherProfileUpdate(item.id) : () => approvalsApi.rejectTeacherProfileUpdate(item.id),
+    action: 'approve',
+    run: () => approvalsApi.approveTeacherProfileUpdate(item.id),
   })
+  const requestProfileRejection = (item: TeacherProfileApproval) => requestDecision({ queue: 'teacherProfileUpdates', id: item.id, label: `${item.teacher_name}'s profile update`, action: 'reject', run: () => approvalsApi.rejectTeacherProfileUpdate(item.id, rejectionReason) })
 
-  const isItemBusy = (queue: ApprovalQueueKey, id: string, action: 'approve' | 'reject') => busyKey === `${queue}:${id}:${action}`
+  const isItemBusy = (queue: ApprovalQueueKey, id: string) => busyKey?.startsWith(`${queue}:${id}:`) ? busyKey.split(':').at(-1) as 'approve' | 'reject' : undefined
   const refreshVisible = () => void Promise.all(visibleQueues.map((key) => queryMap[key].refetch()))
   const leaveApprovals = () => {
     const routeNames: string[] = navigation.getState?.().routeNames ?? []
@@ -464,7 +469,7 @@ export default function ApprovalsScreen() {
     )
   }
 
-  if (loadingAny && !loadedAny) {
+  if (loadingAny && !loadedAny && !hasReceivedInitialQueueResult) {
     return (
       <AppScreen scroll={false} contentStyle={styles.loadingRoot}>
         <View style={styles.loadingMark}><ActivityIndicator color={colors.accent} /></View>
@@ -495,11 +500,11 @@ export default function ApprovalsScreen() {
           <View style={styles.heroMark}><Ionicons name="shield-checkmark" size={22} color={colors.accent} /></View>
           <Text style={styles.heroRole}>{roleContract.label.toUpperCase()}</Text>
         </View>
-        <Text style={[styles.heroTitle, compactHeight && styles.heroTitleCompact]}>{totalPending ? `${totalPending} decision${totalPending === 1 ? '' : 's'} need you.` : 'Your review desk is clear.'}</Text>
-        <Text style={[styles.heroBody, compactHeight && styles.heroBodyCompact]}>{roleContract.purpose} Other roles’ queues stay private.</Text>
+        <Text style={[styles.heroTitle, compactHeight && styles.heroTitleCompact]}>{hasUnavailableQueue ? `${unavailableQueues.length === 1 ? 'A review queue needs attention.' : 'Review queues need attention.'}` : totalPending ? `${totalPending} decision${totalPending === 1 ? '' : 's'} need you.` : 'Your review desk is clear.'}</Text>
+        <Text style={[styles.heroBody, compactHeight && styles.heroBodyCompact]}>{hasUnavailableQueue ? 'We could not confirm every permitted queue. Retry the highlighted queue; other loaded queues remain available.' : `${roleContract.purpose} Other roles’ queues stay private.`}</Text>
         <View style={[styles.heroTrust, compactHeight && styles.heroTrustCompact]}>
           <Ionicons name="time-outline" size={16} color="#AAB5C6" />
-          <Text style={styles.heroTrustText}>Every completed decision keeps its actor and server time.</Text>
+          <Text style={styles.heroTrustText}>{hasUnavailableQueue ? 'No decision was made while a queue is unavailable.' : 'Every completed decision keeps its actor and server time.'}</Text>
         </View>
       </View>
 
@@ -518,7 +523,7 @@ export default function ApprovalsScreen() {
       ) : null}
 
       {visibleQueues.includes('principals') ? (
-        <QueueSection queueKey="principals" count={principals.data?.length ?? 0} error={principals.error} loading={principals.isPending} retrying={principals.isRefetching} onRetry={() => void principals.refetch()}>
+        <QueueSection queueKey="principals" count={principals.data?.length ?? 0} error={principals.error} outcomeUnknown={Boolean(principals.data === undefined && (principals.error || principals.isPending))} loading={principals.isPending} retrying={principals.isRefetching} onRetry={() => void principals.refetch()}>
           <View style={styles.passwordBlock}>
             <TextInputField
               label="Confirm with your admin password"
@@ -531,43 +536,44 @@ export default function ApprovalsScreen() {
             />
             <Text style={styles.passwordHint}>Used only for this decision; it is never stored on the device.</Text>
           </View>
-          {principals.data?.map((item) => <AccountCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('principals', item.id, 'approve') ? 'approve' : isItemBusy('principals', item.id, 'reject') ? 'reject' : undefined} onApprove={() => accountDecision('principals', item, 'approve')} onReject={() => accountDecision('principals', item, 'reject')} />)}
+          {principals.data?.map((item) => <AccountCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('principals', item.id)} onApprove={() => accountDecision('principals', item)} onReject={() => { setRejectionReason(''); accountRejection('principals', item) }} />)}
         </QueueSection>
       ) : null}
 
       {visibleQueues.includes('teachers') ? (
-        <QueueSection queueKey="teachers" count={teachers.data?.length ?? 0} error={teachers.error} loading={teachers.isPending} retrying={teachers.isRefetching} onRetry={() => void teachers.refetch()}>
-          {teachers.data?.map((item) => <AccountCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('teachers', item.id, 'approve') ? 'approve' : isItemBusy('teachers', item.id, 'reject') ? 'reject' : undefined} onApprove={() => accountDecision('teachers', item, 'approve')} onReject={() => accountDecision('teachers', item, 'reject')} />)}
+        <QueueSection queueKey="teachers" count={teachers.data?.length ?? 0} error={teachers.error} outcomeUnknown={Boolean(teachers.data === undefined && (teachers.error || teachers.isPending))} loading={teachers.isPending} retrying={teachers.isRefetching} onRetry={() => void teachers.refetch()}>
+          {teachers.data?.map((item) => <AccountCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('teachers', item.id)} onApprove={() => accountDecision('teachers', item)} onReject={() => { setRejectionReason(''); accountRejection('teachers', item) }} />)}
         </QueueSection>
       ) : null}
 
       {visibleQueues.includes('students') ? (
-        <QueueSection queueKey="students" count={students.data?.length ?? 0} error={students.error} loading={students.isPending} retrying={students.isRefetching} onRetry={() => void students.refetch()}>
-          {students.data?.map((item) => <AccountCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('students', item.id, 'approve') ? 'approve' : isItemBusy('students', item.id, 'reject') ? 'reject' : undefined} onApprove={() => accountDecision('students', item, 'approve')} onReject={() => accountDecision('students', item, 'reject')} />)}
+        <QueueSection queueKey="students" count={students.data?.length ?? 0} error={students.error} outcomeUnknown={Boolean(students.data === undefined && (students.error || students.isPending))} loading={students.isPending} retrying={students.isRefetching} onRetry={() => void students.refetch()}>
+          {students.data?.map((item) => <AccountCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('students', item.id)} onApprove={() => accountDecision('students', item)} onReject={() => { setRejectionReason(''); accountRejection('students', item) }} />)}
         </QueueSection>
       ) : null}
 
       {visibleQueues.includes('classTeacherRequests') ? (
-        <QueueSection queueKey="classTeacherRequests" count={classTeacherRequests.data?.length ?? 0} error={classTeacherRequests.error} loading={classTeacherRequests.isPending} retrying={classTeacherRequests.isRefetching} onRetry={() => void classTeacherRequests.refetch()}>
-          {classTeacherRequests.data?.map((item) => <ClassTeacherCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('classTeacherRequests', item.id, 'approve') ? 'approve' : isItemBusy('classTeacherRequests', item.id, 'reject') ? 'reject' : undefined} onApprove={() => requestPlanDecision(item, 'approve')} onReject={() => requestPlanDecision(item, 'reject')} />)}
+        <QueueSection queueKey="classTeacherRequests" count={classTeacherRequests.data?.length ?? 0} error={classTeacherRequests.error} outcomeUnknown={Boolean(classTeacherRequests.data === undefined && (classTeacherRequests.error || classTeacherRequests.isPending))} loading={classTeacherRequests.isPending} retrying={classTeacherRequests.isRefetching} onRetry={() => void classTeacherRequests.refetch()}>
+          {classTeacherRequests.data?.map((item) => <ClassTeacherCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('classTeacherRequests', item.id)} onApprove={() => requestPlanDecision(item)} onReject={() => { setRejectionReason(''); requestPlanRejection(item) }} />)}
         </QueueSection>
       ) : null}
 
       {visibleQueues.includes('teacherProfileUpdates') ? (
-        <QueueSection queueKey="teacherProfileUpdates" count={teacherProfileUpdates.data?.length ?? 0} error={teacherProfileUpdates.error} loading={teacherProfileUpdates.isPending} retrying={teacherProfileUpdates.isRefetching} onRetry={() => void teacherProfileUpdates.refetch()}>
-          {teacherProfileUpdates.data?.map((item) => <ProfileUpdateCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('teacherProfileUpdates', item.id, 'approve') ? 'approve' : isItemBusy('teacherProfileUpdates', item.id, 'reject') ? 'reject' : undefined} onApprove={() => requestProfileDecision(item, 'approve')} onReject={() => requestProfileDecision(item, 'reject')} />)}
+        <QueueSection queueKey="teacherProfileUpdates" count={teacherProfileUpdates.data?.length ?? 0} error={teacherProfileUpdates.error} outcomeUnknown={Boolean(teacherProfileUpdates.data === undefined && (teacherProfileUpdates.error || teacherProfileUpdates.isPending))} loading={teacherProfileUpdates.isPending} retrying={teacherProfileUpdates.isRefetching} onRetry={() => void teacherProfileUpdates.refetch()}>
+          {teacherProfileUpdates.data?.map((item) => <ProfileUpdateCard key={item.id} item={item} disabled={decisionMutation.isPending} busyAction={isItemBusy('teacherProfileUpdates', item.id)} onApprove={() => requestProfileDecision(item)} onReject={() => { setRejectionReason(''); requestProfileRejection(item) }} />)}
         </QueueSection>
       ) : null}
 
       <Modal visible={Boolean(pendingDecision)} transparent animationType="fade" onRequestClose={() => setPendingDecision(null)}>
         <View style={styles.confirmBackdrop}>
           <View style={styles.confirmSheet} accessibilityRole="alert">
-            <View style={[styles.confirmIcon, pendingDecision?.action === 'reject' && styles.confirmIconDanger]}>
-              <Ionicons name={pendingDecision?.action === 'reject' ? 'close' : 'shield-checkmark'} size={24} color={pendingDecision?.action === 'reject' ? colors.danger : colors.accent} />
+            <View style={styles.confirmIcon}>
+              <Ionicons name="shield-outline" size={24} color={colors.danger} />
             </View>
             <Text style={styles.confirmEyebrow}>FINAL SCHOOL DECISION</Text>
             <Text style={styles.confirmTitle}>{pendingDecision?.action === 'reject' ? 'Reject this request?' : 'Approve this request?'}</Text>
             <Text style={styles.confirmTarget}>{pendingDecision?.label}</Text>
+            {pendingDecision?.action === 'reject' ? <View style={styles.rejectionReasonBlock}><TextInputField label="Reason for rejection (required)" value={rejectionReason} onChangeText={setRejectionReason} placeholder="Explain what must be corrected" multiline error={rejectionReason.trim().length > 0 && rejectionReason.trim().length < 3 ? 'Use at least 3 characters.' : undefined} /><Text style={styles.rejectionReasonHint}>Tell the educator what to correct (minimum 3 characters).</Text></View> : null}
             <View style={styles.confirmAuditRow}>
               <Ionicons name="time-outline" size={17} color={colors.textMuted} />
               <Text style={styles.confirmAuditText}>Your identity, this target, the decision, and server time will be recorded.</Text>
@@ -579,13 +585,15 @@ export default function ApprovalsScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${pendingDecision?.action === 'reject' ? 'Reject' : 'Approve'} request for ${pendingDecision?.label ?? ''}`}
+                accessibilityState={{ disabled: pendingDecision?.action === 'reject' && rejectionReason.trim().length < 3 }}
+                disabled={pendingDecision?.action === 'reject' && rejectionReason.trim().length < 3}
                 onPress={() => {
-                  if (!pendingDecision || decisionMutation.isPending) return
+                  if (!pendingDecision || decisionMutation.isPending || (pendingDecision.action === 'reject' && rejectionReason.trim().length < 3)) return
                   const decision = pendingDecision
                   setPendingDecision(null)
                   decisionMutation.mutate(decision)
                 }}
-                style={({ pressed }) => [styles.confirmPrimary, pendingDecision?.action === 'reject' && styles.confirmDanger, pressed && styles.buttonPressed]}
+                style={({ pressed }) => [pendingDecision?.action === 'reject' ? styles.confirmReject : styles.confirmPrimary, pendingDecision?.action === 'reject' && rejectionReason.trim().length < 3 && styles.confirmRejectDisabled, pressed && styles.buttonPressed]}
               >
                 <Text style={styles.confirmPrimaryText}>{pendingDecision?.action === 'reject' ? 'Reject request' : 'Approve request'}</Text>
               </Pressable>
@@ -636,7 +644,9 @@ const styles = StyleSheet.create({
   sectionTitle: { ...typography.roles.title, color: colors.nav },
   sectionSubtitle: { ...typography.roles.body, marginTop: spacing[1], color: colors.textMuted },
   countPill: { minWidth: 44, height: 44, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  countPillUnavailable: { minWidth: 92, paddingHorizontal: spacing[3], backgroundColor: colors.dangerSurface },
   countText: { color: colors.accentStrong, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
+  countTextUnavailable: { fontFamily: typography.fonts.bodyBold, fontSize: 11, color: colors.dangerText },
   queueError: { flexDirection: 'row', gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface },
   queueLoading: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.xl, backgroundColor: colors.backgroundElevated },
   queueLoadingText: { ...typography.roles.body, color: colors.textMuted },
@@ -644,33 +654,31 @@ const styles = StyleSheet.create({
   queueStateCopy: { flex: 1 },
   queueStateTitle: { color: colors.dangerText, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   queueStateBody: { ...typography.roles.body, marginTop: spacing[1], color: colors.textSecondary },
-  retryButton: { minHeight: 44, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[2], paddingHorizontal: spacing[2] },
+  retryButton: { minHeight: 48, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], marginTop: spacing[3], paddingHorizontal: spacing[3], borderRadius: radius.full, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.white },
   retryText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   emptyLane: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   emptyCheck: { width: 40, height: 40, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successSurface },
   emptyText: { ...typography.roles.body, flex: 1, color: colors.textSecondary },
   passwordBlock: { gap: spacing[1] },
   passwordHint: { marginHorizontal: spacing[2], color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
-  requestCard: { gap: spacing[4], borderColor: colors.borderStrong },
+  requestCard: { gap: spacing[3], padding: spacing[4], borderColor: colors.borderSubtle },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  avatar: { width: 48, height: 48, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
-  avatarText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 17 },
-  planIcon: { width: 48, height: 48, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  avatar: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
+  avatarText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 16 },
+  planIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
   cardCopy: { flex: 1, minWidth: 0 },
-  cardTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 18, lineHeight: 23 },
-  cardMeta: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
-  roleTag: { maxWidth: 88, minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing[3], borderRadius: radius.full, backgroundColor: colors.backgroundMuted },
-  roleTagText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10, textAlign: 'center', textTransform: 'capitalize' },
-  detailGrid: { gap: spacing[2], paddingTop: spacing[3], borderTopWidth: 1, borderTopColor: colors.borderSubtle },
-  detailLine: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
-  detailLabel: { width: 94, flexShrink: 0, color: colors.textSoft, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 18 },
-  detailValue: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
+  cardTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 17, lineHeight: 22 },
+  cardMeta: { marginTop: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 16 },
+  detailGrid: { gap: spacing[1], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: colors.borderSubtle },
+  detailLine: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
+  detailLabel: { width: 82, flexShrink: 0, color: colors.textSoft, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 17 },
+  detailValue: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
   actionRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing[3] },
   actionColumn: { flexDirection: 'column' },
   stackedAction: { width: '100%' },
-  rejectButton: { minWidth: 104, minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], paddingHorizontal: spacing[4], borderRadius: radius.full, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface },
-  rejectText: { color: colors.danger, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  stackedRejectAction: { width: '100%' },
   approveButton: { flex: 1 },
+  rejectButton: { flex: 1, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.danger },
   buttonPressed: { transform: [{ scale: 0.98 }], opacity: 0.88 },
   buttonDisabled: { opacity: 0.55 },
   assignmentList: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.backgroundMuted },
@@ -686,16 +694,18 @@ const styles = StyleSheet.create({
   confirmBackdrop: { flex: 1, justifyContent: 'flex-end', padding: spacing[4], backgroundColor: 'rgba(3, 10, 24, 0.62)' },
   confirmSheet: { gap: spacing[3], padding: spacing[6], paddingBottom: spacing[7], borderRadius: 30, backgroundColor: colors.white, ...shadows.lg },
   confirmIcon: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
-  confirmIconDanger: { backgroundColor: colors.dangerSurface },
   confirmEyebrow: { ...typography.roles.eyebrow, color: colors.accentStrong },
   confirmTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 25, lineHeight: 31 },
   confirmTarget: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 15, lineHeight: 21 },
   confirmAuditRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], padding: spacing[4], borderRadius: radius.lg, backgroundColor: colors.backgroundMuted },
   confirmAuditText: { ...typography.roles.body, flex: 1, color: colors.textMuted },
   confirmActions: { gap: spacing[3], marginTop: spacing[2] },
+  rejectionReasonBlock: { gap: spacing[2] },
+  rejectionReasonHint: { color: colors.textMuted, fontFamily: typography.fonts.body, fontSize: 12, lineHeight: 17 },
   confirmCancel: { minHeight: 52, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.white },
   confirmCancelText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   confirmPrimary: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: colors.accent },
-  confirmDanger: { backgroundColor: colors.danger },
+  confirmReject: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: colors.danger },
+  confirmRejectDisabled: { opacity: 0.45 },
   confirmPrimaryText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
 })

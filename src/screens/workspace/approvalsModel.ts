@@ -44,7 +44,7 @@ export const APPROVAL_ROLE_MATRIX: Readonly<
   },
   teacher: {
     label: 'Teacher',
-    purpose: 'Review students assigned to your class.',
+    purpose: 'Review students assigned to your class sections.',
     queues: ['students'],
     canDecide: true,
     statusOnly: false,

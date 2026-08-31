@@ -31,6 +31,11 @@ const pendingSchoolRole = (error: unknown): 'student' | 'teacher' | 'principal' 
   return null
 }
 
+const isRejectedSchoolAccount = (error: unknown) => {
+  const detail = (error as { response?: { status?: number; data?: { detail?: string } } }).response?.data?.detail
+  return (error as { response?: { status?: number } }).response?.status === 403 && Boolean(detail?.toLowerCase().includes('account rejected'))
+}
+
 export default function LoginScreen() {
   const navigation = useNavigation<Nav>()
   const insets = useSafeAreaInsets()
@@ -103,6 +108,13 @@ export default function LoginScreen() {
         setMotionState('idle')
         setPassword('')
         navigation.navigate('SchoolApprovalStatus', { identifier: identifier.trim(), role: pendingRole })
+        return
+      }
+      if (isRejectedSchoolAccount(loginError)) {
+        const message = 'Your school did not approve this account. Contact your school administrator if you need to correct your registration.'
+        setError(message)
+        setMotionState('error')
+        AccessibilityInfo.announceForAccessibility(message)
         return
       }
       const message = messageFromError(loginError)

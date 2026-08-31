@@ -14,6 +14,9 @@ test('B2B role matrix exposes only the permitted queues', () => {
   assert.deepEqual(getVisibleApprovalQueues('principal'), ['teachers', 'classTeacherRequests', 'teacherProfileUpdates'])
   assert.deepEqual(getVisibleApprovalQueues('teacher'), ['students'])
   assert.deepEqual(getVisibleApprovalQueues('student'), [])
+  assert.deepEqual(getVisibleApprovalQueues('admin'), [])
+  assert.deepEqual(getVisibleApprovalQueues('developer'), [])
+  assert.deepEqual(getVisibleApprovalQueues('b2c_student'), [])
 })
 
 test('students and non-school platform roles never receive approval powers', () => {

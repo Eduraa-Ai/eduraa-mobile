@@ -90,9 +90,9 @@ async function clickText(session, expected) {
 
 async function fill(session, placeholder, value) {
   const filled = await evaluate(session, `(() => {
-    const input = [...document.querySelectorAll('input')].find(item => item.placeholder === ${JSON.stringify(placeholder)});
+    const input = [...document.querySelectorAll('input,textarea')].find(item => item.placeholder === ${JSON.stringify(placeholder)});
     if (!input) return false;
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+    Object.getOwnPropertyDescriptor(input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
     input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
   })()`)
@@ -186,6 +186,11 @@ try {
   await login(session, 'principal@example.test')
   await openApprovals(session)
   await capture(session, 'principal-many-390x844.png')
+  await clickText(session, 'Reject')
+  await waitForText(session, 'Reject this request?')
+  await fill(session, 'Explain what must be corrected', 'Registration details require correction.')
+  await capture(session, 'principal-rejection-confirmation-390x844.png')
+  await clickText(session, 'Keep pending')
   await viewport(session, 320, 700)
   await capture(session, 'principal-many-320x700.png')
   await scrollTo(session, 99999)
@@ -205,7 +210,7 @@ try {
   await session.call('Page.reload', { ignoreCache: true })
   await waitForText(session, 'TODAY’S DESK')
   await openApprovals(session)
-  await waitForText(session, 'Only this queue needs attention')
+  await waitForText(session, 'needs attention')
   await scrollTo(session, 1400)
   await capture(session, 'principal-partial-failure-390x844.png')
 
@@ -221,6 +226,11 @@ try {
 
   await viewport(session, 390, 844)
   await scrollTo(session, 0)
+  await clickText(session, 'Reject')
+  await waitForText(session, 'Reject this request?')
+  await fill(session, 'Explain what must be corrected', 'Student record needs correction.')
+  await capture(session, 'teacher-rejection-confirmation-390x844.png')
+  await clickText(session, 'Keep pending')
   await mode('mutation-slow')
   await clickText(session, 'Approve')
   await waitForText(session, 'FINAL SCHOOL DECISION')
