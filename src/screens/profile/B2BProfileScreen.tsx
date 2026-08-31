@@ -25,6 +25,7 @@ import {
 } from '../../api/b2bProfile'
 import { MultiSelectField } from '../../components/ui/MultiSelectField'
 import { SelectField } from '../../components/ui/SelectField'
+import { ProfileDisclosure } from '../../components/ui/ProfileDisclosure'
 import { useAuthStore } from '../../stores/authStore'
 import { typography } from '../../theme'
 import type { B2BProfileRole, TeacherProfileApprovalDraft, TeacherDraftErrors } from './b2bProfileModel'
@@ -37,7 +38,6 @@ import {
 } from './b2bProfileModel'
 
 const NAVY = '#07152D'
-const NAVY_SOFT = '#122844'
 const CREAM = '#FBF6EC'
 const PAPER = '#FFFCF7'
 const ORANGE = '#F36C21'
@@ -88,8 +88,12 @@ function initials(first?: string | null, last?: string | null, fallback = 'ED') 
   return `${first?.trim().charAt(0) ?? ''}${last?.trim().charAt(0) ?? ''}`.toLocaleUpperCase() || fallback
 }
 
-function joined(values?: readonly string[] | null) {
-  return (values ?? []).map((value) => value.trim()).filter(Boolean).join(', ')
+function countLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
+function listLabel(values?: readonly string[] | null) {
+  return (values ?? []).map((value) => value.trim()).filter(Boolean).join(', ') || 'Not assigned'
 }
 
 function teacherDraftFromProfile(profile: TeacherMasterProfile): TeacherProfileApprovalDraft {
@@ -155,6 +159,7 @@ export default function B2BProfileScreen() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [resetError, setResetError] = useState<string | null>(null)
   const [submittedRequest, setSubmittedRequest] = useState<TeacherProfileUpdateRequest | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
 
   const teacher = teacherQuery.data
   useEffect(() => {
@@ -169,6 +174,7 @@ export default function B2BProfileScreen() {
     setSaveError(null)
     setResetError(null)
     setSubmittedRequest(null)
+    setSigningOut(false)
   }, [accountKey])
 
   const branchQuery = useQuery({
@@ -335,7 +341,6 @@ export default function B2BProfileScreen() {
 
   const identity = resolveIdentity(role, user?.display_name, user?.identifier, student, teacher, principal)
   const isSecurity = surface === 'security' || surface === 'security-sent'
-  const canEdit = role === 'teacher' && !isSecurity
 
   const refresh = () => {
     if (role === 'student') void studentQuery.refetch()
@@ -357,6 +362,12 @@ export default function B2BProfileScreen() {
     setDraftErrors({})
     setSaveError(null)
     setResetError(null)
+  }
+
+  const confirmSignOut = () => {
+    if (signingOut) return
+    setSigningOut(true)
+    void logout().catch(() => setSigningOut(false))
   }
 
   const updateDraft = <K extends keyof TeacherProfileApprovalDraft>(
@@ -391,8 +402,6 @@ export default function B2BProfileScreen() {
           surface={surface}
           identity={identity}
           topInset={insets.top}
-          canEdit={canEdit}
-          onEdit={openEdit}
           onClose={closeToView}
         />
 
@@ -476,8 +485,9 @@ export default function B2BProfileScreen() {
           {surface === 'logout-confirm' ? (
             <LogoutConfirmView
               role={role}
+              signingOut={signingOut}
               onCancel={closeToView}
-              onConfirm={() => void logout()}
+              onConfirm={confirmSignOut}
             />
           ) : null}
         </View>
@@ -522,16 +532,12 @@ function ProfileHero({
   surface,
   identity,
   topInset,
-  canEdit,
-  onEdit,
   onClose,
 }: {
   role: B2BProfileRole
   surface: Surface
   identity: ResolvedIdentity
   topInset: number
-  canEdit: boolean
-  onEdit: () => void
   onClose: () => void
 }) {
   const isView = surface === 'view'
@@ -553,18 +559,18 @@ function ProfileHero({
     >
       <View style={styles.heroTop}>
         <View style={styles.heroTitleBlock}>
-          <Text style={styles.heroEyebrow}>INSTITUTION PROFILE</Text>
+          {!isView ? <Text style={styles.heroEyebrow}>ACCOUNT PROFILE</Text> : null}
           <Text style={[styles.heroTitle, compact && styles.heroTitleCompact]}>{title}</Text>
         </View>
-        {canEdit || !isView ? (
+        {!isView ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={isView ? 'Request profile changes' : 'Close profile panel'}
+            accessibilityLabel="Close profile panel"
             hitSlop={8}
-            onPress={isView ? onEdit : onClose}
+            onPress={onClose}
             style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
           >
-            <Ionicons name={isView ? 'create-outline' : 'close'} color={WHITE} size={19} />
+            <Ionicons name="close" color={WHITE} size={19} />
           </Pressable>
         ) : null}
       </View>
@@ -597,7 +603,6 @@ function ProfileHero({
       <View style={[styles.schoolPath, compact && styles.schoolPathCompact]}>
         <Ionicons name="business-outline" size={16} color="#FFD1B8" />
         <View style={styles.schoolPathCopy}>
-          <Text style={styles.schoolPathLabel}>YOUR SCHOOL CONTEXT</Text>
           <Text style={[styles.schoolPathValue, compact && styles.schoolPathValueCompact]}>
             {valueOrDash(identity.school)}
             {identity.branch ? `  ·  ${identity.branch}` : ''}
@@ -613,20 +618,14 @@ function StudentProfileView({ data }: { data: StudentMasterProfile }) {
   const subjects = data.subjects.map((subject) => subject.subject_name).filter(Boolean)
   return (
     <>
-      <SectionIntro
-        eyebrow="YOUR LEARNING LANE"
-        title={`${valueOrDash(profile.standard)}${profile.division ? ` · Division ${profile.division}` : ''}`}
-        body="Your school keeps this lane accurate, so classes, papers, and teachers stay connected."
-      />
-
-      <StudentLearningLane data={data} />
-
-      <ChipSection title="Subjects" values={subjects} empty="Subjects will appear as soon as your school assigns them." />
-
-      <ManagedNote
-        title="Nothing to chase down."
-        body="Identity, school, standard, and division are school-managed. If something looks wrong, your school can correct it without risking your learning history."
-      />
+      <ProfileDisclosure
+        title="Enrollment & subjects"
+        summary={`${valueOrDash(profile.board)} · ${valueOrDash(profile.standard)}${profile.division ? ` · Division ${profile.division}` : ''}`}
+        icon="school-outline"
+      >
+        <StudentLearningLane data={data} />
+        <ChipSection title="Subjects" values={subjects} empty="Subjects will appear as soon as your school assigns them." />
+      </ProfileDisclosure>
     </>
   )
 }
@@ -657,32 +656,46 @@ function TeacherProfileView({
         />
       ) : null}
 
-      <SectionIntro
-        eyebrow="TEACHING COMPASS"
-        title={profile.subjects_taught.length ? `${profile.subjects_taught.length} subject${profile.subjects_taught.length === 1 ? '' : 's'} in your scope` : 'Your teaching scope'}
-        body="One trustworthy view of what you teach, where you teach it, and the responsibilities your school has confirmed."
-      />
-      <TeacherScopeModel data={data} classTeacher={classTeacher} />
+      <ProfileDisclosure
+        title="Teaching details"
+        summary={`${countLabel(profile.subjects_taught.length, 'subject')} · ${countLabel(profile.standards_taught.length, 'standard')} · ${countLabel(profile.divisions_taught.length, 'division')}`}
+        icon="easel-outline"
+      >
+        <TeacherDetailRow label="Teacher ID" value={valueOrDash(profile.teacher_id)} />
+        <TeacherDetailRow label="Board" value={valueOrDash(profile.board)} />
+        <TeacherDetailRow label="Class teacher" value={classTeacher} />
+        <TeacherDetailRow label="Status" value={compactStatus(data.assignment_status)} />
+        <TeacherDetailRow label="Subjects" value={listLabel(profile.subjects_taught)} />
+        <TeacherDetailRow label="Standards" value={listLabel(profile.standards_taught)} />
+        <TeacherDetailRow label="Divisions" value={listLabel(profile.divisions_taught)} last />
+      </ProfileDisclosure>
 
-      <View style={styles.mappingSection}>
-        <Text style={styles.sectionLabel}>Classes & subjects</Text>
-        {data.subject_mappings.length ? (
-          data.subject_mappings.map((mapping, index) => (
-            <View key={`${mapping.subject_name}-${mapping.standard}-${mapping.division}-${index}`} style={styles.mappingRow}>
-              <View style={styles.mappingMarker}>
-                <Text style={styles.mappingMarkerText}>{String(index + 1).padStart(2, '0')}</Text>
-              </View>
-              <View style={styles.mappingCopy}>
-                <Text style={styles.mappingSubject}>{mapping.subject_name}</Text>
-                <Text style={styles.mappingClass}>{mapping.standard} · Division {mapping.division}</Text>
-              </View>
-              <Text style={styles.mappingType}>{mapping.assignment_type}</Text>
-            </View>
-          ))
-        ) : (
-          <EmptyInline icon="albums-outline" text="Class mappings will appear after your school confirms assignments." />
-        )}
-      </View>
+      <ProfileDisclosure
+        title="Classes & subjects"
+        summary={data.subject_mappings.length ? `${data.subject_mappings.length} confirmed class assignment${data.subject_mappings.length === 1 ? '' : 's'}` : 'Awaiting confirmed class assignments'}
+        icon="albums-outline"
+      >
+        <View style={styles.mappingSection}>
+          {data.subject_mappings.length ? (
+            <>
+              <TeacherDetailRow
+                label="Assignment"
+                value={Array.from(new Set(data.subject_mappings.map((mapping) => compactStatus(mapping.assignment_type)))).join(', ')}
+              />
+              {data.subject_mappings.map((mapping, index) => (
+                <View key={`${mapping.subject_name}-${mapping.standard}-${mapping.division}-${index}`} style={[styles.mappingRow, index === data.subject_mappings.length - 1 && styles.rowLast]}>
+                  <View style={styles.mappingCopy}>
+                    <Text style={styles.mappingSubject}>{mapping.subject_name}</Text>
+                    <Text style={styles.mappingClass}>{mapping.standard} · Division {mapping.division}</Text>
+                  </View>
+                </View>
+              ))}
+            </>
+          ) : (
+            <EmptyInline icon="albums-outline" text="Class mappings will appear after your school confirms assignments." />
+          )}
+        </View>
+      </ProfileDisclosure>
 
       <Pressable
         accessibilityRole="button"
@@ -690,41 +703,34 @@ function TeacherProfileView({
         onPress={onEdit}
         style={({ pressed }) => [styles.primaryAction, pressed && styles.pressedFirm]}
       >
-        <View style={styles.primaryActionIcon}>
-          <Ionicons name="create-outline" size={18} color={NAVY} />
-        </View>
+        <Ionicons name="create-outline" size={19} color={RUST} />
         <View style={styles.primaryActionCopy}>
-          <Text style={styles.primaryActionEyebrow}>{pending ? 'ONE REQUEST · STILL TRACEABLE' : 'PRINCIPAL APPROVAL'}</Text>
           <Text style={styles.primaryActionTitle}>{pending ? 'Update your pending request' : 'Request profile changes'}</Text>
         </View>
-        <Ionicons name="arrow-forward" size={18} color={WHITE} />
+        <Ionicons name="arrow-forward" size={18} color={NAVY} />
       </Pressable>
     </>
   )
 }
 
 function PrincipalProfileView({ data }: { data: PrincipalProfile }) {
-  const { profile } = data
   return (
     <>
-      <SectionIntro
-        eyebrow="LEADERSHIP SCOPE"
-        title={compactStatus(profile.role, 'Principal')}
-        body="Your leadership identity is anchored to this school and branch. That scope protects every approval and school decision you make."
-      />
-      <PrincipalAccountabilityView data={data} />
-      <View style={styles.scopeLine}>
-        <View style={styles.scopePulse} />
-        <Text style={styles.scopeText}>
-          {data.filters.standards.length || data.filters.divisions.length
-            ? `${data.filters.standards.length} standards · ${data.filters.divisions.length} divisions in your current scope`
-            : 'School structure will appear as soon as classes are configured.'}
-        </Text>
-      </View>
-      <ManagedNote
-        title="Leadership identity stays protected."
-        body="School, branch, role, and identity are administrator-managed. This prevents a changed client payload from expanding approval access."
-      />
+      <ProfileDisclosure
+        title="School activity"
+        summary={`${countLabel(data.summary.active_teachers, 'active teacher')} · ${countLabel(data.summary.active_students, 'active student')}`}
+        icon="pulse-outline"
+      >
+        <PrincipalAccountabilityView data={data} />
+        <View style={styles.scopeLine}>
+          <View style={styles.scopePulse} />
+          <Text style={styles.scopeText}>
+            {data.filters.standards.length || data.filters.divisions.length
+              ? `${data.filters.standards.length} standards · ${data.filters.divisions.length} divisions in your current scope`
+              : 'School structure will appear as soon as classes are configured.'}
+          </Text>
+        </View>
+      </ProfileDisclosure>
     </>
   )
 }
@@ -768,39 +774,11 @@ function StudentLearningLane({ data }: { data: StudentMasterProfile }) {
   )
 }
 
-function TeacherScopeModel({ data, classTeacher }: { data: TeacherMasterProfile; classTeacher: string }) {
-  const profile = data.profile
+function TeacherDetailRow({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
   return (
-    <View style={styles.teacherScope}>
-      <View style={styles.teacherScopeTop}>
-        <View style={styles.teacherScopeCount}>
-          <Text style={styles.teacherScopeNumber}>{profile.subjects_taught.length}</Text>
-          <Text style={styles.teacherScopeLabel}>SUBJECTS</Text>
-        </View>
-        <View style={styles.teacherScopeDivider} />
-        <View style={styles.teacherScopeCount}>
-          <Text style={styles.teacherScopeNumber}>{profile.standards_taught.length}</Text>
-          <Text style={styles.teacherScopeLabel}>STANDARDS</Text>
-        </View>
-        <View style={styles.teacherScopeDivider} />
-        <View style={styles.teacherScopeCount}>
-          <Text style={styles.teacherScopeNumber}>{profile.divisions_taught.length}</Text>
-          <Text style={styles.teacherScopeLabel}>DIVISIONS</Text>
-        </View>
-      </View>
-      <View style={styles.teacherScopeFlow}>
-        <Text style={styles.teacherScopeId}>{valueOrDash(profile.teacher_id)}</Text>
-        <Ionicons name="arrow-forward" size={15} color="#FFB085" />
-        <Text style={styles.teacherScopeSubjects} numberOfLines={2}>{joined(profile.subjects_taught) || 'Awaiting subject assignment'}</Text>
-      </View>
-      <View style={styles.teacherResponsibility}>
-        <View style={styles.responsibilitySignal} />
-        <View style={styles.responsibilityCopy}>
-          <Text style={styles.responsibilityLabel}>CLASS-TEACHER RESPONSIBILITY</Text>
-          <Text style={styles.responsibilityValue}>{classTeacher}</Text>
-        </View>
-        <Text style={styles.responsibilityStatus}>{compactStatus(data.assignment_status)}</Text>
-      </View>
+    <View style={[styles.teacherDetailRow, last && styles.rowLast]}>
+      <Text style={styles.teacherDetailLabel}>{label}</Text>
+      <Text style={styles.teacherDetailValue}>{value}</Text>
     </View>
   )
 }
@@ -1042,15 +1020,20 @@ function AccountActions({
 }) {
   return (
     <View style={styles.accountSection}>
-      <Text style={styles.sectionLabel}>Account settings</Text>
-      <ActionRow icon="shield-checkmark-outline" title="Password recovery" caption={`Secure reset for this ${role} account`} onPress={onSecurity} />
-      <Pressable accessibilityRole="button" onPress={onLogout} style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}>
-        <Ionicons name="log-out-outline" size={19} color={RUST} />
-        <View style={styles.logoutCopy}>
-          <Text style={styles.logoutTitle}>Sign out</Text>
-          <Text style={styles.logoutCaption}>Clear this account from the device</Text>
-        </View>
-      </Pressable>
+      <ProfileDisclosure
+        title="Account & security"
+        summary="Password recovery · Sign out"
+        icon="shield-checkmark-outline"
+      >
+        <ActionRow icon="shield-checkmark-outline" title="Password recovery" caption={`Secure reset for this ${role} account`} onPress={onSecurity} />
+        <Pressable accessibilityRole="button" onPress={onLogout} style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}>
+          <Ionicons name="log-out-outline" size={19} color={RUST} />
+          <View style={styles.logoutCopy}>
+            <Text style={styles.logoutTitle}>Sign out</Text>
+            <Text style={styles.logoutCaption}>Clear this account from the device</Text>
+          </View>
+        </Pressable>
+      </ProfileDisclosure>
     </View>
   )
 }
@@ -1138,10 +1121,12 @@ function SecuritySentView({
 
 function LogoutConfirmView({
   role,
+  signingOut,
   onCancel,
   onConfirm,
 }: {
   role: B2BProfileRole
+  signingOut: boolean
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -1168,11 +1153,11 @@ function LogoutConfirmView({
         ))}
       </View>
       <View style={styles.buttonRow}>
-        <Pressable accessibilityRole="button" onPress={onCancel} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
+        <Pressable disabled={signingOut} accessibilityRole="button" onPress={onCancel} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed, signingOut && styles.disabled]}>
           <Text style={styles.secondaryButtonText}>Stay signed in</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={onConfirm} style={({ pressed }) => [styles.logoutConfirmButton, pressed && styles.pressedFirm]}>
-          <Text style={styles.logoutConfirmButtonText}>Sign out</Text>
+        <Pressable disabled={signingOut} accessibilityRole="button" accessibilityState={{ disabled: signingOut, busy: signingOut }} onPress={onConfirm} style={({ pressed }) => [styles.logoutConfirmButton, pressed && styles.pressedFirm, signingOut && styles.disabled]}>
+          {signingOut ? <ActivityIndicator color={WHITE} /> : <Text style={styles.logoutConfirmButtonText}>Sign out</Text>}
         </Pressable>
       </View>
     </>
@@ -1215,20 +1200,6 @@ function EmptyInline({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; tex
     <View style={styles.emptyInline}>
       <Ionicons name={icon} size={18} color={MUTED} />
       <Text style={styles.emptyInlineText}>{text}</Text>
-    </View>
-  )
-}
-
-function ManagedNote({ title, body }: { title: string; body: string }) {
-  return (
-    <View style={styles.managedNote}>
-      <View style={styles.managedIcon}>
-        <Ionicons name="lock-closed-outline" size={18} color={NAVY} />
-      </View>
-      <View style={styles.managedCopy}>
-        <Text style={styles.managedTitle}>{title}</Text>
-        <Text style={styles.managedBody}>{body}</Text>
-      </View>
     </View>
   )
 }
@@ -1381,37 +1352,36 @@ function ProfileLoadState({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: NAVY },
-  scroll: { flex: 1, backgroundColor: NAVY },
-  hero: { minHeight: 354, overflow: 'hidden', paddingHorizontal: 22, paddingBottom: 26, backgroundColor: NAVY },
-  heroCompact: { minHeight: 324, paddingHorizontal: 18, paddingBottom: 22 },
-  heroTop: { minHeight: 52, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  root: { flex: 1, backgroundColor: CREAM },
+  scroll: { flex: 1, backgroundColor: CREAM },
+  hero: { minHeight: 238, overflow: 'hidden', paddingHorizontal: 22, paddingBottom: 14, backgroundColor: NAVY },
+  heroCompact: { minHeight: 224, paddingHorizontal: 18, paddingBottom: 12 },
+  heroTop: { minHeight: 38, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   heroTitleBlock: { flex: 1, minWidth: 0, paddingRight: 12 },
   heroEyebrow: { color: '#FF9A63', fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14, letterSpacing: 1.7 },
-  heroTitle: { marginTop: 4, color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 29, lineHeight: 34 },
-  heroTitleCompact: { fontSize: 25, lineHeight: 30 },
+  heroTitle: { marginTop: 2, color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 25, lineHeight: 30 },
+  heroTitleCompact: { fontSize: 23, lineHeight: 28 },
   heroButton: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 23, borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)', backgroundColor: 'rgba(255,255,255,0.08)' },
-  identityRow: { minHeight: 127, flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 18 },
-  identityRowCompact: { minHeight: 101, gap: 12, marginTop: 12 },
-  avatar: { width: 80, height: 80, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 3, borderColor: 'rgba(255,255,255,0.74)', backgroundColor: ORANGE, shadowColor: '#000', shadowOpacity: 0.24, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
-  avatarText: { color: NAVY, fontFamily: typography.fonts.headingSemibold, fontSize: 25 },
+  identityRow: { minHeight: 92, flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8 },
+  identityRowCompact: { minHeight: 82, gap: 12, marginTop: 6 },
+  avatar: { width: 66, height: 66, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: 2, borderColor: 'rgba(255,255,255,0.74)', backgroundColor: ORANGE },
+  avatarText: { color: NAVY, fontFamily: typography.fonts.headingSemibold, fontSize: 22 },
   avatarCompact: { width: 64, height: 64, borderRadius: 22 },
   avatarTextCompact: { fontSize: 21 },
   avatarSignal: { position: 'absolute', right: -2, bottom: 8, width: 14, height: 14, borderRadius: 7, borderWidth: 3, borderColor: NAVY, backgroundColor: '#57C284' },
   identityCopy: { flex: 1, minWidth: 0 },
-  roleLine: { flexDirection: 'row', marginBottom: 8 },
+  roleLine: { flexDirection: 'row', marginBottom: 4 },
   rolePill: { minHeight: 27, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,209,184,0.25)', backgroundColor: 'rgba(243,108,33,0.12)' },
   rolePillText: { color: '#FFD1B8', fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' },
-  identityName: { color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 25, lineHeight: 30 },
+  identityName: { color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 22, lineHeight: 27 },
   identityNameCompact: { fontSize: 19, lineHeight: 23 },
-  identityIdentifier: { marginTop: 5, color: '#AAB5C6', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
-  schoolPath: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12, paddingHorizontal: 15, paddingVertical: 13, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: NAVY_SOFT },
-  schoolPathCompact: { minHeight: 62, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 16 },
+  identityIdentifier: { marginTop: 5, color: '#C0C9D5', fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
+  schoolPath: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 4, paddingVertical: 9, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.16)' },
+  schoolPathCompact: { minHeight: 48, marginTop: 2, paddingVertical: 7 },
   schoolPathCopy: { flex: 1, minWidth: 0 },
-  schoolPathLabel: { color: '#FF9A63', fontFamily: typography.fonts.bodyBold, fontSize: 8.5, lineHeight: 12, letterSpacing: 1.4 },
-  schoolPathValue: { marginTop: 4, color: WHITE, fontFamily: typography.fonts.bodySemibold, fontSize: 12, lineHeight: 17 },
+  schoolPathValue: { color: WHITE, fontFamily: typography.fonts.bodySemibold, fontSize: 12.5, lineHeight: 18 },
   schoolPathValueCompact: { fontSize: 10.5, lineHeight: 15 },
-  sheet: { minHeight: 540, marginTop: -24, paddingHorizontal: 20, paddingTop: 30, paddingBottom: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: CREAM },
+  sheet: { minHeight: 540, marginTop: -12, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 30, borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: CREAM },
   sectionIntro: { marginBottom: 20 },
   sectionEyebrow: { color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 9.5, lineHeight: 13, letterSpacing: 1.5 },
   sectionTitle: { marginTop: 6, color: NAVY, fontFamily: typography.fonts.headingSemibold, fontSize: 23, lineHeight: 29 },
@@ -1434,21 +1404,10 @@ const styles = StyleSheet.create({
   laneTeacherCopy: { flex: 1, minWidth: 0 },
   laneTeacherLabel: { color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 8, lineHeight: 11, letterSpacing: 0.8 },
   laneTeacherName: { marginTop: 3, color: INK, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 17 },
-  teacherScope: { overflow: 'hidden', marginBottom: 22, borderRadius: 22, backgroundColor: NAVY },
-  teacherScopeTop: { minHeight: 83, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 },
-  teacherScopeCount: { flex: 1, alignItems: 'center' },
-  teacherScopeNumber: { color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 22, lineHeight: 26 },
-  teacherScopeLabel: { marginTop: 2, color: '#9EABBC', fontFamily: typography.fonts.bodyBold, fontSize: 7.5, lineHeight: 11, letterSpacing: 0.8 },
-  teacherScopeDivider: { width: 1, height: 38, backgroundColor: 'rgba(255,255,255,0.13)' },
-  teacherScopeFlow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 15, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.10)', backgroundColor: NAVY_SOFT },
-  teacherScopeId: { color: '#FFD8C2', fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14 },
-  teacherScopeSubjects: { flex: 1, color: WHITE, fontFamily: typography.fonts.bodySemibold, fontSize: 11, lineHeight: 16 },
-  teacherResponsibility: { minHeight: 69, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 15, backgroundColor: '#F9E7D9' },
-  responsibilitySignal: { width: 9, height: 9, borderRadius: 5, backgroundColor: ORANGE },
-  responsibilityCopy: { flex: 1, minWidth: 0 },
-  responsibilityLabel: { color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 7.5, lineHeight: 11, letterSpacing: 0.7 },
-  responsibilityValue: { marginTop: 2, color: INK, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 16 },
-  responsibilityStatus: { maxWidth: 70, color: GREEN, fontFamily: typography.fonts.bodyBold, fontSize: 9, lineHeight: 13, textAlign: 'right' },
+  teacherDetailRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
+  teacherDetailLabel: { color: '#475467', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
+  teacherDetailValue: { flex: 1, color: INK, fontFamily: typography.fonts.bodySemibold, fontSize: 12, lineHeight: 18, textAlign: 'right' },
+  rowLast: { borderBottomWidth: 0 },
   accountabilityView: { overflow: 'hidden', marginBottom: 19, borderRadius: 22, backgroundColor: NAVY },
   accountabilityHeader: { minHeight: 51, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.10)' },
   accountabilityEyebrow: { color: '#FFB085', fontFamily: typography.fonts.bodyBold, fontSize: 8.5, lineHeight: 12, letterSpacing: 1 },
@@ -1467,24 +1426,14 @@ const styles = StyleSheet.create({
   chipText: { maxWidth: 250, color: INK, fontFamily: typography.fonts.bodySemibold, fontSize: 12, lineHeight: 17 },
   emptyInline: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, paddingHorizontal: 13, paddingVertical: 11, borderRadius: 15, borderWidth: 1, borderColor: LINE, backgroundColor: SUBTLE },
   emptyInlineText: { flex: 1, color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17 },
-  managedNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 4, padding: 16, borderRadius: 20, backgroundColor: NAVY },
-  managedIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#FFD8C2' },
-  managedCopy: { flex: 1, minWidth: 0 },
-  managedTitle: { color: WHITE, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 18 },
-  managedBody: { marginTop: 4, color: '#B8C2D1', fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17 },
   mappingSection: { marginTop: 6, marginBottom: 24 },
-  mappingRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 11, borderBottomWidth: 1, borderBottomColor: LINE },
-  mappingMarker: { width: 31, height: 31, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#FFE4D4' },
-  mappingMarkerText: { color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  mappingRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: LINE },
   mappingCopy: { flex: 1, minWidth: 0 },
   mappingSubject: { color: INK, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 17 },
-  mappingClass: { marginTop: 3, color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 14 },
-  mappingType: { maxWidth: 86, color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 9, lineHeight: 13, textAlign: 'right' },
-  primaryAction: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 20, backgroundColor: NAVY },
-  primaryActionIcon: { width: 42, height: 42, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#FFD8C2' },
+  mappingClass: { marginTop: 3, color: '#475467', fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
+  primaryAction: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8, paddingHorizontal: 8, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
   primaryActionCopy: { flex: 1, minWidth: 0 },
-  primaryActionEyebrow: { color: '#FF9A63', fontFamily: typography.fonts.bodyBold, fontSize: 8, lineHeight: 11, letterSpacing: 0.9 },
-  primaryActionTitle: { marginTop: 4, color: WHITE, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 18 },
+  primaryActionTitle: { color: NAVY, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 18 },
   pendingCard: { marginBottom: 22, overflow: 'hidden', borderRadius: 20, borderWidth: 1, borderColor: AMBER_LINE, backgroundColor: AMBER_BG },
   pendingTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 15 },
   pendingIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: WHITE },
@@ -1509,16 +1458,16 @@ const styles = StyleSheet.create({
   scopeLine: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: LINE, backgroundColor: SUBTLE },
   scopePulse: { width: 9, height: 9, borderRadius: 5, backgroundColor: ORANGE },
   scopeText: { flex: 1, color: INK, fontFamily: typography.fonts.bodySemibold, fontSize: 11, lineHeight: 17 },
-  accountSection: { marginTop: 30 },
-  actionRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 11, paddingHorizontal: 13, paddingVertical: 10, borderRadius: 18, borderWidth: 1, borderColor: LINE, backgroundColor: PAPER },
-  actionIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#FFE4D4' },
+  accountSection: { marginTop: 18 },
+  actionRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
+  actionIcon: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   actionCopy: { flex: 1, minWidth: 0 },
   actionTitle: { color: INK, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 18 },
-  actionCaption: { marginTop: 3, color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 14 },
-  logoutButton: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 13, marginTop: 10, paddingHorizontal: 15, borderRadius: 18, borderWidth: 1, borderColor: LINE, backgroundColor: SUBTLE },
+  actionCaption: { marginTop: 3, color: '#475467', fontFamily: typography.fonts.bodyMedium, fontSize: 11.5, lineHeight: 16 },
+  logoutButton: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 13, paddingHorizontal: 13 },
   logoutCopy: { flex: 1 },
   logoutTitle: { color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
-  logoutCaption: { marginTop: 3, color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  logoutCaption: { marginTop: 3, color: '#475467', fontFamily: typography.fonts.bodyMedium, fontSize: 11.5 },
   logoutConfirmMark: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center', marginBottom: 18, borderRadius: 19, borderWidth: 1, borderColor: '#F4BE9E', backgroundColor: '#FFE4D4' },
   logoutSafetyList: { overflow: 'hidden', borderRadius: 18, borderWidth: 1, borderColor: LINE, backgroundColor: PAPER },
   logoutSafetyRow: { minHeight: 55, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },

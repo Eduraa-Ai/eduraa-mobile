@@ -117,3 +117,12 @@ test('terminal scan status cannot show ready before review data is available', (
   assert.match(resultDetailSource, /isChecking\s*\n\s*\? 'Checking'/)
   assert.match(resultDetailSource, /'Preparing review details'/)
 })
+
+test('result detail shows server-backed checking time without a reset-prone local counter', () => {
+  assert.match(resultDetailSource, /checkedPaperElapsedSeconds\(data, stopwatchNow\)/)
+  assert.match(resultDetailSource, /'Elapsed' : 'Checked in'/)
+  assert.match(resultDetailSource, /accessibilityLabel=\{isChecking \? `Checking elapsed time/)
+  assert.match(resultDetailSource, /buildCheckedPaperStageTimeline\(data, stopwatchNow\)/)
+  assert.match(resultDetailSource, /Checking timeline/)
+  assert.match(resultDetailSource, /Time spent at each processing stage/)
+})

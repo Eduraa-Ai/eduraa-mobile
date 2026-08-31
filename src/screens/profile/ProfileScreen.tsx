@@ -25,6 +25,7 @@ import {
 import { useAuthStore } from '../../stores/authStore'
 import type { AccountMinimal, B2CProfileRead, EducationLevel } from '../../types'
 import { SelectField } from '../../components/ui/SelectField'
+import { ProfileDisclosure } from '../../components/ui/ProfileDisclosure'
 import { typography } from '../../theme'
 import B2BProfileScreen from './B2BProfileScreen'
 
@@ -47,7 +48,7 @@ const VERIFIED_DOT = '#57c284'
 const serif = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' })
 
 type EditableEducationLevel = Extract<EducationLevel, 'school' | 'competitive_exams'>
-type SheetState = 'view' | 'edit' | 'security' | 'security-sent'
+type SheetState = 'view' | 'edit' | 'security' | 'security-sent' | 'logout-confirm'
 
 type FormState = {
   firstName: string
@@ -134,10 +135,11 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
   const queryClient = useQueryClient()
   const { logout, user } = useAuthStore()
   const accountKey = user ? `${user.role}:${user.id}` : 'signed-out'
-  const { data: profile, isLoading } = useQuery({
+  const profileQuery = useQuery({
     queryKey: ['b2c-profile', accountKey],
     queryFn: b2cApi.getProfile,
   })
+  const { data: profile, isLoading } = profileQuery
 
   const [sheet, setSheet] = useState<SheetState>(isOnboarding ? 'edit' : 'view')
   const [justSaved, setJustSaved] = useState(false)
@@ -145,6 +147,7 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
   const [errors, setErrors] = useState<FieldErrors>({})
   const [saveError, setSaveError] = useState<string | null>(null)
   const [resetError, setResetError] = useState<string | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
 
   const isSchoolProfile = form.educationLevel === 'school'
   const selectedExamText = useMemo(
@@ -350,11 +353,42 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
     backToView()
   }
 
+  const confirmSignOut = () => {
+    if (signingOut) return
+    setSigningOut(true)
+    void logout().catch(() => setSigningOut(false))
+  }
+
   if (isLoading) {
     return (
       <View style={[styles.root, styles.center]}>
         <ActivityIndicator color={ORANGE} />
         <Text style={styles.loadingText}>Loading your profile</Text>
+      </View>
+    )
+  }
+
+  if (profileQuery.isError || !profile) {
+    return (
+      <View style={[styles.root, styles.loadState, { paddingTop: insets.top + 24 }]}>
+        <View style={styles.loadStateIcon}>
+          <Ionicons name="cloud-offline-outline" size={28} color={RUST} />
+        </View>
+        <Text style={styles.loadStateKicker}>PROFILE CONNECTION</Text>
+        <Text style={styles.loadStateTitle}>Your profile paused here.</Text>
+        <Text style={styles.loadStateBody}>
+          We couldn&apos;t load your saved learning profile. Nothing has been changed—check your connection and try again.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ busy: profileQuery.isRefetching }}
+          disabled={profileQuery.isRefetching}
+          onPress={() => void profileQuery.refetch()}
+          style={({ pressed }) => [styles.retryButton, pressed && styles.pressedFirm, profileQuery.isRefetching && styles.buttonBusy]}
+        >
+          {profileQuery.isRefetching ? <ActivityIndicator color="#ffffff" size="small" /> : <Ionicons name="refresh" size={18} color="#ffffff" />}
+          <Text style={styles.retryButtonText}>{profileQuery.isRefetching ? 'Trying again…' : 'Try again'}</Text>
+        </Pressable>
       </View>
     )
   }
@@ -387,6 +421,8 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
                     ? 'Security'
                     : sheet === 'edit'
                       ? 'Make it yours.'
+                      : sheet === 'logout-confirm'
+                        ? 'Sign out'
                       : 'Profile'}
               </Text>
             </View>
@@ -458,7 +494,10 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
               memberSince={memberSince}
               onEdit={openEdit}
               onSecurity={openSecurity}
-              onSignOut={logout}
+              onSignOut={() => {
+                setJustSaved(false)
+                setSheet('logout-confirm')
+              }}
             />
           ) : null}
 
@@ -477,7 +516,9 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
               onBoard={(value) => update('schoolBoard', value)}
               onStandard={(value) => update('schoolStandard', value)}
               onCancel={cancelEdit}
-              onSave={() => updateMutation.mutate()}
+              onSave={() => {
+                if (!updateMutation.isPending) updateMutation.mutate()
+              }}
             />
           ) : null}
 
@@ -486,7 +527,9 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
               email={email}
               sending={resetMutation.isPending}
               error={resetError}
-              onSend={() => resetMutation.mutate()}
+              onSend={() => {
+                if (!resetMutation.isPending) resetMutation.mutate()
+              }}
               onCancel={backToView}
             />
           ) : null}
@@ -495,8 +538,18 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
             <SecuritySentSheet
               email={email}
               sending={resetMutation.isPending}
-              onResend={() => resetMutation.mutate()}
+              onResend={() => {
+                if (!resetMutation.isPending) resetMutation.mutate()
+              }}
               onBack={backToView}
+            />
+          ) : null}
+
+          {sheet === 'logout-confirm' ? (
+            <LogoutConfirmSheet
+              signingOut={signingOut}
+              onCancel={backToView}
+              onConfirm={confirmSignOut}
             />
           ) : null}
         </View>
@@ -539,54 +592,64 @@ function ViewSheet({
         </View>
       ) : null}
 
-      <Text style={styles.sectionLabel}>{isSchool ? 'School track' : 'Competitive exams'}</Text>
-      {targetChips.length ? (
-        <View style={styles.targets}>
-          {targetChips.map((chip) => (
-            <View key={chip} style={styles.targetItem}>
-              <View style={styles.targetDot} />
-              <Text style={styles.targetText}>{chip}</Text>
-            </View>
-          ))}
-        </View>
-      ) : (
-        <Text style={styles.targetsEmpty}>No exam targets yet — add them to personalize Eduraa.</Text>
-      )}
-
-      <ActionRow
-        small="Personal information"
-        title="Edit name and learning profile"
-        onPress={onEdit}
-        accessibilityLabel="Edit name and learning profile"
-      />
-      <ActionRow
-        small="Security"
-        title="Change password"
-        leading="lock-closed-outline"
-        onPress={onSecurity}
-        accessibilityLabel="Change password"
-      />
-
-      <Text style={[styles.sectionLabel, styles.sectionSpacer]}>Account</Text>
-      <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>Account type</Text>
-        <Text style={styles.metaValue}>{accountType}</Text>
-      </View>
-      {memberSince ? (
-        <View style={styles.metaRow}>
-          <Text style={styles.metaLabel}>Member since</Text>
-          <Text style={styles.metaValue}>{memberSince}</Text>
-        </View>
-      ) : null}
-
-      <Pressable
-        onPress={onSignOut}
-        accessibilityRole="button"
-        style={({ pressed }) => [styles.signOut, pressed && styles.pressedSoft]}
+      <ProfileDisclosure
+        title="Learning profile"
+        summary={targetChips.length ? targetChips.join(' · ') : 'Add your learning target to personalize Eduraa'}
+        icon="school-outline"
       >
-        <Ionicons name="log-out-outline" size={18} color={RUST} />
-        <Text style={styles.signOutText}>Sign out</Text>
-      </Pressable>
+        <Text style={styles.sectionLabel}>{isSchool ? 'School track' : 'Competitive exams'}</Text>
+        {targetChips.length ? (
+          <View style={styles.targets}>
+            {targetChips.map((chip) => (
+              <View key={chip} style={styles.targetItem}>
+                <View style={styles.targetDot} />
+                <Text style={styles.targetText}>{chip}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.targetsEmpty}>No exam targets yet — add them to personalize Eduraa.</Text>
+        )}
+
+        <ActionRow
+          small="Personal information"
+          title="Edit name and learning profile"
+          onPress={onEdit}
+          accessibilityLabel="Edit name and learning profile"
+        />
+      </ProfileDisclosure>
+
+      <ProfileDisclosure
+        title="Account & security"
+        summary={`${accountType}${memberSince ? ` · Member since ${memberSince}` : ''}`}
+        icon="shield-checkmark-outline"
+      >
+        <ActionRow
+          small="Security"
+          title="Change password"
+          leading="lock-closed-outline"
+          onPress={onSecurity}
+          accessibilityLabel="Change password"
+        />
+        <View style={styles.metaRow}>
+          <Text style={styles.metaLabel}>Account type</Text>
+          <Text style={styles.metaValue}>{accountType}</Text>
+        </View>
+        {memberSince ? (
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Member since</Text>
+            <Text style={styles.metaValue}>{memberSince}</Text>
+          </View>
+        ) : null}
+        <Pressable
+          onPress={onSignOut}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.signOut, pressed && styles.pressedSoft]}
+        >
+          <Ionicons name="log-out-outline" size={18} color={RUST} />
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+      </ProfileDisclosure>
     </>
   )
 }
@@ -851,6 +914,45 @@ function SecuritySentSheet({
   )
 }
 
+function LogoutConfirmSheet({
+  signingOut,
+  onCancel,
+  onConfirm,
+}: {
+  signingOut: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <>
+      <Text style={styles.sectionLabel}>Account</Text>
+      <Text style={styles.securitySheetTitle}>Sign out of this device?</Text>
+      <Text style={styles.securitySheetBody}>
+        Your profile and learning history stay safe. You will need to sign in again to use Eduraa on this device.
+      </Text>
+      <View style={styles.buttons}>
+        <Pressable
+          disabled={signingOut}
+          accessibilityRole="button"
+          onPress={onCancel}
+          style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedSoft, signingOut && styles.buttonBusy]}
+        >
+          <Text style={styles.cancelText}>Stay signed in</Text>
+        </Pressable>
+        <Pressable
+          disabled={signingOut}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: signingOut, busy: signingOut }}
+          onPress={onConfirm}
+          style={({ pressed }) => [styles.saveButton, pressed && styles.pressedFirm, signingOut && styles.buttonBusy]}
+        >
+          {signingOut ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.saveText}>Sign out</Text>}
+        </Pressable>
+      </View>
+    </>
+  )
+}
+
 // ── Shared: action row ──
 function ActionRow({
   small,
@@ -947,6 +1049,60 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: NAVY },
   center: { alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: HERO_SUB, fontFamily: typography.fonts.bodyMedium, fontSize: 13 },
+  loadState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 30,
+    paddingBottom: 72,
+    backgroundColor: CREAM,
+  },
+  loadStateIcon: {
+    width: 62,
+    height: 62,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#F4BE9E',
+    backgroundColor: '#FFE4D4',
+  },
+  loadStateKicker: {
+    color: RUST,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 9.5,
+    letterSpacing: 1.5,
+  },
+  loadStateTitle: {
+    marginTop: 8,
+    color: NAVY,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 26,
+    lineHeight: 32,
+    textAlign: 'center',
+  },
+  loadStateBody: {
+    maxWidth: 330,
+    marginTop: 9,
+    color: MUTED,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  retryButton: {
+    minHeight: 54,
+    minWidth: 164,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    marginTop: 24,
+    paddingHorizontal: 22,
+    borderRadius: 17,
+    backgroundColor: NAVY,
+  },
+  retryButtonText: { color: '#ffffff', fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1, backgroundColor: CREAM },
 
