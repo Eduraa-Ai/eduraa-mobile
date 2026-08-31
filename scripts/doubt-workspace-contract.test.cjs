@@ -6,7 +6,7 @@ const test = require('node:test')
 const root = path.join(__dirname, '..')
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8')
 
-test('doubt creation and replies support attachments and optional revision checks', () => {
+test('doubt creation and replies support attachments while resolution stays independent', () => {
   const api = read('src/api/doubts.ts')
   const screen = read('src/screens/workspace/DoubtsScreen.tsx')
 
@@ -31,7 +31,9 @@ test('doubt creation and replies support attachments and optional revision check
   assert.match(screen, /accepted\.current = true/)
   assert.match(screen, /Your draft is safe/)
   assert.doesNotMatch(screen, /isTeacher && doubt\.revision != null/)
-  assert.match(screen, /resolveMutation\.mutate\(doubt\.revision\)/)
+  assert.match(screen, /resolveMutation\.mutate\(\)/)
+  assert.match(screen, /Mark as resolved/)
+  assert.doesNotMatch(screen, /Resolve this doubt/)
 })
 
 test('both roles have native routes and unauthorized thread failures recover', () => {

@@ -143,10 +143,8 @@ export const doubtsApi = {
     return normalizeDoubtDetail(response.data)
   },
 
-  async resolve(id: string, expectedRevision?: number | null) {
-    const payload: { expected_revision?: number } = {}
-    if (expectedRevision != null) payload.expected_revision = expectedRevision
-    const response = await apiClient.patch<DoubtDetail>(`/communication/doubts/${id}/resolve`, payload)
+  async resolve(id: string) {
+    const response = await apiClient.patch<DoubtDetail>(`/communication/doubts/${id}/resolve`, {})
     return normalizeDoubtDetail(response.data)
   },
 }

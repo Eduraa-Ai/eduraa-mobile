@@ -661,7 +661,8 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
   const [reply, setReply] = useState('')
   const [replyAttachments, setReplyAttachments] = useState<DoubtAttachmentInput[]>([])
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [replyError, setReplyError] = useState<string | null>(null)
+  const [resolveError, setResolveError] = useState<string | null>(null)
   const screenRef = useRef<ScrollView>(null)
 
   const detailQuery = useQuery({
@@ -683,20 +684,17 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
 
   const replyMutation = useMutation({
     mutationFn: ({ body, revision, attachments }: { body: string; revision: number | null; attachments: DoubtAttachmentInput[] }) => doubtsApi.reply(id, body, revision, attachments),
-    onSuccess: (detail) => { acceptDetail(detail); setReply(''); setReplyAttachments([]); setActionError(null); setAttachmentError(null) },
+    onSuccess: (detail) => { acceptDetail(detail); setReply(''); setReplyAttachments([]); setReplyError(null); setAttachmentError(null) },
     onError: async (error) => {
       if (doubtErrorCode(error) === 'stale_doubt') await detailQuery.refetch()
-      setActionError(doubtErrorMessage(error, 'Your reply is still here. Refresh and try again.'))
+      setReplyError(doubtErrorMessage(error, 'Your reply is still here. Refresh and try again.'))
     },
   })
 
   const resolveMutation = useMutation({
-    mutationFn: (revision: number | null) => doubtsApi.resolve(id, revision),
-    onSuccess: (detail) => { acceptDetail(detail); setActionError(null) },
-    onError: async (error) => {
-      if (doubtErrorCode(error) === 'stale_doubt') await detailQuery.refetch()
-      setActionError(doubtErrorMessage(error, 'The status changed before this action. Refresh and try again.'))
-    },
+    mutationFn: () => doubtsApi.resolve(id),
+    onSuccess: (detail) => { acceptDetail(detail); setResolveError(null) },
+    onError: (error) => setResolveError(doubtErrorMessage(error, 'This doubt could not be marked as resolved. Try again.')),
   })
 
   if (detailQuery.isLoading) {
@@ -738,8 +736,8 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
   ].join('  ·  ')
   const sendReply = () => {
     const body = reply.trim()
-    if (!body && !replyAttachments.length) { setActionError('Add a message or attachment before sending.'); return }
-    if (netInfo.isConnected === false) { setActionError('You are offline. Your reply is still here.'); return }
+    if (!body && !replyAttachments.length) { setReplyError('Add a message or attachment before sending.'); return }
+    if (netInfo.isConnected === false) { setReplyError('You are offline. Your reply is still here.'); return }
     if (replyMutation.isPending) return
     replyMutation.mutate({ body, revision: doubt.revision, attachments: replyAttachments })
   }
@@ -789,7 +787,7 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
             <View key={message.id} style={[styles.message, mine ? styles.messageMine : styles.messageOther]} accessible accessibilityLabel={`${message.sender_name}, ${relativeDate(message.created_at)}: ${message.body}`}>
               <Text style={[styles.messageAuthor, mine && styles.messageAuthorMine]}>{mine ? 'You' : message.sender_name}</Text>
               {message.body ? <Text style={[styles.messageBody, mine && styles.messageBodyMine]} selectable>{message.body}</Text> : null}
-              <AttachmentList attachments={message.attachments} mine={mine} onError={setActionError} />
+              <AttachmentList attachments={message.attachments} mine={mine} onError={setReplyError} />
               <Text style={[styles.messageTime, mine && styles.messageTimeMine]}>{relativeDate(message.created_at)}</Text>
             </View>
           )
@@ -804,8 +802,6 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
         </View>
       </View>
 
-      {resolved && actionError ? <InlineNotice message={actionError} offline={netInfo.isConnected === false} /> : null}
-
       {resolved ? (
         <View style={styles.resolvedPanel}>
           <Ionicons name="shield-checkmark" size={24} color={colors.success} />
@@ -815,13 +811,27 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
           </View>
         </View>
       ) : (
-        <View style={styles.replyPanel}>
+        <>
+          <View style={styles.resolveAction}>
+            {resolveError ? <InlineNotice message={resolveError} offline={netInfo.isConnected === false} /> : null}
+            <Pressable
+              onPress={() => resolveMutation.mutate()}
+              disabled={resolveMutation.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Mark this doubt as resolved"
+              style={({ pressed }) => [styles.markResolvedButton, resolveMutation.isPending && styles.buttonDisabled, pressed && styles.pressed]}
+            >
+              {resolveMutation.isPending ? <ActivityIndicator color={colors.success} /> : <Ionicons name="checkmark-done" size={19} color={colors.success} />}
+              <Text style={styles.markResolvedButtonText}>Mark as resolved</Text>
+            </Pressable>
+          </View>
+          <View style={styles.replyPanel}>
           <View style={styles.replyLabelRow}>
             <Text style={styles.inputLabel}>{isTeacher ? 'Answer the student' : 'Add useful context'}</Text>
           </View>
           <TextInput
             value={reply}
-            onChangeText={(value) => { setReply(value); setActionError(null) }}
+            onChangeText={(value) => { setReply(value); setReplyError(null) }}
             multiline
             maxLength={5000}
             textAlignVertical="top"
@@ -842,30 +852,21 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
             <Text style={styles.addFileMeta}>Any file up to 10 MB</Text>
           </Pressable>
           {attachmentError ? <Text style={styles.errorText} accessibilityRole="alert">{attachmentError}</Text> : null}
-          {actionError ? <InlineNotice message={actionError} offline={netInfo.isConnected === false} /> : null}
+          {replyError ? <InlineNotice message={replyError} offline={netInfo.isConnected === false} /> : null}
           <View style={styles.replyActions}>
             <Pressable
-              onPress={() => resolveMutation.mutate(doubt.revision)}
-              disabled={resolveMutation.isPending || replyMutation.isPending}
-              accessibilityRole="button"
-              accessibilityLabel="Resolve this doubt"
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-            >
-              {resolveMutation.isPending ? <ActivityIndicator color={colors.success} /> : <Ionicons name="checkmark-done" size={19} color={colors.success} />}
-              <Text style={styles.secondaryButtonText}>Resolve</Text>
-            </Pressable>
-            <Pressable
               onPress={sendReply}
-              disabled={replyMutation.isPending || resolveMutation.isPending}
+              disabled={replyMutation.isPending}
               accessibilityRole="button"
               accessibilityLabel={replyMutation.isPending ? 'Sending reply' : 'Send reply'}
-              style={({ pressed }) => [styles.replyButton, (replyMutation.isPending || resolveMutation.isPending) && styles.buttonDisabled, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [styles.replyButton, replyMutation.isPending && styles.buttonDisabled, pressed && styles.buttonPressed]}
             >
               {replyMutation.isPending ? <ActivityIndicator color={colors.white} /> : <Ionicons name="send" size={17} color={colors.white} />}
               <Text style={styles.replyButtonText}>{isTeacher ? 'Send answer' : 'Send context'}</Text>
             </Pressable>
           </View>
-        </View>
+          </View>
+        </>
       )}
     </AppScreen>
   )
@@ -1204,9 +1205,10 @@ const styles = StyleSheet.create({
   replyPanel: { gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
   replyLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   replyInput: { minHeight: 130, padding: spacing[4], borderRadius: radius.md, backgroundColor: colors.backgroundTint, color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 14, lineHeight: 21 },
+  resolveAction: { gap: spacing[2] },
+  markResolvedButton: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successSurface },
+  markResolvedButtonText: { color: colors.success, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   replyActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing[2] },
-  secondaryButton: { minWidth: 112, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successSurface },
-  secondaryButtonText: { color: colors.success, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   replyButton: { minWidth: 134, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, backgroundColor: colors.nav },
   replyButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
 })
