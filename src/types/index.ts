@@ -191,6 +191,9 @@ export interface Paper {
       allow_custom?: boolean;
     }>;
   } | null;
+  assistant_message?: string | null;
+  requires_reply?: boolean;
+  paper_changed?: boolean;
 }
 
 export interface PaperListItem {

@@ -25,7 +25,7 @@ test('paper detail keeps retest, download, and owned-paper delete in the top-rig
 
 test('teacher references do not request attempts or expose learner paper actions', () => {
   assert.match(detailSource, /params\.presentation === ["']teacher_reference["']/)
-  assert.match(detailSource, /enabled: Boolean\(paper && !isTeacherReference\)/)
+  assert.match(detailSource, /enabled: Boolean\([\s\S]*paper[\s\S]*!isTeacherReference[\s\S]*user\?\.role === "student"[\s\S]*user\?\.role === "b2c_student"[\s\S]*\)/)
   assert.match(detailSource, /if \(paper && !isTeacherReference\) void attemptsQuery\.refetch\(\)/)
   assert.match(detailSource, /Download teacher reference PDF/)
   assert.match(detailSource, /const canDelete = !isTeacherReference/)
@@ -74,7 +74,8 @@ test('submitted papers can always leave for learner or staff checked papers', ()
 })
 
 test('teacher draft paper detail provides inline question and image editing with production endpoints', () => {
-  assert.match(detailSource, /const canEditPaper = isTeacher && !isTeacherReference/)
+  assert.match(detailSource, /const canManagePaper = isTeacher \|\| user\?\.role === ["']admin["']/)
+  assert.match(detailSource, /const canEditPaper = canManagePaper && !isTeacherReference/)
   assert.match(detailSource, /<PaperQuestionEditor/)
   assert.match(detailSource, /YOUR PAPER/)
   assert.match(detailSource, /Tap to edit/)
@@ -99,6 +100,10 @@ test('teacher draft paper detail provides inline question and image editing with
   assert.match(apiSource, /paper_context: input\.paperContext/)
   assert.match(apiSource, /chat_history: input\.chatHistory\.slice\(-6\)/)
   assert.match(apiSource, /dry_run: false/)
+  assert.match(detailSource, /updatedPaper\.assistant_message/)
+  assert.match(detailSource, /updatedPaper\.requires_reply/)
+  assert.match(detailSource, /updatedPaper\.paper_changed/)
+  assert.match(detailSource, /opt\.id \|\| `\$\{q\.id\}-option-\$\{i\}-\$\{opt\.text\}`/)
 })
 
 test('teacher checked-paper report states publication plainly', () => {
