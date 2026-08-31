@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AppScreen, ErrorState, SelectField } from '../../components/ui'
+import { AnimatedButton, AppScreen, ErrorState, GradientHeroCard, SectionHeading, SelectField } from '../../components/ui'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import {
   isAcceptedScanUploadError,
@@ -20,7 +20,7 @@ import {
   type ScanUploadReceipt,
 } from '../../api/scanUpload'
 import { useAuthStore } from '../../stores/authStore'
-import { colors, layout, radius, spacing, typography } from '../../theme'
+import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
 import type { CheckedPaper, Role } from '../../types'
 import type { ScanUploadParams } from '../../navigation'
 import {
@@ -526,11 +526,14 @@ export default function ScanUploadScreen() {
   return (
     <View style={styles.root}>
     <AppScreen protectedChrome contentStyle={styles.screen} refreshControl={<RefreshControl refreshing={optionsQuery.isRefetching} onRefresh={optionsQuery.refetch} tintColor={colors.accent} colors={[colors.accent]} />}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>SCAN UPLOAD</Text>
-        <Text style={styles.title}>Upload an answer sheet</Text>
-        <Text style={styles.subtitle}>Link the right assessment, confirm the student, then arrange the pages exactly as they should be read.</Text>
-      </View>
+      <GradientHeroCard
+        eyebrow="SCAN UPLOAD"
+        title="Upload an answer sheet"
+        subtitle="Link the right assessment, confirm the student, then arrange the pages exactly as they should be read."
+        style={styles.hero}
+      />
+
+      <SectionHeading title="Upload flow" subtitle="Complete each step before sending the pages for checking." />
 
       {draftRestored ? (
         <View style={styles.restoredBanner}>
@@ -621,17 +624,14 @@ export default function ScanUploadScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  screen: { gap: spacing[4], paddingBottom: spacing[20] + spacing[16] },
+  screen: { gap: spacing[5], paddingBottom: spacing[20] + spacing[16] },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[3] },
   loadingText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14 },
-  header: { gap: spacing[1], paddingHorizontal: spacing[1], paddingTop: spacing[1] },
-  eyebrow: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.5 },
-  title: { color: colors.text, fontFamily: typography.fonts.heading, fontSize: 27, lineHeight: 32 },
-  subtitle: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14, lineHeight: 20, maxWidth: 540 },
+  hero: { marginTop: spacing[1] },
   restoredBanner: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing[3], borderWidth: 1, borderColor: colors.successBorder, borderRadius: radius.lg, backgroundColor: colors.successSurface, padding: spacing[3] },
   bannerCopy: { flex: 1, gap: 2 }, bannerTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 }, bannerText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 }, bannerClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  workflowSurface: { backgroundColor: 'transparent' },
-  stepCard: { gap: spacing[4], paddingVertical: spacing[4] }, stepDivider: { borderTopWidth: 1, borderTopColor: colors.border }, stepCardLocked: { opacity: 0.7 },
+  workflowSurface: { gap: spacing[3] },
+  stepCard: { gap: spacing[4], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, ...shadows.sm }, stepDivider: { borderTopWidth: 1, borderTopColor: colors.border }, stepCardLocked: { opacity: 0.72 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] }, stepNumber: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurfaceStrong }, stepNumberComplete: { backgroundColor: colors.success }, stepNumberText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 13 }, stepTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18 },
   lockedCopy: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
   inferredRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing[2], borderRadius: radius.md, backgroundColor: colors.backgroundMuted, paddingHorizontal: spacing[3] }, inferredText: { flex: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
