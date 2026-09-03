@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, TextInputField } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SectionHeading, TextInputField } from '../../components/ui'
 import {
   approvalsApi,
   type ApprovalQueueData,
@@ -127,13 +127,23 @@ function DecisionActions({
       loading={busyAction === 'approve'}
       disabled={disabled}
       onPress={onApprove}
+      variant="primary"
       style={stacked ? styles.stackedAction : styles.approveButton}
     />
   )
   return (
     <View style={[styles.actionRow, stacked && styles.actionColumn]} accessibilityRole="toolbar" accessibilityLabel={`Decision for ${label}`}>
       {approve}
-      <AnimatedButton label="Reject" accessibilityLabel={`Reject ${label}`} icon={<Ionicons name="close" size={18} color={colors.danger} />} loading={busyAction === 'reject'} disabled={disabled} onPress={onReject} style={stacked ? styles.stackedRejectAction : styles.rejectButton} />
+      <AnimatedButton
+        label="Reject"
+        accessibilityLabel={`Reject ${label}`}
+        icon={<Ionicons name="close" size={18} color={colors.danger} />}
+        loading={busyAction === 'reject'}
+        disabled={disabled}
+        onPress={onReject}
+        variant="secondary"
+        style={stacked ? styles.stackedRejectAction : styles.rejectButton}
+      />
     </View>
   )
 }
@@ -490,23 +500,24 @@ export default function ApprovalsScreen() {
           <Ionicons name="arrow-back" size={20} color={colors.nav} />
         </Pressable>
         <View style={styles.screenTopbarCopy}>
-          <Text style={styles.screenTopbarEyebrow}>SECURE SCHOOL SCOPE</Text>
+          <Text style={styles.screenTopbarEyebrow}>SCHOOL REVIEW</Text>
           <Text style={styles.screenTopbarTitle}>Approvals</Text>
         </View>
       </View>
 
-      <View style={[styles.hero, compactHeight && styles.heroCompact]}>
-        <View style={styles.heroTop}>
-          <View style={styles.heroMark}><Ionicons name="shield-checkmark" size={22} color={colors.accent} /></View>
-          <Text style={styles.heroRole}>{roleContract.label.toUpperCase()}</Text>
-        </View>
-        <Text style={[styles.heroTitle, compactHeight && styles.heroTitleCompact]}>{hasUnavailableQueue ? `${unavailableQueues.length === 1 ? 'A review queue needs attention.' : 'Review queues need attention.'}` : totalPending ? `${totalPending} decision${totalPending === 1 ? '' : 's'} need you.` : 'Your review desk is clear.'}</Text>
-        <Text style={[styles.heroBody, compactHeight && styles.heroBodyCompact]}>{hasUnavailableQueue ? 'We could not confirm every permitted queue. Retry the highlighted queue; other loaded queues remain available.' : `${roleContract.purpose} Other roles’ queues stay private.`}</Text>
-        <View style={[styles.heroTrust, compactHeight && styles.heroTrustCompact]}>
-          <Ionicons name="time-outline" size={16} color="#AAB5C6" />
+      <GradientHeroCard
+        eyebrow={roleContract.label.toUpperCase()}
+        title={hasUnavailableQueue ? `${unavailableQueues.length === 1 ? 'A review queue needs attention.' : 'Review queues need attention.'}` : totalPending ? `${totalPending} decision${totalPending === 1 ? '' : 's'} need you.` : 'Your review desk is clear.'}
+        subtitle={hasUnavailableQueue ? 'We could not confirm every permitted queue. Retry the highlighted queue; other loaded queues remain available.' : `${roleContract.purpose} Other roles’ queues stay private.`}
+        style={compactHeight ? styles.heroCompact : styles.hero}
+      >
+        <View style={styles.heroTrustRow}>
+          <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.78)" />
           <Text style={styles.heroTrustText}>{hasUnavailableQueue ? 'No decision was made while a queue is unavailable.' : 'Every completed decision keeps its actor and server time.'}</Text>
         </View>
-      </View>
+      </GradientHeroCard>
+
+      <SectionHeading title="Pending review" subtitle="Approve or reject requests from your assigned school scope." />
 
       {slow && loadingAny ? (
         <View style={styles.slowBanner} accessibilityLiveRegion="polite">
@@ -606,9 +617,9 @@ export default function ApprovalsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { paddingBottom: spacing[20] + 84, gap: spacing[7] },
-  screenTopbar: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  backButton: { width: 44, height: 44, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, ...shadows.xs },
+  screen: { paddingBottom: spacing[20] + 84, gap: spacing[6] },
+  screenTopbar: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  backButton: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, ...shadows.xs },
   screenTopbarCopy: { flex: 1 },
   screenTopbarEyebrow: { ...typography.roles.eyebrow, color: colors.accentStrong },
   screenTopbarTitle: { marginTop: 2, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 19 },
@@ -618,18 +629,10 @@ const styles = StyleSheet.create({
   loadingEyebrow: { ...typography.roles.eyebrow, marginTop: spacing[5], color: colors.accentStrong },
   loadingTitle: { ...typography.roles.screenTitle, marginTop: spacing[2], color: colors.nav, textAlign: 'center' },
   loadingBody: { ...typography.roles.body, maxWidth: 320, marginTop: spacing[3], color: colors.textMuted, textAlign: 'center' },
-  hero: { overflow: 'hidden', borderRadius: 30, padding: spacing[6], backgroundColor: colors.nav, ...shadows.lg },
-  heroCompact: { padding: spacing[5], borderRadius: 26 },
-  heroTop: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  heroMark: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(243,108,33,0.14)', borderWidth: 1, borderColor: 'rgba(243,108,33,0.28)' },
-  heroRole: { ...typography.roles.eyebrow, flex: 1, color: '#FFD9C2' },
-  heroTitle: { marginTop: spacing[7], color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 31, lineHeight: 37, letterSpacing: -0.7 },
-  heroTitleCompact: { marginTop: spacing[4], fontSize: 27, lineHeight: 32 },
-  heroBody: { ...typography.roles.body, marginTop: spacing[3], color: '#AAB5C6' },
-  heroBodyCompact: { marginTop: spacing[2], fontSize: 13, lineHeight: 19 },
-  heroTrust: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[6], paddingTop: spacing[4], borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
-  heroTrustCompact: { marginTop: spacing[4], paddingTop: spacing[3] },
-  heroTrustText: { flex: 1, color: '#AAB5C6', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
+  hero: { marginTop: spacing[1] },
+  heroCompact: { marginTop: spacing[1] },
+  heroTrustRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[5], paddingTop: spacing[4], borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
+  heroTrustText: { flex: 1, color: 'rgba(255,255,255,0.78)', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
   slowBanner: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, backgroundColor: colors.warningSurface },
   slowText: { ...typography.roles.body, flex: 1, color: colors.warning },
   notice: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1 },
@@ -639,18 +642,18 @@ const styles = StyleSheet.create({
   noticeSuccessText: { color: colors.successText },
   noticeErrorText: { color: colors.dangerText },
   section: { gap: spacing[4] },
-  sectionHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'flex-start', gap: spacing[4] },
+  sectionHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing[4], paddingHorizontal: spacing[1] },
   sectionCopy: { flex: 1 },
-  sectionTitle: { ...typography.roles.title, color: colors.nav },
+  sectionTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 18, lineHeight: 24 },
   sectionSubtitle: { ...typography.roles.body, marginTop: spacing[1], color: colors.textMuted },
-  countPill: { minWidth: 44, height: 44, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
-  countPillUnavailable: { minWidth: 92, paddingHorizontal: spacing[3], backgroundColor: colors.dangerSurface },
-  countText: { color: colors.accentStrong, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
+  countPill: { minWidth: 44, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface, borderWidth: 1, borderColor: colors.borderBrand },
+  countPillUnavailable: { minWidth: 94, paddingHorizontal: spacing[3], backgroundColor: colors.dangerSurface, borderColor: colors.dangerBorder },
+  countText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 15 },
   countTextUnavailable: { fontFamily: typography.fonts.bodyBold, fontSize: 11, color: colors.dangerText },
   queueError: { flexDirection: 'row', gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface },
-  queueLoading: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.xl, backgroundColor: colors.backgroundElevated },
+  queueLoading: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.xl, backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.borderSubtle },
   queueLoadingText: { ...typography.roles.body, color: colors.textMuted },
-  queueStateIcon: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white },
+  queueStateIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white },
   queueStateCopy: { flex: 1 },
   queueStateTitle: { color: colors.dangerText, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   queueStateBody: { ...typography.roles.body, marginTop: spacing[1], color: colors.textSecondary },
@@ -659,13 +662,13 @@ const styles = StyleSheet.create({
   emptyLane: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   emptyCheck: { width: 40, height: 40, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successSurface },
   emptyText: { ...typography.roles.body, flex: 1, color: colors.textSecondary },
-  passwordBlock: { gap: spacing[1] },
+  passwordBlock: { gap: spacing[2], paddingVertical: spacing[1] },
   passwordHint: { marginHorizontal: spacing[2], color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
-  requestCard: { gap: spacing[3], padding: spacing[4], borderColor: colors.borderSubtle },
+  requestCard: { gap: spacing[3], padding: spacing[4], borderColor: colors.borderSubtle, borderWidth: 1, borderRadius: radius.xl },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   avatar: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
   avatarText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 16 },
-  planIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  planIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface, borderWidth: 1, borderColor: colors.borderBrand },
   cardCopy: { flex: 1, minWidth: 0 },
   cardTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 17, lineHeight: 22 },
   cardMeta: { marginTop: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 16 },
@@ -678,7 +681,7 @@ const styles = StyleSheet.create({
   stackedAction: { width: '100%' },
   stackedRejectAction: { width: '100%' },
   approveButton: { flex: 1 },
-  rejectButton: { flex: 1, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.danger },
+  rejectButton: { flex: 1 },
   buttonPressed: { transform: [{ scale: 0.98 }], opacity: 0.88 },
   buttonDisabled: { opacity: 0.55 },
   assignmentList: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.backgroundMuted },
