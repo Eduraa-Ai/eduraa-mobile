@@ -75,6 +75,12 @@ function valueOrDash(value?: string | null) {
   return value?.trim() || 'Not available'
 }
 
+function formatStandard(value?: string | null) {
+  const standard = value?.trim()
+  if (!standard) return 'Not available'
+  return /^(std|class)\s/i.test(standard) ? standard : `Std ${standard}`
+}
+
 function compactStatus(value?: string | null, fallback = 'Current') {
   const normalized = value?.trim()
   if (!normalized) return fallback
@@ -383,7 +389,7 @@ export default function B2BProfileScreen() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 104 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 140 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         refreshControl={
@@ -619,6 +625,13 @@ function StudentProfileView({ data }: { data: StudentMasterProfile }) {
   return (
     <>
       <ProfileDisclosure
+        title="Profile details"
+        summary="School-managed academic record"
+        icon="person-circle-outline"
+      >
+        <StudentRecordDetails data={data} />
+      </ProfileDisclosure>
+      <ProfileDisclosure
         title="Enrollment & subjects"
         summary={`${valueOrDash(profile.board)} · ${valueOrDash(profile.standard)}${profile.division ? ` · Division ${profile.division}` : ''}`}
         icon="school-outline"
@@ -626,7 +639,101 @@ function StudentProfileView({ data }: { data: StudentMasterProfile }) {
         <StudentLearningLane data={data} />
         <ChipSection title="Subjects" values={subjects} empty="Subjects will appear as soon as your school assigns them." />
       </ProfileDisclosure>
+      <ProfileDisclosure
+        title="Teachers"
+        summary={data.teacher_subject_mappings.length ? countLabel(data.teacher_subject_mappings.length, 'teacher assignment') : 'No teacher mappings found'}
+        icon="people-outline"
+      >
+        <StudentTeacherMappings data={data} />
+      </ProfileDisclosure>
+      <ProfileDisclosure
+        title="Books / documents"
+        summary={data.documents.length ? countLabel(data.documents.length, 'mapped document') : 'No mapped documents found'}
+        icon="library-outline"
+      >
+        <StudentDocuments data={data} />
+      </ProfileDisclosure>
     </>
+  )
+}
+
+function StudentRecordDetails({ data }: { data: StudentMasterProfile }) {
+  const { profile } = data
+  const fields = [
+    { label: 'First name', value: valueOrDash(profile.first_name) },
+    { label: 'Last name', value: valueOrDash(profile.last_name) },
+    { label: 'Email', value: valueOrDash(profile.email) },
+    { label: 'Student ID', value: valueOrDash(profile.student_id) },
+    { label: 'Board', value: valueOrDash(profile.board) },
+    { label: 'Standard', value: formatStandard(profile.standard) },
+    { label: 'Division', value: profile.division ? `Division ${profile.division}` : 'Not assigned' },
+    { label: 'School', value: valueOrDash(profile.school_name) },
+    { label: 'Branch', value: valueOrDash(profile.branch_name) },
+    { label: 'Class teacher', value: valueOrDash(data.class_teacher_name) },
+  ]
+  return (
+    <View style={styles.studentDetails}>
+      <View style={styles.managedNote} accessibilityRole="summary">
+        <Ionicons name="lock-closed-outline" size={15} color={RUST} />
+        <Text style={styles.managedNoteText}>School-managed fields are shown exactly as maintained in the institutional record.</Text>
+      </View>
+      <View style={styles.recordGrid}>
+        {fields.map((field) => <StudentRecordField key={field.label} {...field} />)}
+        <StudentRecordField label="Status" value={compactStatus(data.assignment_status, 'Enrolled')} status />
+      </View>
+    </View>
+  )
+}
+
+function StudentRecordField({ label, value, status = false }: { label: string; value: string; status?: boolean }) {
+  return (
+    <View style={styles.recordField}>
+      <Text style={styles.recordFieldLabel}>{label}</Text>
+      {status ? <Text style={styles.recordStatus}>{value}</Text> : <Text style={styles.recordFieldValue}>{value}</Text>}
+    </View>
+  )
+}
+
+function StudentTeacherMappings({ data }: { data: StudentMasterProfile }) {
+  if (!data.teacher_subject_mappings.length) return <EmptyInline icon="people-outline" text="No teacher mappings found." />
+  return (
+    <View style={styles.profileList}>
+      {data.teacher_subject_mappings.map((mapping, index) => (
+        <View key={`${mapping.teacher_id}-${mapping.subject_name}-${index}`} style={[styles.teacherMappingRow, index === data.teacher_subject_mappings.length - 1 && styles.rowLast]}>
+          <View style={styles.teacherMappingIcon}>
+            <Ionicons name={mapping.is_class_teacher ? 'star' : 'person-outline'} size={16} color={mapping.is_class_teacher ? AMBER : NAVY} />
+          </View>
+          <View style={styles.teacherMappingCopy}>
+            <Text style={styles.teacherMappingName}>{valueOrDash(mapping.teacher_name)}</Text>
+            <Text style={styles.teacherMappingMeta}>{[mapping.teacher_code, mapping.teacher_email].filter(Boolean).join(' · ') || 'No email'}</Text>
+            <Text style={styles.teacherMappingSubject}>{mapping.subject_name}</Text>
+          </View>
+          <Text style={[styles.mappingType, mapping.is_class_teacher && styles.mappingTypeClass]}>{mapping.is_class_teacher ? 'Class teacher' : 'Subject teacher'}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+function StudentDocuments({ data }: { data: StudentMasterProfile }) {
+  if (!data.documents.length) return <EmptyInline icon="library-outline" text="No mapped documents found." />
+  return (
+    <View style={styles.profileList}>
+      {data.documents.map((document, index) => (
+        <View key={document.document_id} style={[styles.documentRow, index === data.documents.length - 1 && styles.rowLast]}>
+          <View style={styles.documentIcon}><Ionicons name="document-text-outline" size={18} color={RUST} /></View>
+          <View style={styles.documentCopy}>
+            <Text style={styles.documentTitle}>{valueOrDash(document.title)}</Text>
+            <Text style={styles.documentFile}>{valueOrDash(document.file_name)}</Text>
+            <Text style={styles.documentMeta}>{[document.subject_name || 'N/A', document.standard ? formatStandard(document.standard) : 'N/A', document.board || 'N/A'].join(' · ')}</Text>
+          </View>
+          <View style={styles.documentStatus}>
+            <Text style={styles.documentStatusText}>{compactStatus(document.processing_status)}</Text>
+            <Text style={styles.documentPages}>{document.page_count ?? 'N/A'} pg</Text>
+          </View>
+        </View>
+      ))}
+    </View>
   )
 }
 
@@ -1424,6 +1531,32 @@ const styles = StyleSheet.create({
   chip: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 13, paddingVertical: 9, borderRadius: 14, borderWidth: 1, borderColor: LINE, backgroundColor: PAPER },
   chipDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: ORANGE },
   chipText: { maxWidth: 250, color: INK, fontFamily: typography.fonts.bodySemibold, fontSize: 12, lineHeight: 17 },
+  studentDetails: { gap: 14, paddingTop: 7, paddingBottom: 23 },
+  managedNote: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, borderWidth: 1, borderColor: LINE, backgroundColor: SUBTLE },
+  managedNoteText: { flex: 1, color: '#475467', fontFamily: typography.fonts.bodyMedium, fontSize: 10.5, lineHeight: 16 },
+  recordGrid: { overflow: 'hidden', borderRadius: 16, borderWidth: 1, borderColor: LINE, backgroundColor: PAPER },
+  recordField: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingHorizontal: 13, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
+  recordFieldLabel: { width: 83, color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 8.5, lineHeight: 12, letterSpacing: 0.9, textTransform: 'uppercase' },
+  recordFieldValue: { flex: 1, color: INK, fontFamily: typography.fonts.bodySemibold, fontSize: 11.5, lineHeight: 16, textAlign: 'right' },
+  recordStatus: { marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 9, borderWidth: 1, borderColor: GREEN_LINE, color: GREEN, backgroundColor: GREEN_BG, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14 },
+  profileList: { marginTop: 4, marginBottom: 22 },
+  teacherMappingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
+  teacherMappingIcon: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginTop: 1, borderRadius: 11, backgroundColor: SUBTLE },
+  teacherMappingCopy: { flex: 1, minWidth: 0 },
+  teacherMappingName: { color: INK, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 17 },
+  teacherMappingMeta: { marginTop: 2, color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 9.5, lineHeight: 14 },
+  teacherMappingSubject: { marginTop: 5, color: NAVY, fontFamily: typography.fonts.bodySemibold, fontSize: 10.5, lineHeight: 15 },
+  mappingType: { maxWidth: 86, marginTop: 2, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 9, borderWidth: 1, borderColor: LINE, color: '#475467', backgroundColor: SUBTLE, fontFamily: typography.fonts.bodyBold, fontSize: 8.5, lineHeight: 12, textAlign: 'center', textTransform: 'uppercase' },
+  mappingTypeClass: { borderColor: AMBER_LINE, color: AMBER, backgroundColor: AMBER_BG },
+  documentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
+  documentIcon: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginTop: 1, borderRadius: 11, backgroundColor: '#FFF0E5' },
+  documentCopy: { flex: 1, minWidth: 0 },
+  documentTitle: { color: INK, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 17 },
+  documentFile: { marginTop: 2, color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 9.5, lineHeight: 14 },
+  documentMeta: { marginTop: 5, color: '#475467', fontFamily: typography.fonts.bodyMedium, fontSize: 9.5, lineHeight: 14 },
+  documentStatus: { alignItems: 'flex-end', gap: 5, marginTop: 2 },
+  documentStatusText: { maxWidth: 86, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 9, borderWidth: 1, borderColor: LINE, color: '#475467', backgroundColor: SUBTLE, fontFamily: typography.fonts.bodyBold, fontSize: 8.5, lineHeight: 12, textAlign: 'center', textTransform: 'uppercase' },
+  documentPages: { color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 9.5, lineHeight: 14 },
   emptyInline: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, paddingHorizontal: 13, paddingVertical: 11, borderRadius: 15, borderWidth: 1, borderColor: LINE, backgroundColor: SUBTLE },
   emptyInlineText: { flex: 1, color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17 },
   mappingSection: { marginTop: 6, marginBottom: 24 },

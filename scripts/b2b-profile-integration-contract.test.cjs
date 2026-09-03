@@ -16,8 +16,10 @@ test('B2B role reads use canonical role-protected server endpoints', () => {
   assert.match(apiSource, /getPrincipalProfile[\s\S]*'\/analytics\/principal-dashboard-lab'/)
 })
 
-test('profile cache projections drop unused master-profile and dashboard payload fields', () => {
+test('profile cache projections retain every student profile field rendered on mobile and drop sensitive fields', () => {
   assert.match(apiSource, /getStudentProfile[\s\S]*subjects: \(data\.subjects \?\? \[\]\)\.map/)
+  assert.match(apiSource, /getStudentProfile[\s\S]*teacher_subject_mappings: \(data\.teacher_subject_mappings \?\? \[\]\)\.map/)
+  assert.match(apiSource, /getStudentProfile[\s\S]*documents: \(data\.documents \?\? \[\]\)\.map/)
   assert.match(apiSource, /getTeacherProfile[\s\S]*subject_mappings: \(data\.subject_mappings \?\? \[\]\)\.map[\s\S]*pending_update_request: data\.pending_update_request/)
   assert.match(apiSource, /getPrincipalProfile[\s\S]*profile: data\.profile,[\s\S]*filters: data\.filters,[\s\S]*summary: data\.summary/)
   assert.equal([...apiSource.matchAll(/return response\.data/g)].length, 1)
@@ -65,6 +67,7 @@ test('teacher request status yields to canonical server data after approval', ()
 })
 
 test('every institution role uses accessible profile disclosures without changing its data contract', () => {
+  assert.match(screenSource, /function StudentProfileView[\s\S]*title="Profile details"[\s\S]*title="Enrollment & subjects"[\s\S]*title="Teachers"[\s\S]*title="Books \/ documents"/)
   assert.match(screenSource, /function StudentProfileView[\s\S]*title="Enrollment & subjects"/)
   assert.match(screenSource, /function TeacherProfileView[\s\S]*title="Teaching details"[\s\S]*title="Classes & subjects"/)
   assert.match(screenSource, /function PrincipalProfileView[\s\S]*title="School activity"/)

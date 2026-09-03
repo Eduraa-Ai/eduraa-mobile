@@ -17,11 +17,33 @@ export interface StudentProfileSubject {
   subject_name: string
 }
 
+export interface StudentTeacherSubjectMapping {
+  subject_name: string
+  teacher_id: string
+  teacher_code?: string | null
+  teacher_name: string
+  teacher_email?: string | null
+  is_class_teacher: boolean
+}
+
+export interface StudentProfileDocument {
+  document_id: string
+  title: string
+  file_name: string
+  subject_name?: string | null
+  board?: string | null
+  standard?: string | null
+  page_count?: number | null
+  processing_status: string
+}
+
 export interface StudentMasterProfile {
   profile: StudentProfileCore
   class_teacher_name?: string | null
   assignment_status?: string | null
   subjects: StudentProfileSubject[]
+  teacher_subject_mappings: StudentTeacherSubjectMapping[]
+  documents: StudentProfileDocument[]
 }
 
 export interface TeacherProfileSnapshot {
@@ -116,6 +138,24 @@ export const b2bProfileApi = {
       assignment_status: data.assignment_status,
       subjects: (data.subjects ?? []).map((subject) => ({
         subject_name: subject.subject_name,
+      })),
+      teacher_subject_mappings: (data.teacher_subject_mappings ?? []).map((mapping) => ({
+        subject_name: mapping.subject_name,
+        teacher_id: mapping.teacher_id,
+        teacher_code: mapping.teacher_code,
+        teacher_name: mapping.teacher_name,
+        teacher_email: mapping.teacher_email,
+        is_class_teacher: mapping.is_class_teacher,
+      })),
+      documents: (data.documents ?? []).map((document) => ({
+        document_id: document.document_id,
+        title: document.title,
+        file_name: document.file_name,
+        subject_name: document.subject_name,
+        board: document.board,
+        standard: document.standard,
+        page_count: document.page_count,
+        processing_status: document.processing_status,
       })),
     }
   },
