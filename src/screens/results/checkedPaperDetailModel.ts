@@ -230,10 +230,12 @@ function isBlockedStatus(status: string) {
 export function isCheckedPaperChecking(paper: CheckedPaper) {
   const status = normalizedToken(paper.status).replace(/[\s-]+/g, '_')
   if (isBlockedStatus(status)) return false
-  if (paper.results_published || paper.release_status === 'published') return false
   if (paper.manual_review_requested || paper.needs_review || status === 'pending_manual_review') {
     return false
   }
+  // Publication and detailed grading are independent backend operations.  A
+  // record can be marked published before its grading payload is available;
+  // keep treating that state as active so this screen continues to refresh.
   return ['submitted', 'checking', 'processing', 'uploaded'].includes(status)
     || !hasCheckedPaperReviewPayload(paper)
 }

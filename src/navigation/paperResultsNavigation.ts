@@ -41,10 +41,5 @@ export function navigateToCheckedPapers(
 }
 
 export function returnToCheckedPapers(navigation: NavigationLike) {
-  if (navigation.canGoBack?.() && navigation.goBack) {
-    navigation.goBack()
-    return true
-  }
-
   return navigateToCheckedPapers(navigation)
 }

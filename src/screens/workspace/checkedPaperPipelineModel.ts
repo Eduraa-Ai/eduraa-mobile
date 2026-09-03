@@ -151,7 +151,9 @@ export function checkedPaperReviewExperienceStatus(paper: {
   max_score?: number | null
 }): CheckedPaperExperienceStatus {
   const status = checkedPaperExperienceStatus(paper)
-  if (status === 'ready_for_review' && !hasCheckedPaperReviewPayload(paper)) return 'checking'
+  if ((status === 'ready_for_review' || status === 'published') && !hasCheckedPaperReviewPayload(paper)) {
+    return 'checking'
+  }
   return status
 }
 

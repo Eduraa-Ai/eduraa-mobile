@@ -40,11 +40,13 @@ test('returns false instead of locking the UI when no results route exists', () 
   assert.deepEqual(papers.calls, [])
 })
 
-test('result back returns through the existing stack when history is available', () => {
-  const resultDetail = navigator(['ResultsList', 'ResultDetail'], undefined, true)
+test('result back always opens the checked-paper homepage instead of the submission flow', () => {
+  const tabs = navigator(['Home', 'Papers', 'Results'])
+  const resultDetail = navigator(['ResultsList', 'ResultDetail'], tabs, true)
 
   assert.equal(returnToCheckedPapers(resultDetail), true)
-  assert.deepEqual(resultDetail.calls, [['goBack']])
+  assert.deepEqual(resultDetail.calls, [])
+  assert.deepEqual(tabs.calls, [['Results', { screen: 'ResultsList' }]])
 })
 
 test('result back falls through to the staff checked-paper library without history', () => {

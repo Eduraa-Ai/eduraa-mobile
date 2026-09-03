@@ -63,6 +63,11 @@ test('review stays in checking until the terminal payload contains scores and qu
   assert.equal(model.checkedPaperExperienceStatus(emptyTerminal), 'ready_for_review')
   assert.equal(model.hasCheckedPaperReviewPayload(emptyTerminal), false)
   assert.equal(model.checkedPaperReviewExperienceStatus(emptyTerminal), 'checking')
+  assert.equal(model.checkedPaperReviewExperienceStatus({
+    ...emptyTerminal,
+    results_published: true,
+    release_status: 'published',
+  }), 'checking')
   assert.equal(model.hasCheckedPaperReviewPayload(completeTerminal), true)
   assert.equal(model.checkedPaperReviewExperienceStatus(completeTerminal), 'ready_for_review')
 })
