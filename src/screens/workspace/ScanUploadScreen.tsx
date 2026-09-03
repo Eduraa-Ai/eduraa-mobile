@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AppScreen, ErrorState, GradientHeroCard, SectionHeading, SelectField } from '../../components/ui'
+import { AnimatedButton, AppScreen, ErrorState, SelectField } from '../../components/ui'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import {
   isAcceptedScanUploadError,
@@ -20,7 +20,7 @@ import {
   type ScanUploadReceipt,
 } from '../../api/scanUpload'
 import { useAuthStore } from '../../stores/authStore'
-import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
+import { colors, radius, spacing, typography } from '../../theme'
 import type { CheckedPaper, Role } from '../../types'
 import type { ScanUploadParams } from '../../navigation'
 import {
@@ -42,6 +42,7 @@ import {
 } from './scanUploadModel'
 import {
   clearScanUploadDraft,
+  createScanUploadIdempotencyKey,
   deletePersistedScanUploadFile,
   loadScanUploadDraft,
   persistScanUploadFile,
@@ -172,6 +173,7 @@ export default function ScanUploadScreen() {
   const uploadMutationGuardRef = useRef(false)
   const uploadStartedAtRef = useRef<number | null>(null)
   const uploadSucceededRef = useRef(false)
+  const detachingAcceptedUploadRef = useRef(false)
   const pendingUploadRef = useRef<ScanUploadReceipt | null>(null)
   const didResumePendingUploadRef = useRef(false)
   const [staffUploadMode, setStaffUploadMode] = useState<StaffScanUploadMode>('ai_generation_system')
@@ -190,6 +192,7 @@ export default function ScanUploadScreen() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [recoveredPaper, setRecoveredPaper] = useState<CheckedPaper | null>(null)
   const [pendingUpload, setPendingUpload] = useState<ScanUploadReceipt | null>(null)
+  const [clientUploadId, setClientUploadId] = useState(createScanUploadIdempotencyKey)
 
   const optionsQuery = useQuery({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY, queryFn: scanUploadApi.getOptions })
   const options = optionsQuery.data
@@ -249,6 +252,7 @@ export default function ScanUploadScreen() {
         }
         pendingUploadRef.current = draft.pendingUpload
         setPendingUpload(draft.pendingUpload)
+        setClientUploadId(draft.clientUploadId)
       }
       setDraftHydrated(true)
     })
@@ -265,10 +269,11 @@ export default function ScanUploadScreen() {
         selectedStudentId,
         files,
         pendingUpload,
+        clientUploadId,
       })
     }, 250)
     return () => clearTimeout(timer)
-  }, [draftHydrated, files, pendingUpload, selectedExamId, selectedPaperId, selectedStudentId, selectedSubjectId, staffUploadMode, userId])
+  }, [clientUploadId, draftHydrated, files, pendingUpload, selectedExamId, selectedPaperId, selectedStudentId, selectedSubjectId, staffUploadMode, userId])
 
   useEffect(() => () => uploadControllerRef.current?.abort(), [])
 
@@ -329,7 +334,7 @@ export default function ScanUploadScreen() {
       const receipt = resumeReceipt ?? await scanUploadApi.upload({
         paperId: uploadLink.paperId, examId: uploadLink.examId, subjectId: effectiveSubjectId,
         studentId: resolveScanUploadStudentId({ isStaff: staff, selectedStudentId, authenticatedUserId: userId }),
-        uploadMode: uploadLink.uploadMode, files, signal: uploadControllerRef.current.signal, onPhase: setUploadPhase,
+        uploadMode: uploadLink.uploadMode, clientUploadId, files, signal: uploadControllerRef.current.signal, onPhase: setUploadPhase,
       })
       didResumePendingUploadRef.current = true
       pendingUploadRef.current = receipt
@@ -343,6 +348,7 @@ export default function ScanUploadScreen() {
           selectedStudentId,
           files,
           pendingUpload: receipt,
+          clientUploadId,
         }).catch(() => undefined)
       }
       return scanUploadApi.awaitCheckedPaper(receipt, {
@@ -361,10 +367,16 @@ export default function ScanUploadScreen() {
     },
     onError: async (error) => {
       setUploadPhase(null)
+      if (detachingAcceptedUploadRef.current) {
+        setUploadError(null)
+        return
+      }
       const message = friendlyUploadError(extractDetail(error, ''), 'Unable to upload this scan.')
       const acceptedError = isAcceptedScanUploadError(error) ? error : null
       const acceptedReceipt = pendingUploadRef.current
       if (acceptedError?.terminal) {
+        const nextClientUploadId = createScanUploadIdempotencyKey()
+        setClientUploadId(nextClientUploadId)
         pendingUploadRef.current = null
         setPendingUpload(null)
         await saveScanUploadDraft(userId, {
@@ -375,6 +387,7 @@ export default function ScanUploadScreen() {
           selectedStudentId,
           files,
           pendingUpload: null,
+          clientUploadId: nextClientUploadId,
         }).catch(() => undefined)
       }
       const recovered = !acceptedReceipt && /too long|connection|receive|abort/i.test(message)
@@ -387,6 +400,7 @@ export default function ScanUploadScreen() {
     onSettled: () => {
       uploadControllerRef.current = null
       uploadMutationGuardRef.current = false
+      detachingAcceptedUploadRef.current = false
     },
   })
 
@@ -394,6 +408,34 @@ export default function ScanUploadScreen() {
     if (uploadMutationGuardRef.current) return
     uploadMutationGuardRef.current = true
     uploadMutation.mutate(receipt)
+  }
+
+  const startNextUpload = async () => {
+    const wasPolling = uploadMutation.isPending
+    detachingAcceptedUploadRef.current = true
+    pendingUploadRef.current = null
+    uploadControllerRef.current?.abort()
+    files.forEach((file) => deletePersistedScanUploadFile(file, userId || 'anonymous'))
+    const nextClientUploadId = createScanUploadIdempotencyKey()
+    setPendingUpload(null)
+    setFiles([])
+    setSelectedStudentId('')
+    setUploadPhase(null)
+    setUploadError(null)
+    setRecoveredPaper(null)
+    setDraftRestored(false)
+    setClientUploadId(nextClientUploadId)
+    await saveScanUploadDraft(userId, {
+      staffUploadMode,
+      selectedPaperId,
+      selectedExamId,
+      selectedSubjectId,
+      selectedStudentId: '',
+      files: [],
+      pendingUpload: null,
+      clientUploadId: nextClientUploadId,
+    }).catch(() => undefined)
+    if (!wasPolling) detachingAcceptedUploadRef.current = false
   }
 
   useEffect(() => {
@@ -525,15 +567,12 @@ export default function ScanUploadScreen() {
 
   return (
     <View style={styles.root}>
-    <AppScreen protectedChrome contentStyle={styles.screen} refreshControl={<RefreshControl refreshing={optionsQuery.isRefetching} onRefresh={optionsQuery.refetch} tintColor={colors.accent} colors={[colors.accent]} />}>
-      <GradientHeroCard
-        eyebrow="SCAN UPLOAD"
-        title="Upload an answer sheet"
-        subtitle="Link the right assessment, confirm the student, then arrange the pages exactly as they should be read."
-        style={styles.hero}
-      />
-
-      <SectionHeading title="Upload flow" subtitle="Complete each step before sending the pages for checking." />
+    <AppScreen protectedChrome tone="auth" ambient={false} contentStyle={styles.screen} refreshControl={<RefreshControl refreshing={optionsQuery.isRefetching} onRefresh={optionsQuery.refetch} tintColor={colors.accent} colors={[colors.accent]} />}>
+      <View style={styles.composerHeader}>
+        <Text style={styles.composerEyebrow}>SCAN UPLOAD</Text>
+        <Text style={styles.composerTitle}>Upload an answer sheet</Text>
+        <Text style={styles.composerSubtitle}>Choose the assessment and student, then arrange the pages in reading order.</Text>
+      </View>
 
       {draftRestored ? (
         <View style={styles.restoredBanner}>
@@ -560,14 +599,16 @@ export default function ScanUploadScreen() {
         {needsSubjectChoice ? <SelectField label="Subject" value={selectedSubjectId} placeholder="Choose subject" options={subjectOptions} onChange={setSelectedSubjectId} /> : null}
       </View>
 
-      <View style={[styles.stepCard, styles.stepDivider, !assessmentComplete && styles.stepCardLocked]}>
+      <View style={styles.stepDivider} />
+      <View style={[styles.stepCard, !assessmentComplete && styles.stepCardLocked]}>
         <StepHeader number={2} title="Confirm student" complete={identityComplete} />
         {!assessmentComplete ? <Text style={styles.lockedCopy}>Choose the assessment first so Eduraa can show the correct roster.</Text> : isStudentRole(role) ? (
           <View style={styles.identityRow}><Ionicons name="person-circle-outline" size={24} color={colors.accent} /><Text style={styles.identityText}>{user?.display_name || user?.identifier || 'Your account'}</Text></View>
         ) : <SelectField label="Student" value={selectedStudentId} placeholder={studentOptions.length ? 'Choose student' : 'No eligible students for this assessment'} options={studentOptions} disabled={!studentOptions.length || uploadLocked} onChange={setSelectedStudentId} />}
       </View>
 
-      <View style={[styles.stepCard, styles.stepDivider, !identityComplete && styles.stepCardLocked]}>
+      <View style={styles.stepDivider} />
+      <View style={[styles.stepCard, !identityComplete && styles.stepCardLocked]}>
         <StepHeader number={3} title="Add and arrange pages" complete={identityComplete && files.length > 0 && !fileIssue} />
         {!identityComplete ? <Text style={styles.lockedCopy}>Confirm the assessment and student before adding pages.</Text> : <>
           <Text style={styles.pageHelp}>The order below becomes page order. Use arrows to fix it before uploading.</Text>
@@ -583,24 +624,23 @@ export default function ScanUploadScreen() {
           )}
         </>}
       </View>
-      </View>
 
-    </AppScreen>
-
-      <View style={[styles.submitDock, { bottom: layout.bottomTabHeight + insets.bottom }]}>
+      <View style={styles.submitDock}>
         <View style={[styles.submitSurface, uploadMutation.isPending && styles.submitSurfaceActive, uploadError && !pendingUpload && styles.submitSurfaceError]}>
           {uploadError ? <>
             <View style={styles.submitStatusRow}><View style={[styles.submitStatusIcon, (pendingUpload || recoveredPaper) ? styles.submitStatusIconReady : styles.submitStatusIconError]}><Ionicons name={pendingUpload ? 'time-outline' : recoveredPaper ? 'shield-checkmark' : 'cloud-offline-outline'} size={18} color={(pendingUpload || recoveredPaper) ? colors.success : colors.danger} /></View><View style={styles.submitCopy}><Text style={styles.submitTitle}>{pendingUpload ? 'Upload received safely' : recoveredPaper ? 'Upload found safely' : 'Upload needs attention'}</Text><Text style={styles.submitErrorText} numberOfLines={2}>{uploadError}</Text></View></View>
-            {pendingUpload ? <AnimatedButton label="Resume checking" onPress={() => startUpload(pendingUpload)} /> : recoveredPaper ? <AnimatedButton label="Open upload status" onPress={() => openPaperStatus(recoveredPaper)} /> : <AnimatedButton label="Try upload again" variant="secondary" disabled={!readiness.ready} onPress={() => startUpload()} />}
+            {pendingUpload ? <View style={styles.submitActions}><AnimatedButton label="Resume checking" onPress={() => startUpload(pendingUpload)} /><AnimatedButton label="Upload next answer sheet" variant="secondary" onPress={() => void startNextUpload()} /></View> : recoveredPaper ? <AnimatedButton label="Open upload status" onPress={() => openPaperStatus(recoveredPaper)} /> : <AnimatedButton label="Try upload again" variant="secondary" disabled={!readiness.ready} onPress={() => startUpload()} />}
           </> : <>
             <View style={styles.submitStatusRow}>
               <View style={[styles.submitStatusIcon, readiness.ready && styles.submitStatusIconReady]}><Ionicons name={readiness.ready ? 'shield-checkmark' : 'lock-closed-outline'} size={18} color={readiness.ready ? colors.success : colors.textMuted} /></View>
               <View style={styles.submitCopy}><Text style={styles.submitTitle}>{uploadPhase ? phaseCopy[uploadPhase] : readiness.message}</Text><Text style={styles.submitMeta}>{files.length ? `${files.length} ${files.length === 1 ? 'file' : 'files'} · ${formatBytes(files.reduce((sum, file) => sum + (file.size ?? 0), 0))}` : 'Your draft is saved on this device.'}</Text></View>
             </View>
-            {uploadMutation.isPending ? uploadPhase === 'confirming' ? <AnimatedButton label="Confirming receipt…" variant="ghost" disabled onPress={() => undefined} /> : uploadPhase === 'checking' ? null : <AnimatedButton label="Cancel upload" variant="ghost" onPress={() => uploadControllerRef.current?.abort()} /> : <AnimatedButton label="Upload answer sheet" disabled={!readiness.ready} onPress={() => startUpload()} />}
+            {uploadMutation.isPending ? uploadPhase === 'confirming' ? <AnimatedButton label="Confirming receipt…" variant="ghost" disabled onPress={() => undefined} /> : uploadPhase === 'checking' ? <AnimatedButton label="Upload next answer sheet" variant="secondary" onPress={() => void startNextUpload()} /> : <AnimatedButton label="Cancel upload" variant="ghost" onPress={() => uploadControllerRef.current?.abort()} /> : <AnimatedButton label="Upload answer sheet" disabled={!readiness.ready} onPress={() => startUpload()} />}
           </>}
         </View>
       </View>
+      </View>
+    </AppScreen>
 
       <Modal visible={pendingRemovalIndex !== null} transparent animationType="slide" onRequestClose={() => setPendingRemovalIndex(null)}>
         <Pressable style={styles.removalBackdrop} onPress={() => setPendingRemovalIndex(null)} accessibilityLabel="Dismiss remove page confirmation">
@@ -627,11 +667,14 @@ const styles = StyleSheet.create({
   screen: { gap: spacing[5], paddingBottom: spacing[20] + spacing[16] },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[3] },
   loadingText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14 },
-  hero: { marginTop: spacing[1] },
+  composerHeader: { gap: spacing[1], paddingHorizontal: spacing[1], paddingTop: spacing[1] },
+  composerEyebrow: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.5 },
+  composerTitle: { color: colors.text, fontFamily: typography.fonts.heading, fontSize: 27, lineHeight: 32 },
+  composerSubtitle: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14, lineHeight: 20, maxWidth: 540 },
   restoredBanner: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing[3], borderWidth: 1, borderColor: colors.successBorder, borderRadius: radius.lg, backgroundColor: colors.successSurface, padding: spacing[3] },
   bannerCopy: { flex: 1, gap: 2 }, bannerTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 }, bannerText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 }, bannerClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  workflowSurface: { gap: spacing[3] },
-  stepCard: { gap: spacing[4], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, ...shadows.sm }, stepDivider: { borderTopWidth: 1, borderTopColor: colors.border }, stepCardLocked: { opacity: 0.72 },
+  workflowSurface: { backgroundColor: 'transparent' },
+  stepCard: { gap: spacing[4], paddingVertical: spacing[4] }, stepDivider: { height: 1, backgroundColor: colors.border }, stepCardLocked: { opacity: 0.72 },
   stepHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] }, stepNumber: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurfaceStrong }, stepNumberComplete: { backgroundColor: colors.success }, stepNumberText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 13 }, stepTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18 },
   lockedCopy: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
   inferredRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing[2], borderRadius: radius.md, backgroundColor: colors.backgroundMuted, paddingHorizontal: spacing[3] }, inferredText: { flex: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
@@ -640,7 +683,8 @@ const styles = StyleSheet.create({
   issueBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], borderWidth: 1, borderColor: colors.dangerBorder, borderRadius: radius.md, backgroundColor: colors.dangerSurface, padding: spacing[3] }, issueText: { flex: 1, color: colors.danger, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
   emptyPages: { alignItems: 'center', gap: spacing[1], paddingVertical: spacing[6] }, emptyTitle: { color: colors.text, fontFamily: typography.fonts.bodySemibold, fontSize: 14 }, emptyText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
   fileList: { gap: spacing[5], borderLeftWidth: 3, borderLeftColor: colors.accent, marginLeft: 48, paddingLeft: spacing[4] }, fileCard: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3], paddingTop: spacing[2], marginLeft: -67 }, thumbnailButton: { width: 104, height: 134, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.backgroundElevated, borderRadius: radius.md, backgroundColor: colors.backgroundMuted, shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 9, elevation: 3 }, fileThumbnail: { width: '100%', height: '100%' }, pageBadge: { position: 'absolute', top: spacing[2], left: spacing[2], minWidth: 28, height: 28, paddingHorizontal: spacing[1], borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentStrong }, pageBadgeText: { color: colors.textOnBrand, fontFamily: typography.fonts.bodyBold, fontSize: 12 }, fileBody: { flex: 1, gap: spacing[1], paddingTop: spacing[1] }, pageHeadingRow: { gap: spacing[2] }, pageHeadingCopy: { gap: 1 }, pagePosition: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 10 }, fileTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18 }, fileMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10 }, orderControls: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 1 }, fileActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[1], marginTop: spacing[1] }, iconAction: { minWidth: 72, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: spacing[1], paddingHorizontal: spacing[1], backgroundColor: 'transparent' }, iconActionDanger: { backgroundColor: 'transparent' }, iconActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 11 }, iconActionTextDanger: { color: colors.danger }, iconActionDisabled: { opacity: 0.5 },
-  submitDock: { position: 'absolute', left: spacing[4], right: spacing[4] }, submitSurface: { gap: spacing[3], borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.backgroundElevated, padding: spacing[3] }, submitSurfaceActive: { borderColor: colors.borderBrand, backgroundColor: colors.accentSurface }, submitSurfaceError: { borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface }, submitStatusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] }, submitStatusIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundMuted }, submitStatusIconReady: { backgroundColor: colors.successSurface }, submitStatusIconError: { backgroundColor: colors.palette.rose[100] }, submitCopy: { flex: 1, gap: spacing[1] }, submitTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 15, lineHeight: 20 }, submitMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 }, submitErrorText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
+  submitDock: { marginTop: spacing[4] }, submitSurface: { gap: spacing[3], borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.backgroundElevated, padding: spacing[4] }, submitSurfaceActive: { borderColor: colors.borderBrand, backgroundColor: colors.accentSurface }, submitSurfaceError: { borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface }, submitStatusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] }, submitStatusIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundMuted }, submitStatusIconReady: { backgroundColor: colors.successSurface }, submitStatusIconError: { backgroundColor: colors.palette.rose[100] }, submitCopy: { flex: 1, gap: spacing[1] }, submitTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 15, lineHeight: 20 }, submitMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 }, submitErrorText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
+  submitActions: { gap: spacing[2] },
   removalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(7,21,45,0.58)' }, removalSheet: { gap: spacing[3], borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.backgroundElevated, paddingHorizontal: spacing[5], paddingTop: spacing[3] }, removalHandle: { width: 42, height: 4, alignSelf: 'center', borderRadius: 2, backgroundColor: colors.borderStrong }, removalIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.dangerSurface }, removalTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 20 }, removalText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 }, removalActions: { flexDirection: 'row', gap: spacing[2], marginTop: spacing[1] }, removalAction: { flex: 1 }, removeButton: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: colors.danger }, removeButtonText: { color: colors.textOnBrand, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   previewBackdrop: { flex: 1, backgroundColor: '#07152DEE' }, previewHeader: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], paddingBottom: spacing[3] }, previewTitle: { flex: 1, color: colors.textOnBrand, fontFamily: typography.fonts.bodySemibold, fontSize: 14 }, previewClose: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' }, previewImage: { flex: 1, width: '100%' as const }, pressed: { opacity: 0.72 },
 })

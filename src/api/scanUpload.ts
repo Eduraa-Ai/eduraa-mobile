@@ -57,6 +57,7 @@ export interface ScanUploadPayload {
   paperId?: string | null
   studentId?: string | null
   uploadMode?: string | null
+  clientUploadId: string
   files: ScanUploadFile[]
   signal?: AbortSignal
   onPhase?: (phase: ScanUploadPhase) => void
@@ -133,6 +134,7 @@ async function uploadNative(payload: ScanUploadPayload) {
     const response = await authenticatedFetch(`${API_BASE_URL}/api/v1/checked-papers/scan`, {
       method: 'POST',
       body,
+      headers: { 'Idempotency-Key': payload.clientUploadId },
       signal: controller.signal,
     })
     payload.onPhase?.('confirming')
@@ -174,6 +176,7 @@ export const scanUploadApi = {
     const response = await apiClient.post<ScanUploadReceipt>('/checked-papers/scan', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
+        'Idempotency-Key': payload.clientUploadId,
       },
       timeout: 120000,
       signal: payload.signal,

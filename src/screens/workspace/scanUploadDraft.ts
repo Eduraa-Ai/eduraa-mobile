@@ -10,6 +10,13 @@ import type { StaffScanUploadMode } from './checkedPaperPipelineModel'
 
 const STORAGE_PREFIX = 'eduraa:scan-upload-draft:v1'
 
+export function createScanUploadIdempotencyKey(random: () => number = Math.random) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const value = Math.floor(random() * 16)
+    return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16)
+  })
+}
+
 export type ScanUploadDraft = {
   staffUploadMode: StaffScanUploadMode
   selectedPaperId: string
@@ -18,6 +25,7 @@ export type ScanUploadDraft = {
   selectedStudentId: string
   files: ScanUploadFile[]
   pendingUpload: ScanUploadReceipt | null
+  clientUploadId: string
   savedAt: string
 }
 
@@ -92,6 +100,9 @@ export async function loadScanUploadDraft(userId: string): Promise<ScanUploadDra
       selectedStudentId: String(parsed.selectedStudentId ?? ''),
       files,
       pendingUpload: parseScanUploadReceipt(parsed.pendingUpload),
+      clientUploadId: typeof parsed.clientUploadId === 'string' && parsed.clientUploadId
+        ? parsed.clientUploadId
+        : createScanUploadIdempotencyKey(),
       savedAt: String(parsed.savedAt ?? ''),
     }
   } catch {
