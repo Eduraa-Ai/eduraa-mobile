@@ -20,7 +20,7 @@ test('previous papers is an eligible final root tab with an accessible symbol', 
   assert.match(bottomTabBar, /function ConstellationField\(/)
   assert.match(bottomTabBar, /PreviousPapers:\s*'documents-outline'/)
   assert.match(bottomTabBar, /options\?\.tabBarAccessibilityLabel \?\? label/)
-  assert.match(bottomTabBar, /state\.routes\.length < 6/)
+  assert.match(bottomTabBar, /state\.routes\.length <= 6/)
 })
 
 test('B2B students and teachers receive role-appropriate previous-paper tabs', () => {

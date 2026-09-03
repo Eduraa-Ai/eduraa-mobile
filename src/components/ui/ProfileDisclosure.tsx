@@ -92,13 +92,9 @@ const styles = StyleSheet.create({
   },
   chevronExpanded: { backgroundColor: '#07152D' },
   content: {
-    marginLeft: 15,
-    paddingTop: 2,
-    paddingLeft: 25,
-    paddingBottom: 14,
+    paddingTop: 8,
+    paddingBottom: 24,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#E0D6C8',
-    borderLeftWidth: 2,
-    borderLeftColor: '#F36C21',
   },
 })

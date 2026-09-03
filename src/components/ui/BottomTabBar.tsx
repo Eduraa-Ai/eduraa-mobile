@@ -194,9 +194,10 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   const shellWidth = Math.min(MAX_SHELL_WIDTH, Math.max(MIN_SHELL_WIDTH, windowWidth - SHELL_INSET * 2))
   const availableTabWidth = shellWidth - SHELL_EDGE_PADDING * 2
-  // Six labels become unreadable on 320 px devices. Keep the full labels and
-  // center the active route in the existing horizontal rail instead.
-  const fitsWithoutScrolling = state.routes.length < 6
+  // Keep the standard six student destinations inside one stable rail. A
+  // horizontally centred active item cut the first and last controls at phone
+  // edges, which made the tab bar look clipped and hid available destinations.
+  const fitsWithoutScrolling = state.routes.length <= 6
   const itemWidth = fitsWithoutScrolling
     ? availableTabWidth / Math.max(1, state.routes.length)
     : SCROLLING_ITEM_WIDTH
@@ -364,7 +365,6 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          <ConstellationField />
           <View style={styles.topSheen} />
         </View>
         <ScrollView
@@ -482,6 +482,8 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     paddingHorizontal: SHELL_INSET,
     alignItems: 'center',
+    zIndex: 100,
+    elevation: 100,
   },
   barShell: {
     position: 'relative',

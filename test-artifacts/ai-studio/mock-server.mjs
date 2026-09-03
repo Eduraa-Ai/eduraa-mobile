@@ -75,6 +75,7 @@ let studentAttendanceCorrection = null
 let leaderAttendanceCorrectionStatus = 'pending'
 let attendanceReopened = false
 let announcementsMode = 'ready'
+let studentProfileMode = 'ready'
 const announcementClasses = [
     { id: 'b1000000-0000-4000-8000-000000000001', standard: '10', division: 'A', student_count: 28 },
     { id: 'b1000000-0000-4000-8000-000000000002', standard: '10', division: 'B', student_count: 27 },
@@ -807,6 +808,13 @@ const server = http.createServer(async (request, response) => {
         return
     }
 
+    if (request.method === 'POST' && path === '/__test__/student-profile-mode') {
+        const payload = await readBody(request)
+        studentProfileMode = ['ready', 'loading', 'error', 'empty'].includes(payload.mode) ? payload.mode : 'ready'
+        json(response, 200, { mode: studentProfileMode })
+        return
+    }
+
     if (request.method === 'POST' && path === '/api/v1/auth/login') {
         const payload = await readBody(request)
         const attendanceTeacherJourney = String(payload.identifier || payload.email || '').includes('attendance-teacher')
@@ -1015,6 +1023,11 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && path === '/api/v1/roster/student/master-profile') {
+        if (studentProfileMode === 'loading') await new Promise(resolve => setTimeout(resolve, 3000))
+        if (studentProfileMode === 'error') {
+            json(response, 503, { detail: 'The institutional profile is temporarily unavailable.' })
+            return
+        }
         json(response, 200, {
             profile: {
                 student_id: 'STU-2048',
@@ -1029,10 +1042,18 @@ const server = http.createServer(async (request, response) => {
             },
             class_teacher_name: 'Mrs. Meera Subramaniam',
             assignment_status: 'active',
-            subjects: [
+            subjects: studentProfileMode === 'empty' ? [] : [
                 { subject_name: 'Mathematics' },
                 { subject_name: 'Science' },
                 { subject_name: 'English Language and Literature' },
+            ],
+            teacher_subject_mappings: studentProfileMode === 'empty' ? [] : [
+                { subject_name: 'Mathematics', teacher_id: 'teacher-2048', teacher_code: 'TCH-2048', teacher_name: 'Mrs. Meera Subramaniam', teacher_email: 'meera@example.test', is_class_teacher: true },
+                { subject_name: 'Science', teacher_id: 'teacher-1024', teacher_code: 'TCH-1024', teacher_name: 'Mr. Arjun Nair', teacher_email: 'arjun@example.test', is_class_teacher: false },
+            ],
+            documents: studentProfileMode === 'empty' ? [] : [
+                { document_id: 'document-maths-10', title: 'Mathematics Practice Book', file_name: 'mathematics-practice-book.pdf', subject_name: 'Mathematics', board: 'CBSE', standard: '10', page_count: 184, processing_status: 'ready' },
+                { document_id: 'document-science-10', title: 'Science Lab Manual', file_name: 'science-lab-manual.pdf', subject_name: 'Science', board: 'CBSE', standard: '10', page_count: 96, processing_status: 'ready' },
             ],
         })
         return
