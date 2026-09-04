@@ -7,6 +7,7 @@ import { AnimatedButton, AppScreen } from '../../components/ui'
 import {
   ClassSemesterConfig,
   ClassSemesterConfigInput,
+  ClassTeacherRequest,
   SubjectGroupRule,
   SubjectOption,
   classTeacherApi,
@@ -47,6 +48,28 @@ function configToDraft(config: ClassSemesterConfig): Draft {
       group_name: subject.group_id ? groupNameById.get(subject.group_id) ?? null : null,
     })),
   }
+}
+
+/** Match the web page: an approved teacher-assignment plan defines the
+ * subjects initially configured for the class. The server still owns the
+ * actual subject configuration after save. */
+function mergeApprovedAssignmentSubjects(
+  draft: Draft,
+  catalog: SubjectOption[],
+  request?: ClassTeacherRequest,
+): Draft {
+  // An approved plan is a starting point, not a permanent restriction. Once
+  // the class has a saved configuration, teachers must be able to add other
+  // school subjects (including optional ones) and keep them after refresh.
+  if (draft.subjects.length > 0 || request?.status !== 'approved' || request.assignments.length === 0) return draft
+  const idByName = new Map(catalog.map((subject) => [subject.name.trim().toLowerCase(), subject.id]))
+  const approvedIds = [...new Set(request.assignments
+    .map((assignment) => idByName.get(assignment.subject.trim().toLowerCase()))
+    .filter((id): id is string => Boolean(id)))]
+  if (approvedIds.length === 0) return draft
+  const configuredById = new Map(draft.subjects.map((subject) => [subject.subject_id, subject]))
+  const subjects = approvedIds.map((subject_id) => configuredById.get(subject_id) ?? { subject_id, is_mandatory: false, group_name: null })
+  return { ...draft, subjects, expected_subject_count: subjects.length }
 }
 
 /** Stable string used to compare a draft against the loaded server state. */
@@ -93,6 +116,8 @@ export default function ClassSubjectsScreen() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [search, setSearch] = useState('')
   const [newGroupName, setNewGroupName] = useState('')
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
   const baselineRef = useRef<string | null>(null)
   const submitGuard = useRef(false)
 
@@ -110,11 +135,18 @@ export default function ClassSubjectsScreen() {
     retry: false,
   })
 
+  const requestsQuery = useQuery<ClassTeacherRequest[], unknown>({
+    queryKey: classTeacherKeys.requests,
+    queryFn: classTeacherApi.getMyRequests,
+    enabled: access.isAuthorized,
+    retry: false,
+  })
+
   // Adopt server state as the draft baseline whenever a fresh config arrives
   // and the teacher has no unsaved edits.
   useEffect(() => {
     if (!configQuery.data) return
-    const next = configToDraft(configQuery.data)
+    const next = mergeApprovedAssignmentSubjects(configToDraft(configQuery.data), subjectsQuery.data ?? [], requestsQuery.data?.[0])
     const fingerprint = draftFingerprint(next)
     setDraft((current) => {
       if (current && baselineRef.current && draftFingerprint(current) !== baselineRef.current) return current
@@ -122,7 +154,7 @@ export default function ClassSubjectsScreen() {
       return next
     })
     if (baselineRef.current === null) baselineRef.current = fingerprint
-  }, [configQuery.data])
+  }, [configQuery.data, requestsQuery.data, subjectsQuery.data])
 
   const subjects = subjectsQuery.data ?? []
   const subjectNameById = useMemo(() => new Map(subjects.map((subject) => [subject.id, subject.name])), [subjects])
@@ -163,11 +195,14 @@ export default function ClassSubjectsScreen() {
       const next = configToDraft(canonical)
       baselineRef.current = draftFingerprint(next)
       setDraft(next)
+      setSaveError(null)
+      setSaveNotice('Subject setup saved. You can now edit enrollments.')
       void queryClient.invalidateQueries({ queryKey: classTeacherKeys.validation(classId, activeSemesterId ?? undefined) })
       void queryClient.invalidateQueries({ queryKey: ['class-teacher', 'enrollment-counts'] })
     },
     onError: (error) => {
-      Alert.alert('Subjects not saved', toApiFailure(error).message)
+      setSaveNotice(null)
+      setSaveError(toApiFailure(error).message)
     },
     onSettled: () => {
       submitGuard.current = false
@@ -175,6 +210,8 @@ export default function ClassSubjectsScreen() {
   })
 
   const updateDraft = (mutate: (current: Draft) => Draft) => {
+    setSaveError(null)
+    setSaveNotice(null)
     setDraft((current) => (current ? mutate(current) : current))
   }
 
@@ -194,7 +231,14 @@ export default function ClassSubjectsScreen() {
     updateDraft((current) => ({
       ...current,
       subjects: current.subjects.map((subject) =>
-        subject.subject_id === subjectId ? { ...subject, is_mandatory: !subject.is_mandatory } : subject,
+        subject.subject_id === subjectId
+          ? {
+              ...subject,
+              is_mandatory: !subject.is_mandatory,
+              // Mandatory subjects cannot belong to an elective group.
+              group_name: !subject.is_mandatory ? null : subject.group_name,
+            }
+          : subject,
       ),
     }))
   }
@@ -263,51 +307,12 @@ export default function ClassSubjectsScreen() {
 
   const handleSave = async () => {
     if (!draft || !classId || submitGuard.current || saveMutation.isPending || !isDirty) return
-
-    // Verify nobody changed the configuration while this draft was open.
-    let fresh: ClassSemesterConfig
-    try {
-      fresh = await classTeacherApi.getSemesterConfig(classId, activeSemesterId)
-    } catch (error) {
-      Alert.alert('Could not verify current setup', toApiFailure(error).message)
-      return
-    }
-
-    const serverFingerprint = draftFingerprint(configToDraft(fresh))
-    const commit = () => {
-      submitGuard.current = true
-      saveMutation.mutate(draftToPayload(draft))
-    }
-
-    if (baselineRef.current && serverFingerprint !== baselineRef.current) {
-      Alert.alert(
-        'Someone else changed this setup',
-        'The subject configuration on the server no longer matches what you started from. Discard your edits to load theirs, or overwrite with yours.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Discard mine',
-            onPress: () => {
-              const next = configToDraft(fresh)
-              baselineRef.current = draftFingerprint(next)
-              setDraft(next)
-              queryClient.setQueryData(classTeacherKeys.config(classId, activeSemesterId ?? undefined), fresh)
-            },
-          },
-          { text: 'Overwrite', style: 'destructive', onPress: commit },
-        ],
-      )
-      return
-    }
-
-    Alert.alert(
-      'Save subject setup?',
-      `${draft.subjects.length} subject${draft.subjects.length === 1 ? '' : 's'} for this class, expecting ${draft.expected_subject_count} per student. Removing a subject also removes its enrollments.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Save', onPress: commit },
-      ],
-    )
+    // Match the web flow: save immediately. Alert action callbacks are not
+    // dependable in the web runtime, which made this button appear stuck.
+    setSaveError(null)
+    setSaveNotice(null)
+    submitGuard.current = true
+    saveMutation.mutate(draftToPayload(draft))
   }
 
   useEffect(() => {
@@ -624,13 +629,24 @@ export default function ClassSubjectsScreen() {
 
       {draft ? (
         <View style={styles.saveBar}>
+          {saveError ? <Text style={styles.errorNote}>{saveError}</Text> : null}
+          {saveError ? <Text style={styles.retryHint}>Your subject choices are still here. Retry when ready.</Text> : null}
+          {saveNotice ? <Text style={styles.cleanNote}>{saveNotice}</Text> : null}
           {isDirty ? (
             <Text style={styles.dirtyNote}>Unsaved subject changes. Enrollment editing unlocks after saving.</Text>
           ) : (
             <Text style={styles.cleanNote}>Saved. Tap a selected subject's enrollment chip to choose who takes it.</Text>
           )}
           <AnimatedButton
-            label={isDirty ? 'Save subject setup' : 'No changes to save'}
+            label={
+              saveMutation.isPending
+                ? 'Saving subject setup…'
+                : saveError
+                  ? 'Retry save'
+                  : isDirty
+                    ? 'Save subject setup'
+                    : 'No changes to save'
+            }
             loading={saveMutation.isPending}
             disabled={!isDirty || saveMutation.isPending}
             onPress={() => void handleSave()}
@@ -893,6 +909,16 @@ const styles = StyleSheet.create({
   dirtyNote: {
     color: colors.warning,
     fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  errorNote: {
+    color: colors.danger,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  retryHint: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
     fontSize: 12,
   },
   cleanNote: {

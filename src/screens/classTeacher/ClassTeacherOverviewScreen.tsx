@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import { AnimatedCard, AppScreen, GradientHeroCard } from '../../components/ui'
-import { classTeacherApi, ClassValidationReport, Semester, toApiFailure } from '../../api/classTeacher'
+import { classTeacherApi, ClassTeacherRequest, ClassValidationReport, Semester, toApiFailure } from '../../api/classTeacher'
 import { classTeacherKeys, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
 import { useClassTeacherStore } from '../../stores/classTeacherStore'
@@ -63,6 +63,13 @@ export default function ClassTeacherOverviewScreen() {
     retry: false,
   })
 
+  const requestsQuery = useQuery<ClassTeacherRequest[], unknown>({
+    queryKey: classTeacherKeys.requests,
+    queryFn: classTeacherApi.getMyRequests,
+    enabled: access.isAuthorized,
+    retry: false,
+  })
+
   const rosterQuery = useQuery({
     queryKey: classTeacherKeys.roster(classSection?.standard),
     queryFn: () => classTeacherApi.getRoster(classSection?.standard),
@@ -75,7 +82,8 @@ export default function ClassTeacherOverviewScreen() {
     void semestersQuery.refetch()
     void validationQuery.refetch()
     void rosterQuery.refetch()
-  }, [access, rosterQuery, semestersQuery, validationQuery])
+    void requestsQuery.refetch()
+  }, [access, requestsQuery, rosterQuery, semestersQuery, validationQuery])
 
   useAppResume(refreshAll, access.isAuthorized)
 
@@ -122,9 +130,12 @@ export default function ClassTeacherOverviewScreen() {
   const rosterCount = rosterQuery.data?.length
   const validationFailure = validationQuery.error ? toApiFailure(validationQuery.error) : null
   const semestersFailure = semestersQuery.error ? toApiFailure(semestersQuery.error) : null
+  const request = requestsQuery.data?.[0]
+  const requestFailure = requestsQuery.error ? toApiFailure(requestsQuery.error) : null
 
   return (
     <AppScreen
+      protectedChrome
       contentStyle={styles.screen}
       refreshControl={
         <RefreshControl refreshing={access.isFetching && !access.isLoading} onRefresh={refreshAll} tintColor={colors.accent} />
@@ -168,6 +179,25 @@ export default function ClassTeacherOverviewScreen() {
           </>
         )}
       </AnimatedCard>
+
+      <SectionHeaderRow title="Teacher assignment" meta="The principal approves this plan before it becomes active." />
+
+      {requestFailure ? <FailureCard failure={requestFailure} onRetry={() => void requestsQuery.refetch()} /> : (
+        <NavRow
+          icon={request?.status === 'approved' ? 'checkmark-circle' : request?.status === 'pending' ? 'time' : 'person-add'}
+          title={request ? `Plan ${request.status}` : 'Plan subject teachers'}
+          body={
+            request?.status === 'pending'
+              ? 'Your plan is waiting for principal approval. Open it to review the submitted teachers and subjects.'
+              : request?.status === 'approved'
+                ? 'Your approved teacher-subject plan is active. Open it to review or submit an update.'
+                : 'Choose approved teachers and their subjects, then submit the plan for principal approval.'
+          }
+          tone={request?.status === 'approved' ? colors.success : request?.status === 'pending' ? colors.warning : colors.accent}
+          meta={requestsQuery.isLoading ? 'Loading' : request ? `${request.assignments.length}` : 'Start'}
+          onPress={() => navigation.navigate('ClassTeacherAssignments')}
+        />
+      )}
 
       <SectionHeaderRow
         title="Semester"

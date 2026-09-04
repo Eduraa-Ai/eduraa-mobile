@@ -273,6 +273,14 @@ test('question status is expressed with text and not color alone', () => {
 test('checking state remains active until a real score or review outcome arrives', () => {
   const pending = paper({ status: 'graded', total_score: null, max_score: null })
   assert.equal(model.isCheckedPaperChecking(pending), true)
+  assert.equal(model.isCheckedPaperChecking(paper({
+    status: 'graded',
+    results_published: true,
+    release_status: 'published',
+    total_score: null,
+    max_score: null,
+    grading_results: [],
+  })), true)
   assert.equal(model.isCheckedPaperChecking(paper()), false)
   assert.equal(model.isCheckedPaperChecking(paper({
     status: 'pending_manual_review',

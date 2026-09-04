@@ -80,6 +80,8 @@ export default function SubjectEnrollmentScreen() {
 
   const [selection, setSelection] = useState<Set<string> | null>(null)
   const [search, setSearch] = useState('')
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
   const baselineRef = useRef<Set<string> | null>(null)
   const submitGuard = useRef(false)
 
@@ -125,11 +127,14 @@ export default function SubjectEnrollmentScreen() {
       const serverSelection = enrolledIds(canonical)
       baselineRef.current = serverSelection
       setSelection(new Set(serverSelection))
+      setSaveError(null)
+      setSaveNotice('Enrollment saved.')
       void queryClient.invalidateQueries({ queryKey: classTeacherKeys.validation(classId, activeSemesterId ?? undefined) })
       void queryClient.invalidateQueries({ queryKey: ['class-teacher', 'enrollment-counts'] })
     },
     onError: (error) => {
-      Alert.alert('Enrollment not saved', toApiFailure(error).message)
+      setSaveNotice(null)
+      setSaveError(toApiFailure(error).message)
     },
     onSettled: () => {
       submitGuard.current = false
@@ -137,6 +142,8 @@ export default function SubjectEnrollmentScreen() {
   })
 
   const toggle = useCallback((id: string) => {
+    setSaveError(null)
+    setSaveNotice(null)
     setSelection((current) => {
       if (!current) return current
       const next = new Set(current)
@@ -147,6 +154,8 @@ export default function SubjectEnrollmentScreen() {
   }, [])
 
   const toggleAllVisible = () => {
+    setSaveError(null)
+    setSaveNotice(null)
     setSelection((current) => {
       if (!current) return current
       const next = new Set(current)
@@ -161,56 +170,13 @@ export default function SubjectEnrollmentScreen() {
 
   const handleSave = async () => {
     if (!classId || !selection || submitGuard.current || saveMutation.isPending || !isDirty) return
-
-    // Re-read before writing: this endpoint replaces the whole enrollment list,
-    // so a stale draft would silently discard someone else's newer change.
-    let fresh: SubjectEnrollment
-    try {
-      fresh = await classTeacherApi.getSubjectEnrollments(classId, subjectId, activeSemesterId)
-    } catch (error) {
-      Alert.alert('Could not verify current enrollment', toApiFailure(error).message)
-      return
-    }
-
-    const serverSelection = enrolledIds(fresh)
     const everyone = students.length > 0 && selection.size === students.length
-    const commit = () => {
-      submitGuard.current = true
-      saveMutation.mutate({ student_ids: [...selection], select_all: everyone })
-    }
-
-    if (baselineRef.current && !sameSet(serverSelection, baselineRef.current)) {
-      Alert.alert(
-        'Someone else changed this enrollment',
-        `${subjectName} enrollment changed on the server since you opened it. Discard your edits to load theirs, or overwrite with yours.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Discard mine',
-            onPress: () => {
-              baselineRef.current = serverSelection
-              setSelection(new Set(serverSelection))
-              queryClient.setQueryData(classTeacherKeys.enrollments(classId, subjectId, activeSemesterId ?? undefined), fresh)
-            },
-          },
-          { text: 'Overwrite', style: 'destructive', onPress: commit },
-        ],
-      )
-      return
-    }
-
-    const removing = [...(baselineRef.current ?? [])].filter((id) => !selection.has(id)).length
-    const adding = [...selection].filter((id) => !(baselineRef.current ?? new Set()).has(id)).length
-    const parts = [adding ? `enroll ${adding}` : null, removing ? `remove ${removing}` : null].filter(Boolean).join(' and ')
-
-    Alert.alert(
-      removing > 0 ? 'Remove students from this subject?' : 'Save enrollment?',
-      `This will ${parts} student${adding + removing === 1 ? '' : 's'} for ${subjectName}. Removing a student deletes their enrollment record for this semester.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Save enrollment', style: removing > 0 ? 'destructive' : 'default', onPress: commit },
-      ],
-    )
+    // The endpoint replaces the enrollment list. Save immediately, as the
+    // web page does, so enrolling and unenrolling work in every runtime.
+    setSaveError(null)
+    setSaveNotice(null)
+    submitGuard.current = true
+    saveMutation.mutate({ student_ids: [...selection], select_all: everyone })
   }
 
   useEffect(() => {
@@ -328,11 +294,22 @@ export default function SubjectEnrollmentScreen() {
       )}
 
       <View style={styles.saveBar}>
+        {saveError ? <Text style={styles.errorNote}>{saveError}</Text> : null}
+        {saveError ? <Text style={styles.retryHint}>Your selections are still here. Retry when ready.</Text> : null}
+        {saveNotice ? <Text style={styles.cleanNote}>{saveNotice}</Text> : null}
         <Text style={isDirty ? styles.dirtyNote : styles.cleanNote}>
           {isDirty ? 'Unsaved enrollment changes' : 'Enrollment matches the school record'}
         </Text>
         <AnimatedButton
-          label={isDirty ? `Save ${enrolledCount} enrolled` : 'No changes to save'}
+          label={
+            saveMutation.isPending
+              ? 'Saving enrollment…'
+              : saveError
+                ? 'Retry save'
+                : isDirty
+                  ? `Save ${enrolledCount} enrolled`
+                  : 'No changes to save'
+          }
           loading={saveMutation.isPending}
           disabled={!isDirty || saveMutation.isPending}
           onPress={() => void handleSave()}
@@ -475,6 +452,16 @@ const styles = StyleSheet.create({
   dirtyNote: {
     color: colors.warning,
     fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  errorNote: {
+    color: colors.danger,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 12,
+  },
+  retryHint: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
     fontSize: 12,
   },
   cleanNote: {

@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { prefetchAgenticLearning } from '../../api/agenticLearning'
+import { papersApi } from '../../api/papers'
 import { isLearnerRole } from '../../auth/roles'
 import { AuthLogoMark, MathText } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
@@ -252,6 +253,8 @@ export default function ResultDetailScreen() {
     },
     refetchIntervalInBackground: false,
     refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
+    refetchOnWindowFocus: 'always',
   })
 
   useFocusEffect(useCallback(() => {
@@ -279,19 +282,45 @@ export default function ResultDetailScreen() {
     && Number.isFinite(data.checking_progress_percent)
     ? Math.max(0, Math.min(100, Math.round(data.checking_progress_percent)))
     : null
-  const checkingPercent = reportedCheckingPercent
+  // Older checked-paper responses can omit the progress field while the
+  // matching paper submission already exposes it.  Use that same canonical
+  // value as a temporary fallback, rather than inventing client-side progress.
+  const submissionProgressQuery = useQuery({
+    queryKey: ['checked-paper-submission-progress', data?.id, data?.paper_id, data?.exam_id],
+    queryFn: () => papersApi.getSubmission(data?.paper_id || '', {
+      exam_id: data?.exam_id || undefined,
+      attempt_id: data?.id,
+    }),
+    enabled: Boolean(data?.paper_id && isChecking && reportedCheckingPercent == null),
+    refetchInterval: (activeQuery) => {
+      const status = String(activeQuery.state.data?.grading_status || '').toLowerCase()
+      return ['submitted', 'checking'].includes(status) ? CHECKED_PAPER_POLL_INTERVAL_MS : false
+    },
+    refetchIntervalInBackground: false,
+    refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
+    refetchOnWindowFocus: 'always',
+  })
+  const fallbackSubmission = submissionProgressQuery.data?.id === data?.id
+    ? submissionProgressQuery.data
+    : null
+  const fallbackCheckingPercent = typeof fallbackSubmission?.checking_progress_percent === 'number'
+    && Number.isFinite(fallbackSubmission.checking_progress_percent)
+    ? Math.max(0, Math.min(100, Math.round(fallbackSubmission.checking_progress_percent)))
+    : null
+  const checkingPercent = reportedCheckingPercent ?? fallbackCheckingPercent
   const checkingStage = isChecking && pipelineExperienceStatus === 'ready_for_review'
     ? 'Preparing review details'
     : checkingStageLabel(data?.status, data?.processing_stage)
   const pollingIssue = isChecking && isError
   const checkingContextLabel = pollingIssue
     ? 'Connection status'
-    : reportedCheckingPercent == null
+    : checkingPercent == null
       ? 'Current stage'
       : 'Checking progress'
   const checkingContextValue = pollingIssue
     ? 'Retrying'
-    : reportedCheckingPercent == null
+    : checkingPercent == null
       ? checkingStage
       : 'Checking'
   const elapsedSeconds = data ? checkedPaperElapsedSeconds(data, stopwatchNow) : null
@@ -317,7 +346,10 @@ export default function ResultDetailScreen() {
     if (manualRefreshing) return
     setManualRefreshing(true)
     try {
-      await refetch()
+      await Promise.all([
+        refetch(),
+        submissionProgressQuery.refetch(),
+      ])
     } finally {
       setManualRefreshing(false)
     }

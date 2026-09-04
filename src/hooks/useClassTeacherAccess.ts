@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/authStore'
 export const classTeacherKeys = {
   classes: ['class-teacher', 'classes'] as const,
   identity: ['class-teacher', 'identity'] as const,
+  requests: ['class-teacher', 'requests', 'me'] as const,
   semesters: ['class-teacher', 'semesters'] as const,
   subjects: ['class-teacher', 'subjects'] as const,
   roster: (standard: string | undefined) => ['class-teacher', 'roster', standard ?? 'default'] as const,

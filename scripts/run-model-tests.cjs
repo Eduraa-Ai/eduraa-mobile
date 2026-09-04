@@ -123,6 +123,10 @@ const suites = [
     env: {},
   },
   {
+    file: 'scripts/class-teacher-management-contract.test.cjs',
+    env: {},
+  },
+  {
     file: 'scripts/announcement-model.test.cjs',
     env: { ANNOUNCEMENT_MODEL_PATH: path.join(outDir, 'screens/workspace/announcementModel.js') },
   },

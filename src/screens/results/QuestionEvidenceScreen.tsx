@@ -534,7 +534,7 @@ export default function QuestionEvidenceScreen() {
   const reviewSent = Boolean(item.manual_review_requested || reviewMutation.isSuccess)
   const reviewResolved = Boolean(item.manual_review_completed && !item.manual_review_requested)
   const hasReviewHistory = reviewSent || reviewResolved || reviewThread.length > 0
-  const canSubmitReview = reviewNote.trim().length >= 10 && !reviewMutation.isPending && !reviewSent
+  const canSubmitReview = reviewNote.trim().length > 0 && !reviewMutation.isPending && !reviewSent
   const tabs = (isStaff || isB2BStudent) ? TAB_CONFIG : TAB_CONFIG.filter((tab) => tab.key !== 'review')
   const hasScan = Boolean(String(data.scanned_pdf_url || '').trim())
   const maxScore = typeof item.max_score === 'number' ? item.max_score : null
@@ -871,7 +871,7 @@ export default function QuestionEvidenceScreen() {
                     <Text style={styles.reviewLabel}>What should the teacher review?</Text>
                     <TextInput
                       accessibilityLabel="Question review reason"
-                      accessibilityHint="Enter at least 10 characters"
+                      accessibilityHint="Enter a review note"
                       value={reviewNote}
                       onChangeText={setReviewNote}
                       placeholder="Explain the grading or content issue"
@@ -880,8 +880,7 @@ export default function QuestionEvidenceScreen() {
                       maxLength={2000}
                       style={styles.reviewInput}
                     />
-                    <Text style={styles.helperText}>Enter at least 10 characters. Your score remains visible while the report is reviewed.</Text>
-                    {reviewNote.length > 0 && reviewNote.trim().length < 10 ? <Text accessibilityRole="alert" style={styles.errorText}>Add a little more detail before sending.</Text> : null}
+                    <Text style={styles.helperText}>Your score remains visible while the report is reviewed.</Text>
                     {reviewMutation.isError ? <Text accessibilityRole="alert" style={styles.errorText}>The review could not be sent. Your text is saved here—check the connection and try again.</Text> : null}
                     <Pressable
                       accessibilityRole="button"
