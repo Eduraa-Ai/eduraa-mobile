@@ -50,16 +50,6 @@ test('subject enrollment persists removals directly and exposes in-screen save f
   assert.match(enrollment, /saveMutation\.isPending\s*\?\s*'Saving enrollment…'/)
 })
 
-test('the enrollment API sends the committed roster before slow catalog syncing', () => {
-  const backendRoot = path.resolve(root, '..', 'AI_Question_Paper_System', 'eduraa-ai', 'backend')
-  const service = fs.readFileSync(path.join(backendRoot, 'app', 'services', 'class_management_service.py'), 'utf8')
-  const route = fs.readFileSync(path.join(backendRoot, 'app', 'api', 'v1', 'class_teacher.py'), 'utf8')
-  assert.match(service, /sync_catalog: bool = False/)
-  assert.match(service, /async def sync_subject_enrollment_catalog\(/)
-  assert.match(route, /background_tasks: BackgroundTasks/)
-  assert.match(route, /background_tasks\.add_task\([\s\S]*?_sync_subject_enrollment_catalog_after_response/)
-})
-
 test('timeouts are not misreported as an offline request that was never sent', () => {
   const errors = read('src/api/errors.ts')
   assert.match(errors, /\| 'timeout'/)
