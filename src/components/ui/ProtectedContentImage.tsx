@@ -56,6 +56,13 @@ export function ProtectedContentImage({
     setFailed(true)
     onLoadStateChange?.('error')
   }, [onLoadStateChange])
+  const finishLoading = useCallback((event: any) => {
+    const width = event.nativeEvent?.source?.width
+    const height = event.nativeEvent?.source?.height
+    if (width && height) onNaturalSizeChange?.(width, height)
+    setIsLoading(false)
+    onLoadStateChange?.('loaded')
+  }, [onLoadStateChange, onNaturalSizeChange])
 
   useEffect(() => {
     markLoading()
@@ -168,13 +175,7 @@ export function ProtectedContentImage({
         source={source}
         accessibilityLabel={accessibilityLabel}
         onLoadStart={markLoading}
-        onLoad={({ nativeEvent }) => {
-          const width = nativeEvent.source?.width
-          const height = nativeEvent.source?.height
-          if (width && height) onNaturalSizeChange?.(width, height)
-          setIsLoading(false)
-          onLoadStateChange?.('loaded')
-        }}
+        onLoad={finishLoading}
         onError={failImage}
         resizeMode="contain"
         style={[styles.image, style]}

@@ -29,7 +29,7 @@ test('student attempts reuse the canonical flow and teacher cards never receive 
   assert.match(model, /role === 'student'.*\['attempt'\]/)
   assert.match(model, /role === 'teacher'.*\['open_details'\]/)
   assert.doesNotMatch(model, /role === 'teacher'.*\['attempt'\]/)
-  assert.match(detail, /enabled: Boolean\(paper && !isTeacherReference\)/)
+  assert.match(detail, /enabled:\s*Boolean\(\s*paper\s*&&\s*!isTeacherReference/)
   assert.match(detail, /isTeacherReference \? \(/)
   assert.match(detail, /Download teacher reference PDF/)
 })

@@ -53,10 +53,6 @@ function QuestionVisualAsset({
   containerStyle,
 }: QuestionVisualAssetProps) {
   const { height, width } = useWindowDimensions();
-  const [imageState, setImageState] = useState<
-    "loading" | "loaded" | "error"
-  >("loading");
-  const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const scale = useSharedValue(1);
@@ -69,7 +65,7 @@ function QuestionVisualAsset({
   const viewerWidth = Math.max(1, width - spacing[8]);
   const viewerImageHeight = Math.max(
     220,
-    Math.min(height - 220, viewerWidth / aspectRatio),
+    Math.min(height - 220, viewerWidth / (16 / 9)),
   );
 
   const resetZoom = useCallback(() => {
@@ -161,27 +157,21 @@ function QuestionVisualAsset({
           accessibilityLabel={alt}
           contentHeight={inlineHeight}
           errorHeight={144}
-          onLoadStateChange={setImageState}
-          onNaturalSizeChange={(naturalWidth, naturalHeight) =>
-            setAspectRatio(naturalWidth / naturalHeight)
-          }
           style={[styles.image, style]}
         />
-        {imageState === "loaded" ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${alt} full screen`}
-            accessibilityHint="Opens a viewer where you can zoom and move around the figure."
-            onPress={() => {
-              resetZoom();
-              setViewerVisible(true);
-            }}
-            hitSlop={8}
-            style={styles.expandButton}
-          >
-            <Ionicons name="expand-outline" size={18} color={colors.white} />
-          </Pressable>
-        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${alt} full screen`}
+          accessibilityHint="Opens a viewer where you can zoom and move around the figure."
+          onPress={() => {
+            resetZoom();
+            setViewerVisible(true);
+          }}
+          hitSlop={8}
+          style={styles.expandButton}
+        >
+          <Ionicons name="expand-outline" size={18} color={colors.white} />
+        </Pressable>
       </View>
       {caption ? <Text style={styles.caption}>{caption}</Text> : null}
 

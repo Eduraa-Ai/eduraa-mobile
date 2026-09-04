@@ -205,7 +205,11 @@ export default function PaperDetailScreen() {
   const attemptsQuery = useQuery({
     queryKey: ["paper-attempts-detail", params.paperId],
     queryFn: () => papersApi.listAttempts(params.paperId),
-    enabled: Boolean(paper && !isTeacherReference),
+    enabled: Boolean(
+      paper
+      && !isTeacherReference
+      && (user?.role === "student" || user?.role === "b2c_student")
+    ),
     retry: false,
   });
   const attempts = attemptsQuery.data?.items ?? [];
@@ -235,14 +239,15 @@ export default function PaperDetailScreen() {
     Boolean(paper?.created_by && paper.created_by === user?.id);
   const canDelete = !isTeacherReference && ownsPaper;
   const isTeacher = user?.role === "teacher";
+  const canManagePaper = isTeacher || user?.role === "admin";
   const isPublished = paper?.status === "published";
-  const canPublish = isTeacher && Boolean(paper) && !isPublished;
-  const canEditPaper = isTeacher && !isTeacherReference && Boolean(paper) && !isPublished;
+  const canPublish = canManagePaper && Boolean(paper) && !isPublished;
+  const canEditPaper = canManagePaper && !isTeacherReference && Boolean(paper) && !isPublished;
   const chatStorageKey = user?.id ? paperChatStorageKey(user.id, params.paperId) : null;
   const pendingInstructionStorageKey = user?.id
     ? paperPendingInstructionStorageKey(user.id, params.paperId)
     : null;
-  const canRename = isTeacher || canDelete;
+  const canRename = canManagePaper || canDelete;
   // The export endpoint only releases answers to the paper's creator; admins and
   // principals read across their school.
   const canDownloadAnswerKey =
@@ -418,10 +423,13 @@ export default function PaperDetailScreen() {
       pendingInstruction,
     }).then((updatedPaper) => ({
       updatedPaper,
-      reply: updatedPaper.clarify?.questions?.[0]?.prompt?.trim()
+      reply: updatedPaper.assistant_message?.trim()
+        || updatedPaper.clarify?.questions?.[0]?.prompt?.trim()
         || "Done — I updated your paper.",
     })).then((result) => {
       if (
+        result.updatedPaper.paper_changed === undefined
+        &&
         !result.updatedPaper.clarify
         && paperEditableContentFingerprint(result.updatedPaper) === beforeFingerprint
       ) {
@@ -445,7 +453,9 @@ export default function PaperDetailScreen() {
     onSuccess: async ({ updatedPaper, reply }, variables) => {
       queryClient.setQueryData(["paper", params.paperId], updatedPaper);
       setPendingPaperInstruction(
-        updatedPaper.clarify ? variables.pendingInstruction || variables.instruction : null,
+        updatedPaper.requires_reply || updatedPaper.clarify
+          ? variables.pendingInstruction || variables.instruction
+          : null,
       );
       setPaperChatMessages((current) => [
         ...current,
@@ -456,12 +466,13 @@ export default function PaperDetailScreen() {
     onError: (error: any, variables) => {
       const status = Number(error?.response?.status || 0);
       const detail = error?.response?.data?.detail;
+      const serverMessage = typeof detail === "string" && detail.trim() ? detail.trim() : null;
       setPaperInstruction((current) => current || variables.instruction);
       setPaperChatError(
         error instanceof PaperInstructionNoChangeError
           ? error.message
-          : status >= 400 && status < 500 && typeof detail === "string"
-          ? detail
+          : status >= 400 && serverMessage
+          ? serverMessage
           : "I couldn't update the paper. Your message is still here — tap send to try again.",
       );
     },
@@ -1070,41 +1081,46 @@ export default function PaperDetailScreen() {
                 onRemoveVisual={() => removeVisualMutation.mutate(q.question_number)}
               />
             ) : (
-              <Pressable
-                accessibilityRole={canEditPaper ? "button" : undefined}
-                accessibilityLabel={canEditPaper ? `Edit question ${q.question_number}` : undefined}
-                disabled={!canEditPaper || editingQuestionNumber !== null}
-                onPress={() => {
-                  setActionError(null);
-                  setSavedMessage(null);
-                  setEditingQuestionNumber(q.question_number);
-                }}
-                style={({ pressed }) => [styles.questionContent, pressed && canEditPaper && styles.questionContentPressed]}
-              >
+              <View style={styles.questionContent}>
                 {q.visual_payload ? <QuestionVisual visual={q.visual_payload} /> : null}
-                {shouldShowQuestionStemText(q.visual_payload, "interactive") ? (
-                  <LatexText value={q.question_text} style={styles.questionText} />
-                ) : null}
-                {q.options && Array.isArray(q.options) ? (
-                  <View style={styles.optionsList}>
-                    {(q.options as Array<{ id: string; text: string }>).map((opt, i) => (
-                      <View key={opt.id} style={styles.optionRow}>
-                        <View style={styles.optionLetter}>
-                          <Text style={styles.optionLetterText}>{String.fromCharCode(65 + i)}</Text>
+                <Pressable
+                  accessibilityRole={canEditPaper ? "button" : undefined}
+                  accessibilityLabel={canEditPaper ? `Edit question ${q.question_number}` : undefined}
+                  disabled={!canEditPaper || editingQuestionNumber !== null}
+                  onPress={() => {
+                    setActionError(null);
+                    setSavedMessage(null);
+                    setEditingQuestionNumber(q.question_number);
+                  }}
+                  style={({ pressed }) => pressed && canEditPaper && styles.questionContentPressed}
+                >
+                  {shouldShowQuestionStemText(q.visual_payload, "interactive") ? (
+                    <LatexText value={q.question_text} style={styles.questionText} />
+                  ) : null}
+                  {q.options && Array.isArray(q.options) ? (
+                    <View style={styles.optionsList}>
+                      {(q.options as Array<{ id?: string; text: string }>).map((opt, i) => (
+                        <View
+                          key={opt.id || `${q.id}-option-${i}-${opt.text}`}
+                          style={styles.optionRow}
+                        >
+                          <View style={styles.optionLetter}>
+                            <Text style={styles.optionLetterText}>{String.fromCharCode(65 + i)}</Text>
+                          </View>
+                          <LatexText value={opt.text} style={styles.optionText} containerStyle={styles.optionTextContainer} />
                         </View>
-                        <LatexText value={opt.text} style={styles.optionText} containerStyle={styles.optionTextContainer} />
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-                {isMatchColumnsOptions(q.options) ? <MatchColumnsPreview options={q.options} /> : null}
-                {canEditPaper ? (
-                  <View style={styles.questionEditCue}>
-                    <Ionicons name="sparkles-outline" size={13} color={colors.accentStrong} />
-                    <Text style={styles.questionEditCueText}>Edit text, answer, marks or image</Text>
-                  </View>
-                ) : null}
-              </Pressable>
+                      ))}
+                    </View>
+                  ) : null}
+                  {isMatchColumnsOptions(q.options) ? <MatchColumnsPreview options={q.options} /> : null}
+                  {canEditPaper ? (
+                    <View style={styles.questionEditCue}>
+                      <Ionicons name="sparkles-outline" size={13} color={colors.accentStrong} />
+                      <Text style={styles.questionEditCueText}>Edit text, answer, marks or image</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              </View>
             )}
           </View>
         ))}
