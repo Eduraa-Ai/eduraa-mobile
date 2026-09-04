@@ -1,14 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useNetInfo } from '@react-native-community/netinfo'
 import { useNavigation } from '@react-navigation/native'
-import React, { ReactNode, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, AppState, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import React, { ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, AppState, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import * as DocumentPicker from 'expo-document-picker'
+import { Directory, File as ExpoFile, Paths } from 'expo-file-system'
+import * as Sharing from 'expo-sharing'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatedButton, AnimatedCard, AppScreen, DateField, ErrorState, SelectableChip, SelectField, TextInputField } from '../../components/ui'
 import {
   AttendanceCorrectionRequest,
+  AttendanceLeaveApplication,
+  AttendanceLeaveAttachment,
+  AttendanceLeaveAttachmentInput,
+  AttendanceLeaveStatus,
   AttendanceRecord,
   AttendanceStatus,
   attendanceApi,
@@ -47,6 +54,26 @@ const statusTones: Record<AttendanceStatus, string> = {
 
 type LeadershipQueueFilter = 'all' | 'missing' | 'draft' | 'submitted' | 'reopened'
 
+type LeaveDecision = {
+  application: AttendanceLeaveApplication
+  status: Extract<AttendanceLeaveStatus, 'approved' | 'rejected'>
+  note: string
+}
+
+const MAX_LEAVE_ATTACHMENT_BYTES = 5 * 1024 * 1024
+const LEAVE_ATTACHMENT_TYPES = [
+  'application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv',
+]
+const LEAVE_ATTACHMENT_TYPES_BY_EXTENSION: Record<string, string> = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', csv: 'text/csv',
+}
+
+type LeaveAttachmentAction = 'view' | 'download'
+
 const leadershipQueueLabels: Record<LeadershipQueueFilter, string> = {
   all: 'All classes',
   missing: 'Not started',
@@ -77,6 +104,115 @@ function formatMonth(value: string) {
 
 function extractDetail(error: unknown, fallback: string) {
   return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || fallback
+}
+
+function leaveAttachmentContentType(asset: DocumentPicker.DocumentPickerAsset) {
+  const mimeType = (asset.mimeType || asset.file?.type || '').split(';', 1)[0].toLowerCase()
+  if (LEAVE_ATTACHMENT_TYPES.includes(mimeType)) return mimeType === 'image/jpg' ? 'image/jpeg' : mimeType
+  return LEAVE_ATTACHMENT_TYPES_BY_EXTENSION[asset.name.split('.').pop()?.toLowerCase() ?? ''] ?? null
+}
+
+function browserFileBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the selected attachment.'))
+    reader.onload = () => {
+      const value = typeof reader.result === 'string' ? reader.result : ''
+      const comma = value.indexOf(',')
+      if (comma < 0) reject(new Error('Could not encode the selected attachment.'))
+      else resolve(value.slice(comma + 1))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function normalizeBase64(value: string) {
+  const encoded = value.includes(',') && /^data:/i.test(value.trim())
+    ? value.slice(value.indexOf(',') + 1)
+    : value
+  const normalized = encoded.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')
+  return normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
+}
+
+async function pickLeaveAttachments(): Promise<AttendanceLeaveAttachmentInput[]> {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: LEAVE_ATTACHMENT_TYPES,
+    multiple: true,
+    copyToCacheDirectory: true,
+    base64: Platform.OS === 'web',
+  })
+  if (result.canceled || !result.assets?.length) return []
+  return Promise.all(result.assets.map(async (asset) => {
+    const contentType = leaveAttachmentContentType(asset)
+    if (!contentType) throw new Error('Choose PDF, image, Word, Excel, or CSV files.')
+    if ((asset.size ?? 0) > MAX_LEAVE_ATTACHMENT_BYTES) throw new Error(`${asset.name} must be 5 MB or smaller.`)
+    const rawBase64 = Platform.OS === 'web'
+      ? asset.base64 || (asset.file ? await browserFileBase64(asset.file) : '')
+      : await new ExpoFile(asset.uri).base64()
+    const dataBase64 = normalizeBase64(rawBase64)
+    if (!dataBase64) throw new Error(`${asset.name} is empty.`)
+    if (Math.floor((dataBase64.length * 3) / 4) > MAX_LEAVE_ATTACHMENT_BYTES) throw new Error(`${asset.name} must be 5 MB or smaller.`)
+    return { file_name: asset.name || 'leave-attachment', content_type: contentType, data_base64: dataBase64 }
+  }))
+}
+
+function safeAttachmentName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/^-+|-+$/g, '') || 'leave-attachment'
+}
+
+async function handleLeaveAttachment(
+  application: AttendanceLeaveApplication,
+  attachment: AttendanceLeaveAttachment,
+  action: LeaveAttachmentAction,
+) {
+  const data = await attendanceApi.getLeaveAttachment(application.id, attachment.id)
+  const fileName = attachment.file_name
+  const contentType = attachment.content_type
+  if (Platform.OS === 'web') {
+    const blobUrl = URL.createObjectURL(new Blob([data], { type: contentType }))
+    if (action === 'view') {
+      const opened = window.open(blobUrl, '_blank', 'noopener,noreferrer')
+      if (!opened) {
+        URL.revokeObjectURL(blobUrl)
+        throw new Error('Allow pop-ups to open this attachment, then try again.')
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+      return
+    }
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1_000)
+    return
+  }
+
+  const directory = new Directory(Paths.cache, 'leave-attachments')
+  directory.create({ idempotent: true, intermediates: true })
+  const file = new ExpoFile(directory, `${application.id}-${safeAttachmentName(fileName)}`)
+  file.create({ overwrite: true, intermediates: true })
+  file.write(new Uint8Array(data))
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error('Attachment opening is not available on this device.')
+  }
+  try {
+    await Sharing.shareAsync(file.uri, {
+      dialogTitle: action === 'view' ? `View ${fileName}` : `Save ${fileName}`,
+      mimeType: contentType,
+      ...(contentType === 'application/pdf' ? { UTI: 'com.adobe.pdf' } : {}),
+    })
+  } finally {
+    if (file.exists) file.delete()
+  }
+}
+
+function leaveInboxErrorMessage(error: unknown) {
+  const statusCode = (error as { response?: { status?: number } }).response?.status
+  if (statusCode === 401 || statusCode === 403) return 'Your session no longer has access to leave requests. Sign in again and retry.'
+  if (statusCode && statusCode >= 500) return 'We couldn’t load leave requests right now. Please try again shortly.'
+  return 'We couldn’t load leave requests. Check your connection and try again.'
 }
 
 function isTeacherRole(role?: Role) {
@@ -263,6 +399,253 @@ function CorrectionsList({
   )
 }
 
+function monthStartSchoolDate() {
+  return `${todaySchoolDate().slice(0, 8)}01`
+}
+
+function LeaveApplicationsList({
+  applications,
+  canResolve,
+  busyKey,
+  decisionOpen = false,
+  decisionError,
+  isLoading = false,
+  error,
+  onRetry,
+  onResolve,
+}: {
+  applications: AttendanceLeaveApplication[]
+  canResolve: boolean
+  busyKey: string | null
+  decisionOpen?: boolean
+  decisionError?: string | null
+  isLoading?: boolean
+  error?: string | null
+  onRetry?: () => Promise<unknown>
+  onResolve: (item: AttendanceLeaveApplication, status: Extract<AttendanceLeaveStatus, 'approved' | 'rejected'>, note: string) => void
+}) {
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [attachmentAction, setAttachmentAction] = useState<string | null>(null)
+  const pendingApplications = canResolve ? applications.filter((item) => item.status === 'pending') : applications
+  const resolvedApplications = canResolve ? applications.filter((item) => item.status !== 'pending') : []
+  const openAttachment = async (item: AttendanceLeaveApplication, attachment: AttendanceLeaveAttachment, action: LeaveAttachmentAction) => {
+    if (attachmentAction) return
+    setAttachmentAction(`${action}:${item.id}:${attachment.id}`)
+    try {
+      await handleLeaveAttachment(item, attachment, action)
+    } catch (error) {
+      Alert.alert(
+        action === 'view' ? 'Could not open attachment' : 'Could not download attachment',
+        error instanceof Error ? error.message : 'Please try again.',
+      )
+    } finally {
+      setAttachmentAction(null)
+    }
+  }
+  const renderAttachments = (item: AttendanceLeaveApplication) => {
+    const attachments = item.attachments?.length ? item.attachments : item.attachment ? [item.attachment] : []
+    return attachments.map((attachment) => (
+      <View key={attachment.id} style={styles.leaveAttachment}>
+        <View style={styles.leaveAttachmentCopy}>
+          <Ionicons name="document-attach-outline" size={18} color={colors.accent} />
+          <Text numberOfLines={1} style={styles.leaveAttachmentName}>{attachment.file_name}</Text>
+        </View>
+        <View style={styles.leaveAttachmentActions}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`View ${attachment.file_name}`} disabled={Boolean(attachmentAction)} onPress={() => { void openAttachment(item, attachment, 'view') }} style={({ pressed }) => [styles.leaveAttachmentButton, pressed && styles.pressed, attachmentAction && styles.disabledControl]}>
+            {attachmentAction === `view:${item.id}:${attachment.id}` ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="eye-outline" size={17} color={colors.accent} />}
+            <Text style={styles.leaveAttachmentButtonText}>View</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Download ${attachment.file_name}`} disabled={Boolean(attachmentAction)} onPress={() => { void openAttachment(item, attachment, 'download') }} style={({ pressed }) => [styles.leaveAttachmentButton, pressed && styles.pressed, attachmentAction && styles.disabledControl]}>
+            {attachmentAction === `download:${item.id}:${attachment.id}` ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="download-outline" size={17} color={colors.accent} />}
+            <Text style={styles.leaveAttachmentButtonText}>Download</Text>
+          </Pressable>
+        </View>
+      </View>
+    ))
+  }
+  const retry = async () => {
+    if (!onRetry || isRetrying) return
+    setIsRetrying(true)
+    try {
+      await Promise.all([
+        onRetry(),
+        new Promise<void>((resolve) => setTimeout(resolve, 450)),
+      ])
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+  return (
+    <View style={styles.section}>
+      <SectionHeader
+        title={canResolve ? 'Leave requests' : 'My leave requests'}
+        subtitle={canResolve ? 'Review requests and keep past decisions with their evidence.' : 'Track requests and supporting PDFs sent to your class teacher.'}
+        count={!isLoading && !error ? applications.length : undefined}
+      />
+      {decisionError ? (
+        <View style={styles.leaveDecisionError} accessibilityRole="alert">
+          <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+          <Text style={styles.leaveDecisionErrorText}>{decisionError}</Text>
+        </View>
+      ) : null}
+      {isLoading ? (
+        <AnimatedCard style={styles.leaveStateCard}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.emptyText}>Loading leave requests…</Text>
+        </AnimatedCard>
+      ) : error ? (
+        <AnimatedCard style={styles.leaveStateCard}>
+          <View style={styles.leaveErrorContent} accessibilityRole="alert">
+            <Ionicons name="cloud-offline-outline" size={20} color={colors.warning} />
+            <View style={styles.leaveStateCopy}>
+              <Text style={styles.leaveStateTitle}>Leave requests could not load</Text>
+              <Text style={styles.emptyText}>{error}</Text>
+            </View>
+          </View>
+          {onRetry ? <AnimatedButton label={isRetrying ? 'Retrying…' : 'Retry'} variant="ghost" disabled={isRetrying} onPress={() => { void retry() }} /> : null}
+        </AnimatedCard>
+      ) : applications.length === 0 ? (
+        <AnimatedCard style={styles.emptyCard}>
+          <Text style={styles.emptyText}>{canResolve ? 'No leave requests have been sent to your class.' : 'You have not sent any leave requests.'}</Text>
+        </AnimatedCard>
+      ) : (
+        <>
+        {canResolve && pendingApplications.length === 0 ? (
+          <AnimatedCard style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No leave requests need your review. Past decisions remain below.</Text>
+          </AnimatedCard>
+        ) : null}
+        {pendingApplications.map((item) => (
+        <AnimatedCard key={item.id} style={styles.correctionCard}>
+          <View style={styles.recordTop}>
+            <View style={styles.iconBubble}><Ionicons name="calendar-outline" size={18} color={colors.accent} /></View>
+            <View style={styles.recordCopy}>
+              <Text style={styles.recordTitle}>{canResolve ? item.student_name : `${formatDate(item.start_date)} – ${formatDate(item.end_date)}`}</Text>
+              <Text style={styles.recordMeta}>{canResolve ? `${item.standard} ${item.division ?? ''} · ${formatDate(item.start_date)} – ${formatDate(item.end_date)}` : item.status}</Text>
+            </View>
+          </View>
+          <Text style={styles.noteText}>{item.reason}</Text>
+          {renderAttachments(item)}
+          {item.resolution_note ? <Text style={styles.recordMeta}>Teacher note: {item.resolution_note}</Text> : null}
+          {canResolve && item.status === 'pending' ? (
+            <View style={styles.correctionActions}>
+              <TextInputField
+                label="Optional decision note"
+                value={notes[item.id] ?? ''}
+                onChangeText={(value) => setNotes((current) => ({ ...current, [item.id]: value }))}
+                placeholder="Add context for the student"
+                left={<Ionicons name="chatbox-ellipses-outline" size={17} color={colors.textMuted} />}
+              />
+              <View style={styles.actionRow}>
+                <AnimatedButton label="Approve" loading={busyKey === `approve:${item.id}`} disabled={Boolean(busyKey) || decisionOpen} onPress={() => onResolve(item, 'approved', notes[item.id] ?? '')} style={styles.actionButton} />
+                <AnimatedButton label="Reject" variant="ghost" loading={busyKey === `reject:${item.id}`} disabled={Boolean(busyKey) || decisionOpen} onPress={() => onResolve(item, 'rejected', notes[item.id] ?? '')} style={styles.actionButton} />
+              </View>
+            </View>
+          ) : null}
+        </AnimatedCard>
+        ))}
+        {canResolve && resolvedApplications.length > 0 ? (
+          <View style={styles.leaveHistory}>
+            <Text style={styles.leaveHistoryTitle}>Decision history</Text>
+            <Text style={styles.leaveHistorySubtitle}>Approved and rejected requests remain available with all their original attachments.</Text>
+          </View>
+        ) : null}
+        {resolvedApplications.map((item) => (
+          <AnimatedCard key={item.id} style={styles.correctionCard}>
+            <View style={styles.recordTop}>
+              <View style={styles.iconBubble}><Ionicons name="calendar-outline" size={18} color={item.status === 'approved' ? colors.success : colors.danger} /></View>
+              <View style={styles.recordCopy}>
+                <Text style={styles.recordTitle}>{item.student_name}</Text>
+                <Text style={styles.recordMeta}>{item.standard} {item.division ?? ''} · {formatDate(item.start_date)} – {formatDate(item.end_date)} · {item.status}</Text>
+              </View>
+            </View>
+            <Text style={styles.noteText}>{item.reason}</Text>
+            {renderAttachments(item)}
+            {item.resolution_note ? <Text style={styles.recordMeta}>Teacher note: {item.resolution_note}</Text> : null}
+            {item.resolved_at ? <Text style={styles.recordMeta}>Decided {formatDate(item.resolved_at)}</Text> : null}
+          </AnimatedCard>
+        ))}
+        </>
+      )}
+    </View>
+  )
+}
+
+function LeaveDecisionDialog({
+  decision,
+  busy,
+  confirmReady,
+  onCancel,
+  onConfirm,
+}: {
+  decision: LeaveDecision | null
+  busy: boolean
+  confirmReady: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const approving = decision?.status === 'approved'
+  const action = approving ? 'Approve' : 'Reject'
+  const application = decision?.application
+
+  return (
+    <Modal
+      visible={Boolean(decision)}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        if (!busy) onCancel()
+      }}
+    >
+      <View style={styles.leaveDecisionBackdrop}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Keep leave request pending"
+          disabled={busy}
+          onPress={onCancel}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.leaveDecisionSheet} accessibilityRole="alert">
+          <View style={[styles.leaveDecisionIcon, approving ? styles.leaveDecisionApproveIcon : styles.leaveDecisionRejectIcon]}>
+            <Ionicons name={approving ? 'checkmark-circle-outline' : 'close-circle-outline'} size={24} color={approving ? colors.success : colors.danger} />
+          </View>
+          <Text style={styles.leaveDecisionEyebrow}>LEAVE REQUEST DECISION</Text>
+          <Text style={styles.leaveDecisionTitle}>{action} this leave request?</Text>
+          <Text style={styles.leaveDecisionBody}>
+            {application ? `${application.student_name} · ${formatDate(application.start_date)} – ${formatDate(application.end_date)}` : ''}
+          </Text>
+          {decision?.note.trim() ? <Text style={styles.leaveDecisionNote}>Teacher note: {decision.note.trim()}</Text> : null}
+          <Text style={styles.leaveDecisionHint}>
+            {approving ? 'The student will see this as approved, and eligible attendance entries will be updated.' : 'The student will see this request as rejected.'}
+          </Text>
+          <View style={styles.leaveDecisionActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Keep leave request pending"
+              disabled={busy}
+              onPress={onCancel}
+              style={({ pressed }) => [styles.leaveDecisionCancel, pressed && !busy && styles.pressed, busy && styles.leaveDecisionDisabled]}
+            >
+              <Text style={styles.leaveDecisionCancelText}>Keep pending</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${action} leave request`}
+              accessibilityState={{ disabled: busy || !confirmReady, busy }}
+              disabled={busy || !confirmReady}
+              onPress={onConfirm}
+              style={({ pressed }) => [approving ? styles.leaveDecisionApprove : styles.leaveDecisionReject, pressed && !busy && confirmReady && styles.pressed, (busy || !confirmReady) && styles.leaveDecisionDisabled]}
+            >
+              {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.leaveDecisionConfirmText}>{confirmReady ? `${action} request` : 'Opening confirmation…'}</Text>}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
 function TeacherAttendance() {
   const queryClient = useQueryClient()
   const navigation = useNavigation()
@@ -279,8 +662,19 @@ function TeacherAttendance() {
   const [rosterFilter, setRosterFilter] = useState<AttendanceRosterFilter>('all')
   const [showMoreRosterFilters, setShowMoreRosterFilters] = useState(false)
   const [busyKey, setBusyKey] = useState<string | null>(null)
+  const [leaveDecisionKey, setLeaveDecisionKey] = useState<string | null>(null)
+  const [pendingLeaveDecision, setPendingLeaveDecision] = useState<LeaveDecision | null>(null)
+  const [leaveDecisionReady, setLeaveDecisionReady] = useState(false)
+  const leaveDecisionVersionRef = useRef(0)
+  const [leaveDecisionError, setLeaveDecisionError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<string | null>(null)
   const [terminalMessage, setTerminalMessage] = useState<string | null>(null)
+
+  const dismissLeaveDecision = () => {
+    leaveDecisionVersionRef.current += 1
+    setLeaveDecisionReady(false)
+    setPendingLeaveDecision(null)
+  }
 
   const classesQuery = useQuery({
     queryKey: ['attendance', 'teacher', 'classes'],
@@ -295,6 +689,11 @@ function TeacherAttendance() {
   const summaryQuery = useQuery({
     queryKey: ['attendance', 'teacher', 'summary', attendanceDate, selectedClassId],
     queryFn: () => attendanceApi.getTeacherSummary(attendanceDate, selectedClassId),
+  })
+
+  const leavesQuery = useQuery({
+    queryKey: ['attendance', 'teacher', 'leaves'],
+    queryFn: () => attendanceApi.getLeaveApplications(),
   })
 
   const queriedSheet = todayQuery.data?.sheet
@@ -410,6 +809,53 @@ function TeacherAttendance() {
     },
     onSettled: () => setBusyKey(null),
   })
+
+  const resolveLeaveMutation = useMutation({
+    mutationFn: async ({ id, status, note }: { id: string; status: Extract<AttendanceLeaveStatus, 'approved' | 'rejected'>; note: string }) => {
+      setLeaveDecisionKey(`${status === 'approved' ? 'approve' : 'reject'}:${id}`)
+      return attendanceApi.resolveLeaveApplication(id, status, note)
+    },
+    onSuccess: async (application) => {
+      dismissLeaveDecision()
+      setLeaveDecisionError(null)
+      setTerminalMessage(`Leave request ${application.status}. ${application.student_name}'s editable attendance is updated.`)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['attendance', 'teacher', 'leaves'] }),
+        queryClient.invalidateQueries({ queryKey: ['attendance', 'teacher', 'today', attendanceDate] }),
+        queryClient.invalidateQueries({ queryKey: ['attendance', 'teacher', 'summary', attendanceDate] }),
+      ])
+    },
+    onError: (error) => {
+      dismissLeaveDecision()
+      setLeaveDecisionError(extractDetail(error, 'The leave request was not updated. Refresh and try again.'))
+    },
+    onSettled: () => setLeaveDecisionKey(null),
+  })
+
+  const requestLeaveDecision = (
+    application: AttendanceLeaveApplication,
+    status: Extract<AttendanceLeaveStatus, 'approved' | 'rejected'>,
+    note: string,
+  ) => {
+    if (resolveLeaveMutation.isPending || pendingLeaveDecision) return
+    const version = leaveDecisionVersionRef.current + 1
+    leaveDecisionVersionRef.current = version
+    setLeaveDecisionError(null)
+    setLeaveDecisionReady(false)
+    setPendingLeaveDecision({ application, status, note })
+    setTimeout(() => {
+      if (leaveDecisionVersionRef.current === version) setLeaveDecisionReady(true)
+    }, 250)
+  }
+
+  const confirmLeaveDecision = () => {
+    if (!pendingLeaveDecision || !leaveDecisionReady || resolveLeaveMutation.isPending) return
+    resolveLeaveMutation.mutate({
+      id: pendingLeaveDecision.application.id,
+      status: pendingLeaveDecision.status,
+      note: pendingLeaveDecision.note,
+    })
+  }
 
   if (todayQuery.isLoading) {
     return (
@@ -655,7 +1101,7 @@ function TeacherAttendance() {
         <TextInputField
           label="Class remark (optional)"
           value={classNote}
-          editable={!locked && !Boolean(busyKey)}
+          editable={!locked && sheet.status !== 'submitted' && !Boolean(busyKey)}
           onChangeText={setClassNote}
           placeholder={sheet.class_note || 'Example: Assembly delayed first period'}
           multiline
@@ -665,7 +1111,7 @@ function TeacherAttendance() {
           <AnimatedButton
             label="Mark all present"
             loading={busyKey === 'mark-all'}
-            disabled={Boolean(busyKey) || locked || netInfo.isConnected === false || sheet.records.length === 0}
+            disabled={Boolean(busyKey) || locked || sheet.status === 'submitted' || netInfo.isConnected === false || sheet.records.length === 0}
             onPress={() => Alert.alert('Mark everyone present?', 'This saves Present for the full roster immediately and replaces any unsaved local attendance changes.', [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Mark all', onPress: () => sheetMutation.mutate({
@@ -685,7 +1131,7 @@ function TeacherAttendance() {
             label={dirty ? 'Save draft' : 'Draft saved'}
             variant="secondary"
             loading={busyKey === 'save'}
-            disabled={Boolean(busyKey) || locked || !dirty || netInfo.isConnected === false}
+            disabled={Boolean(busyKey) || locked || sheet.status === 'submitted' || !dirty || netInfo.isConnected === false}
             onPress={saveDraft}
             style={styles.actionButton}
           />
@@ -763,7 +1209,7 @@ function TeacherAttendance() {
               <AttendanceRecordCard
                 key={record.id}
                 record={record}
-                disabled={locked || Boolean(busyKey)}
+                disabled={locked || sheet.status === 'submitted' || Boolean(busyKey)}
                 busy={false}
                 onStatus={(status) => updateRecord(record, { status })}
                 onNote={(note) => updateRecord(record, { note })}
@@ -772,6 +1218,20 @@ function TeacherAttendance() {
           </View>
         )}
       </View>
+      <LeaveApplicationsList
+        applications={leavesQuery.data ?? []}
+        canResolve
+        busyKey={leaveDecisionKey}
+        decisionOpen={Boolean(pendingLeaveDecision)}
+        decisionError={leaveDecisionError}
+        isLoading={leavesQuery.isLoading}
+        error={leavesQuery.isError ? leaveInboxErrorMessage(leavesQuery.error) : null}
+        onRetry={() => {
+          setLeaveDecisionError(null)
+          return leavesQuery.refetch()
+        }}
+        onResolve={requestLeaveDecision}
+      />
     </AppScreen>
       <View style={[styles.submitDock, { bottom: layout.bottomTabHeight + insets.bottom }]}>
         <View style={[styles.submitSurface, dirty && styles.submitSurfaceActive]}>
@@ -785,20 +1245,26 @@ function TeacherAttendance() {
             </View>
           </View>
           <AnimatedButton
-            label={locked ? 'Attendance locked' : sheet.status === 'submitted' ? 'Resubmit attendance' : 'Submit attendance'}
+            label={locked ? 'Attendance locked' : sheet.status === 'submitted' ? 'Attendance submitted' : 'Submit attendance'}
             loading={busyKey === 'submit'}
-            disabled={Boolean(busyKey) || locked || netInfo.isConnected === false || sheet.records.length === 0}
-            onPress={() => Alert.alert(sheet.status === 'submitted' ? 'Resubmit attendance?' : 'Submit attendance?', `${sheet.standard} ${sheet.division} · ${formatDate(sheet.attendance_date)} · ${sheet.records.length} students. You can update and resubmit this sheet until leadership locks it.`, [
-              { text: 'Review roster', style: 'cancel' },
-              { text: 'Submit', onPress: () => sheetMutation.mutate({ key: 'submit', run: async () => {
-                const result = await attendanceApi.submitSheet(sheet.id, sheet.revision, classNote.trim() || null, pendingRecords)
-                setTerminalMessage(`Submitted ${result.standard} ${result.division} for ${formatDate(result.attendance_date)}. You can still correct and resubmit until leadership locks it.`)
-                return result
-              } }) },
-            ])}
+            disabled={Boolean(busyKey) || locked || sheet.status === 'submitted' || netInfo.isConnected === false || sheet.records.length === 0}
+            onPress={() => sheetMutation.mutate({ key: 'submit', run: async () => {
+              const result = await attendanceApi.submitSheet(sheet.id, sheet.revision, classNote.trim() || null, pendingRecords)
+              setTerminalMessage(`Submitted ${result.standard} ${result.division} for ${formatDate(result.attendance_date)}. Leadership can reopen it if a correction is needed.`)
+              return result
+            } })}
           />
         </View>
       </View>
+      <LeaveDecisionDialog
+        decision={pendingLeaveDecision}
+        busy={resolveLeaveMutation.isPending}
+        confirmReady={leaveDecisionReady}
+        onCancel={() => {
+          if (!resolveLeaveMutation.isPending) dismissLeaveDecision()
+        }}
+        onConfirm={confirmLeaveDecision}
+      />
     </View>
   )
 }
@@ -1116,6 +1582,14 @@ function StudentAttendance() {
   const netInfo = useNetInfo()
   const [correctionRecordId, setCorrectionRecordId] = useState<string | null>(null)
   const [correctionReason, setCorrectionReason] = useState('')
+  const [historyStartDate, setHistoryStartDate] = useState(monthStartSchoolDate)
+  const [historyEndDate, setHistoryEndDate] = useState(todaySchoolDate)
+  const [showLeaveForm, setShowLeaveForm] = useState(false)
+  const [leaveStartDate, setLeaveStartDate] = useState(todaySchoolDate)
+  const [leaveEndDate, setLeaveEndDate] = useState(todaySchoolDate)
+  const [leaveReason, setLeaveReason] = useState('')
+  const [leaveAttachments, setLeaveAttachments] = useState<AttendanceLeaveAttachmentInput[]>([])
+  const [pickingLeaveAttachment, setPickingLeaveAttachment] = useState(false)
   const summaryQuery = useQuery({
     queryKey: ['attendance', 'student', 'summary'],
     queryFn: attendanceApi.getStudentSummary,
@@ -1127,6 +1601,18 @@ function StudentAttendance() {
     retry: false,
   })
 
+  const historyRangeValid = historyEndDate >= historyStartDate
+  const historyQuery = useQuery({
+    queryKey: ['attendance', 'student', 'history', historyStartDate, historyEndDate],
+    queryFn: () => attendanceApi.getStudentHistory(historyStartDate, historyEndDate),
+    enabled: historyRangeValid,
+  })
+
+  const leavesQuery = useQuery({
+    queryKey: ['attendance', 'student', 'leaves'],
+    queryFn: () => attendanceApi.getLeaveApplications(),
+  })
+
   const correctionMutation = useMutation({
     mutationFn: ({ recordId, reason }: { recordId: string; reason: string }) => attendanceApi.createCorrection(recordId, reason),
     onSuccess: async () => {
@@ -1136,6 +1622,31 @@ function StudentAttendance() {
     },
     onError: (error) => Alert.alert('Correction not sent', extractDetail(error, 'Your request could not be sent. Please try again.')),
   })
+
+  const leaveMutation = useMutation({
+    mutationFn: () => attendanceApi.createLeaveApplication(leaveStartDate, leaveEndDate, leaveReason.trim(), leaveAttachments),
+    onSuccess: async (application) => {
+      setLeaveReason('')
+      setLeaveAttachments([])
+      setShowLeaveForm(false)
+      Alert.alert('Leave request sent', `Your class teacher can now review ${formatDate(application.start_date)} – ${formatDate(application.end_date)}.`)
+      await queryClient.invalidateQueries({ queryKey: ['attendance', 'student', 'leaves'] })
+    },
+    onError: (error) => Alert.alert('Leave request not sent', extractDetail(error, 'Please review the dates and try again.')),
+  })
+
+  const selectLeaveAttachment = async () => {
+    if (leaveMutation.isPending || pickingLeaveAttachment) return
+    setPickingLeaveAttachment(true)
+    try {
+      const attachments = await pickLeaveAttachments()
+      if (attachments.length) setLeaveAttachments((current) => [...current, ...attachments])
+    } catch (error) {
+      Alert.alert('Attachments not added', error instanceof Error ? error.message : 'Choose supported files that are each 5 MB or smaller.')
+    } finally {
+      setPickingLeaveAttachment(false)
+    }
+  }
 
   if (summaryQuery.isLoading) {
     return (
@@ -1162,7 +1673,7 @@ function StudentAttendance() {
     <AppScreen
       protectedChrome
       contentStyle={styles.screen}
-      refreshControl={<RefreshControl refreshing={summaryQuery.isRefetching} onRefresh={summaryQuery.refetch} tintColor={colors.accent} colors={[colors.accent]} />}
+      refreshControl={<RefreshControl refreshing={summaryQuery.isRefetching || historyQuery.isRefetching || leavesQuery.isRefetching} onRefresh={() => { void summaryQuery.refetch(); void historyQuery.refetch(); void leavesQuery.refetch() }} tintColor={colors.accent} colors={[colors.accent]} />}
     >
       <AttendanceHero
         title={`${Math.round(summary.attendance_percent)}% this month`}
@@ -1184,15 +1695,22 @@ function StudentAttendance() {
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title="Recent history" subtitle="Latest class attendance records." count={summary.history.length} />
-        {summary.history.length === 0 ? (
+        <SectionHeader title="Attendance history" subtitle="Choose dates to view any earlier attendance." count={historyQuery.data?.length ?? 0} />
+        <View style={styles.scopeFieldsRow}>
+          <View style={styles.scopeField}><DateField label="From" value={historyStartDate} onChange={setHistoryStartDate} /></View>
+          <View style={styles.scopeField}><DateField label="To" value={historyEndDate} onChange={setHistoryEndDate} /></View>
+        </View>
+        {!historyRangeValid ? <Text style={styles.controlHint}>The end date must be on or after the start date.</Text> : null}
+        {historyQuery.isLoading ? <ActivityIndicator color={colors.accent} /> : null}
+        {historyQuery.isError ? <ErrorState title="History could not load" message={extractDetail(historyQuery.error, 'Please try again.')} onAction={() => void historyQuery.refetch()} /> : null}
+        {!historyQuery.isLoading && !historyQuery.isError && (historyQuery.data?.length ?? 0) === 0 ? (
           <AnimatedCard style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No attendance history yet.</Text>
+            <Text style={styles.emptyText}>No submitted attendance was found for these dates.</Text>
           </AnimatedCard>
-        ) : (
+        ) : historyQuery.data && historyQuery.data.length > 0 ? (
           <View style={styles.historyLedger}>
-          {summary.history.map((item) => (
-            <View key={`${item.attendance_date}-${item.standard}-${item.division ?? ''}`} style={styles.historyRow}>
+          {historyQuery.data.map((item) => (
+            <View key={item.record_id} style={styles.historyRow}>
               <View style={styles.recordTop}>
                 <View style={[styles.statusDot, { backgroundColor: statusTones[item.status] }]} />
                 <View style={styles.recordCopy}>
@@ -1230,8 +1748,59 @@ function StudentAttendance() {
             </View>
           ))}
           </View>
+        ) : null}
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Leave application" subtitle="Send a request directly to your class teacher." />
+        {showLeaveForm ? (
+          <AnimatedCard style={styles.correctionCard}>
+            <View style={styles.scopeFieldsRow}>
+              <View style={styles.scopeField}><DateField label="First day" value={leaveStartDate} onChange={setLeaveStartDate} disabled={leaveMutation.isPending} /></View>
+              <View style={styles.scopeField}><DateField label="Last day" value={leaveEndDate} onChange={setLeaveEndDate} disabled={leaveMutation.isPending} /></View>
+            </View>
+            <TextInputField label="Reason" value={leaveReason} onChangeText={setLeaveReason} placeholder="Briefly explain your absence" multiline editable={!leaveMutation.isPending} left={<Ionicons name="document-text-outline" size={17} color={colors.textMuted} />} />
+            <View style={styles.leaveUploadBox}>
+              <View style={styles.leaveUploadCopy}>
+                <Ionicons name="document-attach-outline" size={19} color={colors.accent} />
+                <View style={styles.recordCopy}>
+                  <Text style={styles.leaveUploadTitle}>{leaveAttachments.length ? `${leaveAttachments.length} supporting attachment${leaveAttachments.length === 1 ? '' : 's'} added` : 'Supporting attachments (optional)'}</Text>
+                  <Text numberOfLines={1} style={styles.recordMeta}>{leaveAttachments.length ? 'Add as many more files as needed.' : 'PDF, image, Word, Excel, or CSV · 5 MB each'}</Text>
+                </View>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Attach leave evidence" disabled={leaveMutation.isPending || pickingLeaveAttachment} onPress={() => { void selectLeaveAttachment() }} style={({ pressed }) => [styles.leaveAttachmentButton, pressed && styles.pressed, (leaveMutation.isPending || pickingLeaveAttachment) && styles.disabledControl]}>
+                {pickingLeaveAttachment ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="attach-outline" size={17} color={colors.accent} />}
+                <Text style={styles.leaveAttachmentButtonText}>{pickingLeaveAttachment ? 'Adding…' : 'Add files'}</Text>
+              </Pressable>
+            </View>
+            {leaveAttachments.map((attachment, index) => (
+              <View key={`${attachment.file_name}:${index}`} style={styles.leaveAttachment}>
+                <View style={styles.leaveAttachmentCopy}><Ionicons name="document-outline" size={18} color={colors.accent} /><Text numberOfLines={1} style={styles.leaveAttachmentName}>{attachment.file_name}</Text></View>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${attachment.file_name}`} disabled={leaveMutation.isPending} onPress={() => setLeaveAttachments((current) => current.filter((_, attachmentIndex) => attachmentIndex !== index))} style={({ pressed }) => [styles.leaveAttachmentButton, pressed && styles.pressed, leaveMutation.isPending && styles.disabledControl]}>
+                  <Ionicons name="close-outline" size={17} color={colors.danger} /><Text style={[styles.leaveAttachmentButtonText, { color: colors.danger }]}>Remove</Text>
+                </Pressable>
+              </View>
+            ))}
+            {leaveEndDate < leaveStartDate ? <Text style={styles.controlHint}>The last day must be on or after the first day.</Text> : null}
+            <View style={styles.actionRow}>
+              <AnimatedButton label="Cancel" variant="ghost" disabled={leaveMutation.isPending || pickingLeaveAttachment} onPress={() => { setShowLeaveForm(false); setLeaveReason(''); setLeaveAttachments([]) }} style={styles.actionButton} />
+              <AnimatedButton label="Send request" loading={leaveMutation.isPending} disabled={leaveReason.trim().length < 3 || leaveEndDate < leaveStartDate || netInfo.isConnected === false || pickingLeaveAttachment} onPress={() => leaveMutation.mutate()} style={styles.actionButton} />
+            </View>
+          </AnimatedCard>
+        ) : (
+          <AnimatedButton label="Request leave" disabled={netInfo.isConnected === false} onPress={() => setShowLeaveForm(true)} />
         )}
       </View>
+
+      <LeaveApplicationsList
+        applications={leavesQuery.data ?? []}
+        canResolve={false}
+        busyKey={null}
+        isLoading={leavesQuery.isLoading}
+        error={leavesQuery.isError ? leaveInboxErrorMessage(leavesQuery.error) : null}
+        onRetry={() => leavesQuery.refetch()}
+        onResolve={() => {}}
+      />
 
       {correctionsQuery.isError ? null : (
         <CorrectionsList corrections={correctionsQuery.data ?? []} canResolve={false} busyKey={null} onResolve={() => {}} />
@@ -1595,6 +2164,117 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: typography.fonts.bodyBold,
   },
+  leaveDecisionError: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.dangerSurface,
+    borderColor: colors.dangerBorder,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing[3],
+    padding: spacing[3],
+  },
+  leaveDecisionErrorText: {
+    ...typography.roles.body,
+    color: colors.danger,
+    flex: 1,
+  },
+  leaveDecisionBackdrop: {
+    backgroundColor: 'rgba(7, 21, 45, 0.46)',
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: spacing[4],
+  },
+  leaveDecisionSheet: {
+    backgroundColor: colors.backgroundElevated,
+    borderRadius: radius.sheet,
+    gap: spacing[3],
+    padding: spacing[5],
+    ...shadows.lg,
+  },
+  leaveDecisionIcon: {
+    alignItems: 'center',
+    borderRadius: radius.full,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  leaveDecisionApproveIcon: {
+    backgroundColor: colors.successSurface,
+  },
+  leaveDecisionRejectIcon: {
+    backgroundColor: colors.dangerSurface,
+  },
+  leaveDecisionEyebrow: {
+    ...typography.roles.eyebrow,
+    color: colors.accentStrong,
+  },
+  leaveDecisionTitle: {
+    ...typography.roles.title,
+    color: colors.text,
+  },
+  leaveDecisionBody: {
+    ...typography.roles.body,
+    color: colors.textSecondary,
+    fontFamily: typography.fonts.bodyBold,
+  },
+  leaveDecisionNote: {
+    ...typography.roles.body,
+    backgroundColor: colors.backgroundMuted,
+    borderRadius: radius.md,
+    color: colors.text,
+    padding: spacing[3],
+  },
+  leaveDecisionHint: {
+    ...typography.roles.body,
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  leaveDecisionActions: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    marginTop: spacing[1],
+  },
+  leaveDecisionCancel: {
+    alignItems: 'center',
+    backgroundColor: colors.backgroundElevated,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: layout.touchTarget,
+  },
+  leaveDecisionApprove: {
+    alignItems: 'center',
+    backgroundColor: colors.success,
+    borderRadius: radius.full,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: layout.touchTarget,
+  },
+  leaveDecisionReject: {
+    alignItems: 'center',
+    backgroundColor: colors.danger,
+    borderRadius: radius.full,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: layout.touchTarget,
+  },
+  leaveDecisionCancelText: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 14,
+  },
+  leaveDecisionConfirmText: {
+    color: colors.white,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 14,
+  },
+  leaveDecisionDisabled: {
+    opacity: 0.62,
+  },
   actionButton: {
     flex: 1,
   },
@@ -1698,6 +2378,72 @@ const styles = StyleSheet.create({
   },
   correctionActions: {
     gap: spacing[3],
+  },
+  leaveUploadBox: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing[3],
+    gap: spacing[3],
+  },
+  leaveUploadCopy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  leaveUploadTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+  },
+  leaveAttachment: {
+    borderRadius: radius.md,
+    backgroundColor: colors.cardMuted,
+    padding: spacing[3],
+    gap: spacing[3],
+  },
+  leaveAttachmentCopy: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  leaveAttachmentName: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+  },
+  leaveAttachmentActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[3],
+  },
+  leaveAttachmentButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    alignSelf: 'flex-start',
+  },
+  leaveAttachmentButtonText: {
+    color: colors.accent,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 13,
+  },
+  leaveHistory: {
+    gap: spacing[1],
+    marginTop: spacing[3],
+  },
+  leaveHistoryTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 16,
+  },
+  leaveHistorySubtitle: {
+    color: colors.textMuted,
+    fontFamily: typography.fonts.body,
+    fontSize: 13,
   },
   correctionLink: {
     minHeight: 44,
@@ -1822,6 +2568,26 @@ const styles = StyleSheet.create({
   emptyText: {
     ...typography.roles.body,
     color: colors.textMuted,
+  },
+  leaveStateCard: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing[3],
+  },
+  leaveStateCopy: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  leaveErrorContent: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing[3],
+  },
+  leaveStateTitle: {
+    color: colors.text,
+    fontFamily: typography.fonts.headingSemibold,
+    fontSize: 14,
   },
   pressed: {
     opacity: 0.72,

@@ -3,6 +3,21 @@ import apiClient from './client'
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'half_day' | 'excused'
 export type AttendanceSheetStatus = 'draft' | 'submitted' | 'reopened' | 'locked'
 export type AttendanceCorrectionStatus = 'pending' | 'approved' | 'rejected'
+export type AttendanceLeaveStatus = 'pending' | 'approved' | 'rejected'
+
+export interface AttendanceLeaveAttachmentInput {
+  file_name: string
+  content_type: string
+  data_base64: string
+}
+
+export interface AttendanceLeaveAttachment {
+  id: string
+  file_name: string
+  content_type: string
+  file_size: number
+  url: string
+}
 
 export interface AttendanceSheetSummary {
   total_students: number
@@ -123,6 +138,29 @@ export interface StudentAttendanceSummary {
   history: StudentAttendanceHistoryRow[]
 }
 
+export interface AttendanceLeaveApplication {
+  id: string
+  class_section_id?: string | null
+  student_id: string
+  student_name: string
+  student_code: string
+  standard: string
+  division?: string | null
+  start_date: string
+  end_date: string
+  reason: string
+  status: AttendanceLeaveStatus
+  requested_by_user_id?: string | null
+  requested_by_role?: string | null
+  resolved_by_user_id?: string | null
+  resolved_by_role?: string | null
+  resolved_at?: string | null
+  resolution_note?: string | null
+  attachments?: AttendanceLeaveAttachment[]
+  attachment?: AttendanceLeaveAttachment | null
+  created_at: string
+}
+
 export interface AttendanceCorrectionRequest {
   id: string
   sheet_id: string
@@ -186,6 +224,54 @@ export const attendanceApi = {
 
   async getStudentSummary() {
     const response = await apiClient.get<StudentAttendanceSummary>('/attendance/students/me/summary')
+    return response.data
+  },
+
+  async getStudentHistory(startDate: string, endDate: string) {
+    const response = await apiClient.get<StudentAttendanceHistoryRow[]>('/attendance/students/me/history', {
+      params: { start_date: startDate, end_date: endDate },
+    })
+    return response.data
+  },
+
+  async getLeaveApplications(status?: AttendanceLeaveStatus) {
+    const response = await apiClient.get<AttendanceLeaveApplication[]>('/attendance/leaves', {
+      params: status ? { status } : undefined,
+    })
+    return response.data
+  },
+
+  async createLeaveApplication(
+    startDate: string,
+    endDate: string,
+    reason: string,
+    attachments?: AttendanceLeaveAttachmentInput[],
+  ) {
+    const response = await apiClient.post<AttendanceLeaveApplication>('/attendance/leaves', {
+      start_date: startDate,
+      end_date: endDate,
+      reason,
+      attachments: attachments ?? [],
+    })
+    return response.data
+  },
+
+  async getLeaveAttachment(applicationId: string, attachmentId: string) {
+    const response = await apiClient.get<ArrayBuffer>(`/attendance/leaves/${applicationId}/attachments/${attachmentId}`, {
+      responseType: 'arraybuffer',
+    })
+    return response.data
+  },
+
+  async resolveLeaveApplication(
+    applicationId: string,
+    status: Extract<AttendanceLeaveStatus, 'approved' | 'rejected'>,
+    resolutionNote?: string,
+  ) {
+    const response = await apiClient.post<AttendanceLeaveApplication>(
+      `/attendance/leaves/${applicationId}/resolve`,
+      { status, resolution_note: resolutionNote?.trim() || null },
+    )
     return response.data
   },
 
