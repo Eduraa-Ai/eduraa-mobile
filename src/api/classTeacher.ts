@@ -17,6 +17,51 @@ export interface ClassTeacherProfile {
   division: string | null
 }
 
+/** The server currently supports pending and approved requests. Keep this
+ * open-ended so a future server-side status remains visible rather than being
+ * misrepresented by the app. */
+export type ClassTeacherRequestStatus = 'pending' | 'approved' | string
+
+export interface AssignmentTeacherOption {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  teacher_id: string
+}
+
+export interface ClassTeacherAssignment {
+  teacher_id: string
+  teacher_name: string
+  subject: string
+}
+
+export interface ClassTeacherRequest {
+  id: string
+  status: ClassTeacherRequestStatus
+  standard: string
+  division: string
+  assignments: ClassTeacherAssignment[]
+}
+
+export interface ClassTeacherAssignmentInput {
+  teacher_id: string
+  subject: string
+}
+
+/** Mirrors frontend/src/data/classTeacherSubjects.ts in the web app. The
+ * backend validates this canonical list; it is not an ad-hoc mobile catalog. */
+export const classTeacherAssignmentSubjects = [
+  'English Language', 'English Literature', 'Hindi', 'Marathi', 'Sanskrit',
+  'Mathematics', 'Algebra', 'Geometry', 'Trigonometry', 'Statistics', 'Physics',
+  'Chemistry', 'Biology', 'General Science', 'Environmental Science', 'Social Studies',
+  'History', 'Geography', 'Civics', 'Economics', 'Computer Science', 'Information Technology',
+  'Coding', 'Robotics', 'Art', 'Music', 'Dance', 'Physical Education', 'Health Education',
+  'Moral Science', 'Value Education', 'General Knowledge', 'Life Skills', 'Reading', 'Writing',
+  'Grammar', 'Spelling', 'Science Lab', 'Math Lab', 'Library', 'Drawing', 'Craft', 'Drama',
+  'Public Speaking', 'Debate', 'French', 'German', 'Spanish', 'Sports', 'Yoga',
+] as const
+
 export interface ClassSection {
   id: string
   standard: string
@@ -120,6 +165,21 @@ export interface ClassValidationReport {
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const classTeacherApi = {
+  async getAssignmentTeachers() {
+    const response = await apiClient.get<AssignmentTeacherOption[]>('/class-teacher/teachers')
+    return response.data
+  },
+
+  async getMyRequests() {
+    const response = await apiClient.get<ClassTeacherRequest[]>('/class-teacher/requests/me')
+    return response.data
+  },
+
+  async createRequest(assignments: ClassTeacherAssignmentInput[]) {
+    const response = await apiClient.post<ClassTeacherRequest>('/class-teacher/requests', { assignments })
+    return response.data
+  },
+
   async getMyClasses() {
     const response = await apiClient.get<ClassSection[]>('/class-teacher/classes/me')
     return response.data

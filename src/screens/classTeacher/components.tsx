@@ -75,6 +75,7 @@ function ContextChip({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; la
 
 const FAILURE_TITLES: Record<ApiFailure['kind'], string> = {
   offline: 'You are offline',
+  timeout: 'Still waiting for the server',
   session_expired: 'Session expired',
   not_authorized: 'Not your class',
   not_found: 'No longer available',

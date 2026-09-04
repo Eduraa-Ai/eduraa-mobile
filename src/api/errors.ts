@@ -5,6 +5,7 @@
 
 export type ApiFailureKind =
   | 'offline'
+  | 'timeout'
   | 'session_expired'
   | 'not_authorized'
   | 'not_found'
@@ -23,6 +24,7 @@ export interface ApiFailure {
 
 const FAILURE_COPY: Record<ApiFailureKind, string> = {
   offline: 'You appear to be offline. Reconnect and try again — nothing was sent.',
+  timeout: 'The server took too long to respond. Reload to check whether your change was saved before trying again.',
   session_expired: 'Your session expired. Sign in again to continue.',
   not_authorized: 'Your account is not authorized for this.',
   not_found: 'This no longer exists.',
@@ -45,8 +47,9 @@ export function toApiFailure(error: unknown): ApiFailure {
   const detail = typeof rawDetail === 'string' && rawDetail.trim() ? rawDetail.trim() : undefined
 
   if (!axiosError?.response) {
-    const isNetwork = Boolean(axiosError?.request) || axiosError?.code === 'ERR_NETWORK' || axiosError?.code === 'ECONNABORTED'
-    const kind: ApiFailureKind = isNetwork ? 'offline' : 'unknown'
+    const isTimeout = axiosError?.code === 'ECONNABORTED' || axiosError?.code === 'ETIMEDOUT'
+    const isNetwork = Boolean(axiosError?.request) || axiosError?.code === 'ERR_NETWORK'
+    const kind: ApiFailureKind = isTimeout ? 'timeout' : isNetwork ? 'offline' : 'unknown'
     return { kind, detail, message: detail ?? FAILURE_COPY[kind] }
   }
 

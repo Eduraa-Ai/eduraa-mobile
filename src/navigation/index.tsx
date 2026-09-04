@@ -53,6 +53,7 @@ import ExamsScreen from '../screens/workspace/ExamsScreen'
 import AnnouncementsScreen from '../screens/workspace/AnnouncementsScreen'
 import DoubtsScreen from '../screens/workspace/DoubtsScreen'
 import ClassTeacherOverviewScreen from '../screens/classTeacher/ClassTeacherOverviewScreen';
+import ClassTeacherAssignmentsScreen from '../screens/classTeacher/ClassTeacherAssignmentsScreen';
 import ClassRosterScreen from '../screens/classTeacher/ClassRosterScreen';
 import ClassSubjectsScreen from '../screens/classTeacher/ClassSubjectsScreen';
 import SubjectEnrollmentScreen from '../screens/classTeacher/SubjectEnrollmentScreen';
@@ -130,6 +131,7 @@ export type StaffWorkspaceStackParamList = {
   StaffWorkspace: undefined;
   Dashboard: undefined;
   ClassTeacherOverview: undefined;
+  ClassTeacherAssignments: undefined;
   ClassRoster: undefined;
   ClassSubjects: undefined;
   SubjectEnrollment: { subjectId: string; subjectName: string };
@@ -457,6 +459,11 @@ function StaffWorkspaceNavigator() {
         name="ClassTeacherOverview"
         component={ClassTeacherOverviewScreen}
         options={{ title: "My class" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="ClassTeacherAssignments"
+        component={ClassTeacherAssignmentsScreen}
+        options={{ title: "Teacher assignments" }}
       />
       <StaffWorkspaceStack.Screen
         name="ClassRoster"
