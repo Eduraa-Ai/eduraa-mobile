@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -283,38 +284,54 @@ function AttachmentList({
   onRemove?: (index: number) => void
   onError?: (message: string) => void
 }) {
+  const [previewing, setPreviewing] = useState<DoubtAttachmentInput | DoubtAttachment | null>(null)
   if (!attachments.length) return null
+  const previewUri = previewing && ('url' in previewing ? previewing.url : previewing.preview_uri)
+  const previewIsRemote = Boolean(previewing && 'url' in previewing)
   return (
-    <View style={styles.attachmentList}>
-      {attachments.map((attachment, index) => {
+    <>
+      <View style={styles.attachmentList}>
+        {attachments.map((attachment, index) => {
         const readableSize = 'file_size' in attachment ? formatFileSize(attachment.file_size ?? 0) : ''
         const isImage = attachment.content_type.startsWith('image/')
         const remoteUrl = 'url' in attachment ? attachment.url : null
         const previewUri = 'preview_uri' in attachment ? attachment.preview_uri : null
+        const canPreview = isImage ? Boolean(remoteUrl || previewUri) : Boolean(remoteUrl)
+        const preview = () => {
+          if (isImage && (remoteUrl || previewUri)) {
+            setPreviewing(attachment)
+            return
+          }
+          if (remoteUrl) {
+            void openProtectedDocument(remoteUrl, attachment.file_name, attachment.content_type)
+              .catch(() => onError?.('This attachment could not be previewed. Try again.'))
+          }
+        }
         return (
           <View key={`${attachment.file_name}-${index}`} style={[styles.attachmentItem, mine && styles.attachmentItemMine]}>
             {remoteUrl && isImage ? (
-              <AuthenticatedImage
-                uri={remoteUrl}
-                accessibilityLabel={attachment.file_name}
-                containerStyle={styles.attachmentPreview}
-                imageStyle={styles.attachmentImage}
-              />
+              <Pressable accessibilityRole="button" accessibilityLabel={`Preview ${attachment.file_name}`} onPress={preview}>
+                <AuthenticatedImage
+                  uri={remoteUrl}
+                  accessibilityLabel={attachment.file_name}
+                  containerStyle={styles.attachmentPreview}
+                  imageStyle={styles.attachmentImage}
+                />
+              </Pressable>
             ) : previewUri && isImage ? (
-              <Image source={{ uri: previewUri }} accessibilityLabel={attachment.file_name} resizeMode="cover" style={[styles.attachmentPreview, styles.attachmentImage]} />
+              <Pressable style={styles.attachmentPreview} accessibilityRole="button" accessibilityLabel={`Preview ${attachment.file_name}`} onPress={preview}>
+                <Image source={{ uri: previewUri }} accessibilityLabel={attachment.file_name} resizeMode="cover" style={styles.attachmentImage} />
+              </Pressable>
             ) : (
               <View style={[styles.attachmentIcon, mine && styles.attachmentIconMine]}>
                 <Ionicons name={isImage ? 'image-outline' : 'document-attach-outline'} size={17} color={mine ? colors.white : colors.accent} />
               </View>
             )}
             <Pressable
-              disabled={!remoteUrl}
-              onPress={() => remoteUrl
-                ? void openProtectedDocument(remoteUrl, attachment.file_name, attachment.content_type)
-                  .catch(() => onError?.('This attachment could not be opened. Try downloading it again.'))
-                : undefined}
-              accessibilityRole={remoteUrl ? 'button' : undefined}
-              accessibilityLabel={remoteUrl ? `Open ${attachment.file_name}` : attachment.file_name}
+              disabled={!canPreview}
+              onPress={preview}
+              accessibilityRole={canPreview ? 'button' : undefined}
+              accessibilityLabel={canPreview ? `Preview ${attachment.file_name}` : attachment.file_name}
               style={styles.attachmentCopy}
             >
               <Text style={[styles.attachmentName, mine && styles.attachmentNameMine]} numberOfLines={1}>{attachment.file_name}</Text>
@@ -341,8 +358,42 @@ function AttachmentList({
             ) : null}
           </View>
         )
-      })}
-    </View>
+        })}
+      </View>
+      <Modal
+        animationType="fade"
+        transparent
+        visible={Boolean(previewing && previewUri)}
+        onRequestClose={() => setPreviewing(null)}
+      >
+        <View style={styles.mediaPreviewBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Close attachment preview" onPress={() => setPreviewing(null)} />
+          <View style={styles.mediaPreviewSheet}>
+            <View style={styles.mediaPreviewHeader}>
+              <Text style={styles.mediaPreviewTitle} numberOfLines={1}>{previewing?.file_name}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close attachment preview" onPress={() => setPreviewing(null)} hitSlop={8}>
+                <Ionicons name="close" size={24} color={colors.white} />
+              </Pressable>
+            </View>
+            {previewIsRemote ? (
+              <AuthenticatedImage
+                uri={previewUri as string}
+                accessibilityLabel={previewing?.file_name ?? 'Attachment preview'}
+                containerStyle={styles.mediaPreviewImage}
+                imageStyle={styles.mediaPreviewImage}
+              />
+            ) : (
+              <Image
+                source={{ uri: previewUri as string }}
+                accessibilityLabel={previewing?.file_name ?? 'Attachment preview'}
+                resizeMode="contain"
+                style={styles.mediaPreviewImage}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+    </>
   )
 }
 
@@ -669,7 +720,11 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
     queryKey: ['doubt-detail', user?.id, id],
     queryFn: () => doubtsApi.detail(id),
     refetchOnWindowFocus: 'always',
-    staleTime: 30_000,
+    // This keeps an open conversation synchronized like chat without any
+    // manual refresh. It stops automatically while the screen is inactive.
+    refetchInterval: netInfo.isConnected === false ? false : 2_000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
   })
 
   useEffect(() => {
@@ -889,7 +944,10 @@ export default function DoubtsScreen() {
     queryKey: ['doubts', user?.id],
     queryFn: doubtsApi.list,
     refetchOnWindowFocus: 'always',
-    staleTime: 30_000,
+    // Keep the teacher queue and student inbox in sync while this screen is open.
+    refetchInterval: netInfo.isConnected === false ? false : 2_000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
   })
 
   useEffect(() => {
@@ -1168,6 +1226,11 @@ const styles = StyleSheet.create({
   attachmentAction: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   attachmentPreview: { width: 52, height: 52, overflow: 'hidden', borderRadius: radius.xs, backgroundColor: colors.backgroundMuted },
   attachmentImage: { width: '100%', height: '100%' },
+  mediaPreviewBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing[5], backgroundColor: 'rgba(7, 21, 45, 0.92)' },
+  mediaPreviewSheet: { width: '100%', maxWidth: 720, maxHeight: '88%', overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.nav },
+  mediaPreviewHeader: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], paddingHorizontal: spacing[4] },
+  mediaPreviewTitle: { flex: 1, color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  mediaPreviewImage: { width: '100%', height: 420, maxHeight: '78%' },
   primaryButton: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, backgroundColor: colors.nav, ...shadows.sm },
   primaryButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   buttonDisabled: { opacity: 0.46 },
