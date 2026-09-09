@@ -103,6 +103,27 @@ test('attendance API carries optimistic concurrency and correction contracts', (
   assert.match(api, /attendance\/leaves/)
 })
 
+test('attendance ownership is limited to institution heads and correction failures are not rendered as empty', () => {
+  const fs = require('node:fs')
+  const screen = fs.readFileSync('src/screens/workspace/AttendanceScreen.tsx', 'utf8')
+  const workspaceApi = fs.readFileSync('src/api/workspace.ts', 'utf8')
+  const controls = fs.readFileSync('src/data/mobileControlCatalog.ts', 'utf8')
+  assert.match(screen, /return role === 'principal' \|\| role === 'school_super_admin'/)
+  assert.match(screen, /correctionsQuery\.isError \? \(/)
+  assert.match(screen, /title="Corrections unavailable"/)
+  assert.match(workspaceApi, /role === 'principal' \|\| role === 'school_super_admin'/)
+  assert.doesNotMatch(controls, /roles: \['student', 'teacher', 'principal', 'school_super_admin', 'branch_admin', 'admin', 'developer'\]/)
+})
+
+test('submitted teacher attendance remains editable while locked attendance does not', () => {
+  const fs = require('node:fs')
+  const screen = fs.readFileSync('src/screens/workspace/AttendanceScreen.tsx', 'utf8')
+  assert.match(screen, /editable=\{!locked && !Boolean\(busyKey\)\}/)
+  assert.match(screen, /sheet\.status === 'submitted' \? 'Save corrections' : 'Save draft'/)
+  assert.match(screen, /disabled=\{locked \|\| Boolean\(busyKey\)\}/)
+  assert.match(screen, /You can still save corrections if needed\./)
+})
+
 test('teacher leave decisions use an in-app confirmation that works on web', () => {
   const fs = require('node:fs')
   const screen = fs.readFileSync('src/screens/workspace/AttendanceScreen.tsx', 'utf8')

@@ -13,6 +13,8 @@
     "ios": "node scripts/start-web.cjs --ios",
     "web": "node scripts/start-web.cjs --web",
     "web:remote": "node scripts/start-web.cjs --web",
+    "attendance:preview": "node scripts/start-attendance-preview.cjs",
+    "attendance:capture": "node scripts/capture-attendance.mjs",
     "api-bridge": "node scripts/dev-api-bridge.cjs",
     "check:deps": "expo install --check",
     "audit:critical": "node scripts/audit-critical.cjs",

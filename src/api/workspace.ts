@@ -54,7 +54,10 @@ export const workspaceApi = {
             read('Correction requests', '/attendance/corrections'),
           ])
         }
-        return Promise.all([read('Leadership summary', '/attendance/dashboard/leadership'), read('Correction requests', '/attendance/corrections')])
+        if (role === 'principal' || role === 'school_super_admin') {
+          return Promise.all([read('Leadership summary', '/attendance/dashboard/leadership'), read('Correction requests', '/attendance/corrections')])
+        }
+        return Promise.all([read('Attendance access', '/auth/session')])
       case 'exams':
         return Promise.all([read('Exams', '/exams')])
       case 'scan-upload':

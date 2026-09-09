@@ -382,12 +382,23 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ busy: profileQuery.isRefetching }}
-          disabled={profileQuery.isRefetching}
+          disabled={profileQuery.isRefetching || signingOut}
           onPress={() => void profileQuery.refetch()}
           style={({ pressed }) => [styles.retryButton, pressed && styles.pressedFirm, profileQuery.isRefetching && styles.buttonBusy]}
         >
           {profileQuery.isRefetching ? <ActivityIndicator color="#ffffff" size="small" /> : <Ionicons name="refresh" size={18} color="#ffffff" />}
           <Text style={styles.retryButtonText}>{profileQuery.isRefetching ? 'Trying again…' : 'Try again'}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel="Sign out of this device"
+          accessibilityRole="button"
+          accessibilityState={{ busy: signingOut, disabled: signingOut }}
+          disabled={signingOut}
+          onPress={confirmSignOut}
+          style={({ pressed }) => [styles.loadStateSignOut, pressed && styles.pressedSoft, signingOut && styles.buttonBusy]}
+        >
+          {signingOut ? <ActivityIndicator color={RUST} size="small" /> : <Ionicons name="log-out-outline" size={18} color={RUST} />}
+          <Text style={styles.loadStateSignOutText}>{signingOut ? 'Signing out…' : 'Sign out'}</Text>
         </Pressable>
       </View>
     )
@@ -1103,6 +1114,21 @@ const styles = StyleSheet.create({
     backgroundColor: NAVY,
   },
   retryButtonText: { color: '#ffffff', fontFamily: typography.fonts.bodyBold, fontSize: 12 },
+  loadStateSignOut: {
+    minHeight: 48,
+    minWidth: 164,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 20,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: LINE,
+    backgroundColor: '#ffffff',
+  },
+  loadStateSignOutText: { color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1, backgroundColor: CREAM },
 

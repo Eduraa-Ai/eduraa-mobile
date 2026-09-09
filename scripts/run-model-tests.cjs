@@ -178,6 +178,10 @@ const suites = [
     env: {},
   },
   {
+    file: 'scripts/synthetic-auth.test.cjs',
+    env: {},
+  },
+  {
     file: 'scripts/previous-papers-access.test.cjs',
     env: { LANDING_MODEL_PATH: path.join(outDir, 'auth/landing.js') },
   },
@@ -195,6 +199,10 @@ const suites = [
   },
   {
     file: 'scripts/b2b-profile-integration-contract.test.cjs',
+    env: {},
+  },
+  {
+    file: 'scripts/profile-error-recovery-contract.test.cjs',
     env: {},
   },
   {

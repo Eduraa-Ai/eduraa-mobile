@@ -224,7 +224,7 @@ function isStudentRole(role?: Role) {
 }
 
 function isLeadershipRole(role?: Role) {
-  return role === 'principal' || role === 'school_super_admin' || role === 'branch_admin' || role === 'admin' || role === 'developer'
+  return role === 'principal' || role === 'school_super_admin'
 }
 
 function MetricStrip({ items }: { items: Array<{ value: ReactNode; label: string; tone?: string }> }) {
@@ -1101,7 +1101,7 @@ function TeacherAttendance() {
         <TextInputField
           label="Class remark (optional)"
           value={classNote}
-          editable={!locked && sheet.status !== 'submitted' && !Boolean(busyKey)}
+          editable={!locked && !Boolean(busyKey)}
           onChangeText={setClassNote}
           placeholder={sheet.class_note || 'Example: Assembly delayed first period'}
           multiline
@@ -1111,7 +1111,7 @@ function TeacherAttendance() {
           <AnimatedButton
             label="Mark all present"
             loading={busyKey === 'mark-all'}
-            disabled={Boolean(busyKey) || locked || sheet.status === 'submitted' || netInfo.isConnected === false || sheet.records.length === 0}
+            disabled={Boolean(busyKey) || locked || netInfo.isConnected === false || sheet.records.length === 0}
             onPress={() => Alert.alert('Mark everyone present?', 'This saves Present for the full roster immediately and replaces any unsaved local attendance changes.', [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Mark all', onPress: () => sheetMutation.mutate({
@@ -1128,10 +1128,10 @@ function TeacherAttendance() {
             style={styles.actionButton}
           />
           <AnimatedButton
-            label={dirty ? 'Save draft' : 'Draft saved'}
+            label={dirty ? sheet.status === 'submitted' ? 'Save corrections' : 'Save draft' : sheet.status === 'submitted' ? 'Corrections saved' : 'Draft saved'}
             variant="secondary"
             loading={busyKey === 'save'}
-            disabled={Boolean(busyKey) || locked || sheet.status === 'submitted' || !dirty || netInfo.isConnected === false}
+            disabled={Boolean(busyKey) || locked || !dirty || netInfo.isConnected === false}
             onPress={saveDraft}
             style={styles.actionButton}
           />
@@ -1141,7 +1141,7 @@ function TeacherAttendance() {
 
       <View style={styles.workflowSection}>
         <WorkflowStepHeader number={3} title="Review the roster" subtitle={locked ? 'This sheet is locked and read-only.' : 'Mark only exceptions and add context where it helps.'} />
-        <SectionHeader title="Class roster" subtitle={locked ? 'Submitted sheets are read-only.' : 'Find a student, mark status, and add context only when useful.'} count={visibleRecords.length} />
+        <SectionHeader title="Class roster" subtitle={locked ? 'Locked sheets are read-only.' : 'Find a student, mark status, and add context only when useful.'} count={visibleRecords.length} />
         <SelectField
           label="Student"
           value={selectedStudentId}
@@ -1209,7 +1209,7 @@ function TeacherAttendance() {
               <AttendanceRecordCard
                 key={record.id}
                 record={record}
-                disabled={locked || sheet.status === 'submitted' || Boolean(busyKey)}
+                disabled={locked || Boolean(busyKey)}
                 busy={false}
                 onStatus={(status) => updateRecord(record, { status })}
                 onNote={(note) => updateRecord(record, { note })}
@@ -1250,7 +1250,7 @@ function TeacherAttendance() {
             disabled={Boolean(busyKey) || locked || sheet.status === 'submitted' || netInfo.isConnected === false || sheet.records.length === 0}
             onPress={() => sheetMutation.mutate({ key: 'submit', run: async () => {
               const result = await attendanceApi.submitSheet(sheet.id, sheet.revision, classNote.trim() || null, pendingRecords)
-              setTerminalMessage(`Submitted ${result.standard} ${result.division} for ${formatDate(result.attendance_date)}. Leadership can reopen it if a correction is needed.`)
+              setTerminalMessage(`Submitted ${result.standard} ${result.division} for ${formatDate(result.attendance_date)}. You can still save corrections if needed.`)
               return result
             } })}
           />
@@ -1445,17 +1445,25 @@ function LeadershipAttendance() {
         <Text style={styles.snapshotText}>{summary.total_students} students · {summary.present_count} present · {summary.absent_count} absent · {summary.late_count + summary.half_day_count} late or half-day</Text>
       </View>
 
-      <CorrectionsList
-        corrections={correctionsQuery.data ?? []}
-        canResolve
-        busyKey={busyKey}
-        onResolve={(item, status, resolutionNote) => {
-          Alert.alert(`${status === 'approved' ? 'Approve' : 'Reject'} correction?`, item.reason, [
-            { text: 'Cancel', style: 'cancel' },
-            { text: status === 'approved' ? 'Approve' : 'Reject', onPress: () => resolveMutation.mutate({ key: `${status === 'approved' ? 'approve' : 'reject'}-${item.id}`, id: item.id, status, resolutionNote }) },
-          ])
-        }}
-      />
+      {correctionsQuery.isError ? (
+        <ErrorState
+          title="Corrections unavailable"
+          message={extractDetail(correctionsQuery.error, 'We could not load correction requests. Refresh to review them before making attendance changes.')}
+          onAction={() => void correctionsQuery.refetch()}
+        />
+      ) : (
+        <CorrectionsList
+          corrections={correctionsQuery.data ?? []}
+          canResolve
+          busyKey={busyKey}
+          onResolve={(item, status, resolutionNote) => {
+            Alert.alert(`${status === 'approved' ? 'Approve' : 'Reject'} correction?`, item.reason, [
+              { text: 'Cancel', style: 'cancel' },
+              { text: status === 'approved' ? 'Approve' : 'Reject', onPress: () => resolveMutation.mutate({ key: `${status === 'approved' ? 'approve' : 'reject'}-${item.id}`, id: item.id, status, resolutionNote }) },
+            ])
+          }}
+        />
+      )}
 
       <View style={styles.section}>
         <SectionHeader title="Class queue" subtitle="Find any class, then inspect its sheet and exceptions." count={queueItems.length} />
