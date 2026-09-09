@@ -3,7 +3,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-const appUrl = 'http://localhost:8082'
+const appUrl = process.env.ATTENDANCE_APP_URL || 'http://localhost:8082'
+const mockApiUrl = process.env.ATTENDANCE_MOCK_API_URL || 'http://127.0.0.1:8000'
 const outputDir = path.resolve('test-artifacts/attendance')
 const debuggingPort = 9339
 const profileDir = await fs.mkdtemp(path.join(os.tmpdir(), 'eduraa-attendance-edge-'))
@@ -81,7 +82,13 @@ async function clickText(session, text) {
     if(matches.length){matches[0].scrollIntoView({block:'center'});matches[0].click();return 1;}
     return 0;
   })()`)
-  if (count !== 1) throw new Error(`Expected one button containing ${text}; found ${count}.`)
+  if (count !== 1) {
+    const matchingNodes = await evaluate(session, `(() => [...document.querySelectorAll('*')]
+      .filter((item) => (item.innerText || item.textContent || '').trim().replace(/\\s+/g, ' ') === ${JSON.stringify(text)})
+      .slice(0, 8)
+      .map((item) => ({ tag: item.tagName, role: item.getAttribute('role'), tabIndex: item.getAttribute('tabindex'), ariaDisabled: item.getAttribute('aria-disabled'), text: (item.innerText || item.textContent || '').trim() })))()`)
+    throw new Error(`Expected one button containing ${text}; found ${count}. Matching nodes: ${JSON.stringify(matchingNodes)}`)
+  }
   await sleep(500)
 }
 
@@ -109,7 +116,18 @@ async function capture(session, name) {
 }
 
 async function login(session, identifier) {
-  await waitForText(session, 'Welcome back')
+  let lastError
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await waitForText(session, 'Welcome back', 10000)
+      break
+    } catch (error) {
+      lastError = error
+      if (attempt === 2) throw lastError
+      await session.call('Page.navigate', { url: `${appUrl}?journeyRetry=${attempt + 1}` })
+      await sleep(750)
+    }
+  }
   await fill(session, 'Email or student ID', identifier)
   await fill(session, 'Password', 'Synthetic123!')
   await clickText(session, 'Continue')
@@ -118,7 +136,7 @@ async function login(session, identifier) {
 }
 
 async function setAttendanceMode(mode) {
-  const response = await fetch('http://127.0.0.1:8000/__test__/attendance-mode', {
+  const response = await fetch(`${mockApiUrl}/__test__/attendance-mode`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ mode }),
@@ -127,9 +145,26 @@ async function setAttendanceMode(mode) {
 }
 
 async function resetForRole(session, width = 390, height = 844) {
-  await session.call('Storage.clearDataForOrigin', { origin: appUrl, storageTypes: 'all' })
+  await session.call('Page.navigate', { url: 'about:blank' })
+  await sleep(250)
+  await session.call('Storage.clearDataForOrigin', { origin: appUrl, storageTypes: 'local_storage,indexeddb,session_storage' })
   await viewport(session, width, height)
   await session.call('Page.navigate', { url: appUrl })
+}
+
+async function resetAndLogin(session, identifier, readyText, width = 390, height = 844) {
+  let lastError
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await resetForRole(session, width, height)
+      await login(session, identifier)
+      await waitForText(session, readyText)
+      return
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
 }
 
 await fs.mkdir(outputDir, { recursive: true })
@@ -146,7 +181,7 @@ try {
   await viewport(session, 390, 844)
   await session.call('Page.navigate', { url: appUrl })
   await login(session, 'attendance-teacher@example.test')
-  await waitForText(session, 'Submit final attendance')
+  await waitForText(session, 'Submit attendance')
   await capture(session, 'teacher-initial-390x844.png')
 
   await clickText(session, 'Absent')
@@ -160,16 +195,14 @@ try {
   await capture(session, 'teacher-roster-320x700.png')
 
   await setAttendanceMode('conflict')
-  await resetForRole(session)
-  await login(session, 'attendance-teacher@example.test')
+  await resetAndLogin(session, 'attendance-teacher@example.test', 'Submit attendance')
   await clickText(session, 'Absent')
   await clickText(session, 'Save draft')
   await waitForText(session, 'A newer roster is available')
   await capture(session, 'teacher-conflict-390x844.png')
 
   await setAttendanceMode('ready')
-  await resetForRole(session)
-  await login(session, 'attendance-teacher@example.test')
+  await resetAndLogin(session, 'attendance-teacher@example.test', 'Submit attendance')
   await session.call('Network.enable')
   await session.call('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 })
   await clickText(session, 'Absent')
@@ -181,29 +214,26 @@ try {
   await session.call('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 })
 
   await setAttendanceMode('submitted')
-  await resetForRole(session)
-  await login(session, 'attendance-teacher@example.test')
-  await waitForText(session, 'Attendance submitted')
+  await resetAndLogin(session, 'attendance-teacher@example.test', 'Attendance submitted')
   await capture(session, 'teacher-submitted-390x844.png')
+  await clickText(session, 'Absent')
+  await waitForText(session, 'Save corrections')
+  await clickText(session, 'Save corrections')
+  await waitForText(session, 'Corrections saved')
+  await capture(session, 'teacher-submitted-corrected-390x844.png')
 
   await setAttendanceMode('empty')
-  await resetForRole(session, 320, 700)
-  await login(session, 'attendance-teacher@example.test')
-  await waitForText(session, 'No students are enrolled')
+  await resetAndLogin(session, 'attendance-teacher@example.test', 'No students are enrolled', 320, 700)
   await evaluate(session, `(() => { const scrollable=[...document.querySelectorAll('*')].filter((item)=>item.scrollHeight>item.clientHeight+80).sort((a,b)=>b.scrollHeight-b.clientHeight-a.scrollHeight+a.clientHeight)[0]; if(scrollable)scrollable.scrollTop=560; })()`)
   await sleep(400)
   await capture(session, 'teacher-empty-320x700.png')
 
   await setAttendanceMode('error')
-  await resetForRole(session)
-  await login(session, 'attendance-teacher@example.test')
-  await waitForText(session, 'Attendance unavailable')
+  await resetAndLogin(session, 'attendance-teacher@example.test', 'Attendance unavailable')
   await capture(session, 'teacher-error-390x844.png')
 
   await setAttendanceMode('ready')
-  await resetForRole(session)
-  await login(session, 'attendance-student@example.test')
-  await waitForText(session, 'Recent history')
+  await resetAndLogin(session, 'attendance-student@example.test', 'Attendance history')
   await capture(session, 'student-summary-390x844.png')
   await viewport(session, 320, 700)
   await capture(session, 'student-summary-320x700.png')
@@ -218,9 +248,24 @@ try {
   await waitForText(session, 'Correction Pending')
   await capture(session, 'student-correction-pending-390x844.png')
 
-  await resetForRole(session)
-  await login(session, 'attendance-leader@example.test')
-  await waitForText(session, 'classes submitted')
+  await clickText(session, 'Request leave')
+  await fill(session, 'Briefly explain your absence', 'Medical appointment during the school day.')
+  await clickText(session, 'Send request')
+  await waitForText(session, 'Medical appointment during the school day.')
+  await capture(session, 'student-leave-pending-390x844.png')
+
+  await resetAndLogin(session, 'attendance-teacher@example.test', 'Submit attendance')
+  await evaluate(session, `(() => { const scrollable=[...document.querySelectorAll('*')].filter((item)=>item.scrollHeight>item.clientHeight+80).sort((a,b)=>b.scrollHeight-b.clientHeight-a.scrollHeight+a.clientHeight)[0]; if(scrollable)scrollable.scrollTop=9999; })()`)
+  await sleep(600)
+  await waitForText(session, 'Leave requests')
+  await clickText(session, 'Approve')
+  await waitForText(session, 'Approve this leave request?')
+  await waitForText(session, 'Approve request')
+  await clickText(session, 'Approve request')
+  await waitForText(session, 'Decision history')
+  await capture(session, 'teacher-leave-approved-390x844.png')
+
+  await resetAndLogin(session, 'attendance-leader@example.test', 'classes submitted')
   await capture(session, 'leadership-summary-390x844.png')
   await viewport(session, 320, 700)
   await capture(session, 'leadership-summary-320x700.png')
@@ -228,13 +273,11 @@ try {
   await evaluate(session, `(() => { const scrollable=[...document.querySelectorAll('*')].filter((item)=>item.scrollHeight>item.clientHeight+80).sort((a,b)=>b.scrollHeight-b.clientHeight-a.scrollHeight+a.clientHeight)[0]; if(scrollable)scrollable.scrollTop=820; })()`)
   await sleep(500)
   await capture(session, 'leadership-actions-390x844.png')
-  await fetch('http://127.0.0.1:8000/api/v1/attendance/corrections/a8000000-0000-4000-8000-000000000001/resolve', {
+  await fetch(`${mockApiUrl}/api/v1/attendance/corrections/a8000000-0000-4000-8000-000000000001/resolve`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ status: 'approved', resolution_note: 'Reviewed against the teacher register.' }),
   })
-  await resetForRole(session)
-  await login(session, 'attendance-leader@example.test')
-  await waitForText(session, 'student / approved')
+  await resetAndLogin(session, 'attendance-leader@example.test', 'student / approved')
   await evaluate(session, `(() => { const scrollable=[...document.querySelectorAll('*')].filter((item)=>item.scrollHeight>item.clientHeight+80).sort((a,b)=>b.scrollHeight-b.clientHeight-a.scrollHeight+a.clientHeight)[0]; if(scrollable)scrollable.scrollTop=680; })()`)
   await sleep(800)
   await capture(session, 'leadership-correction-approved-390x844.png')
@@ -243,7 +286,7 @@ try {
   await evaluate(session, `(() => { const scrollable=[...document.querySelectorAll('*')].filter((item)=>item.scrollHeight>item.clientHeight+80).sort((a,b)=>b.scrollHeight-b.clientHeight-a.scrollHeight+a.clientHeight)[0]; if(scrollable)scrollable.scrollTop=1600; })()`)
   await sleep(500)
   await capture(session, 'leadership-reopen-390x844.png')
-  await fill(session, 'Explain what needs correction', 'Teacher confirmed an incorrect absence.')
+  await fill(session, 'Why should the teacher resubmit this sheet?', 'Teacher confirmed an incorrect absence.')
   await clickText(session, 'Reopen for correction')
   await waitForText(session, 'Reopened 10 A')
   await capture(session, 'leadership-reopened-390x844.png')

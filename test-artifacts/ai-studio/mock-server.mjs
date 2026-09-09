@@ -1,4 +1,5 @@
 import http from 'node:http'
+import { authenticateFixture, createFixtureSessions } from './auth-fixtures.mjs'
 
 const PORT = Number(process.env.MOCK_PORT || 8000)
 const SEED = 'studio-row-20260718'
@@ -66,7 +67,7 @@ let paperDetailMode = 'checking'
 let paperDetailDeleted = false
 let questionVisualMode = 'ready'
 let examWorkspaceMode = 'ready'
-let syntheticRole = 'b2c_student'
+const authSessions = createFixtureSessions()
 let schoolPreviousPapersMode = 'ready'
 let scanUploadMode = 'ready'
 let attendanceMode = 'ready'
@@ -74,6 +75,7 @@ let attendanceRevision = 7
 let studentAttendanceCorrection = null
 let leaderAttendanceCorrectionStatus = 'pending'
 let attendanceReopened = false
+let attendanceLeaves = []
 let announcementsMode = 'ready'
 let studentProfileMode = 'ready'
 const announcementClasses = [
@@ -752,6 +754,8 @@ const server = http.createServer(async (request, response) => {
 
     const url = new URL(request.url, `http://${request.headers.host}`)
     const path = url.pathname
+    const requestAccount = authSessions.accountForAuthorization(request.headers.authorization)
+    const requestRole = requestAccount?.role || null
 
     if (request.method === 'POST' && path === '/__test__/attendance-mode') {
         const payload = await readBody(request)
@@ -817,39 +821,43 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'POST' && path === '/api/v1/auth/login') {
         const payload = await readBody(request)
-        const attendanceTeacherJourney = String(payload.identifier || payload.email || '').includes('attendance-teacher')
-        const attendanceStudentJourney = String(payload.identifier || payload.email || '').includes('attendance-student')
-        const attendanceLeaderJourney = String(payload.identifier || payload.email || '').includes('attendance-leader')
-        const b2bExamJourney = String(payload.identifier || payload.email || '').includes('exam-b2b')
-        const schoolStudentJourney = String(payload.identifier || payload.email || '').includes('school-student')
-        const schoolTeacherJourney = String(payload.identifier || payload.email || '').includes('school-teacher')
-        const previousPapersJourney = String(payload.identifier || payload.email || '').includes('pr6')
-        const schoolRole = attendanceLeaderJourney ? 'principal' : (attendanceTeacherJourney || schoolTeacherJourney ? 'teacher' : (attendanceStudentJourney || b2bExamJourney || schoolStudentJourney ? 'student' : null))
-        syntheticRole = schoolRole || 'b2c_student'
+        const account = authenticateFixture(payload.identifier || payload.email, payload.password)
+        if (!account) return json(response, 401, { detail: 'Invalid synthetic credentials.' })
+        const tokens = authSessions.issue(account)
         json(response, 200, {
-            access_token: `synthetic-${SEED}`,
+            access_token: tokens.accessToken,
+            refresh_token: tokens.refreshToken,
             token_type: 'bearer',
-            user: {
-                id: b2bExamJourney
-                    ? '00000000-0000-4000-8000-000000000019'
-                    : '00000000-0000-4000-8000-000000000018',
-                display_name: 'Aarav Test',
-                identifier: `aarav.${SEED}@example.test`,
-                role: schoolRole || 'b2c_student',
-                profile_completed: true,
-                is_email_verified: true,
-                b2c_education_level: previousPapersJourney ? 'school' : 'competitive_exams',
-                b2c_target_exam: previousPapersJourney ? null : 'JEE Main + Advanced',
-                b2c_subjects: ['Physics', 'Mathematics', 'Chemistry'],
-                standard: schoolRole === 'student' ? '10' : undefined,
-                division: schoolRole === 'student' ? 'A' : undefined,
-            },
+            user: account,
         })
         return
     }
 
+    if (request.method === 'GET' && path === '/api/v1/auth/me') {
+        if (!requestAccount) return json(response, 401, { detail: 'Invalid or expired synthetic session.' })
+        return json(response, 200, requestAccount)
+    }
+
+    if (request.method === 'POST' && path === '/api/v1/auth/refresh') {
+        const payload = await readBody(request)
+        const refreshed = authSessions.refresh(payload.refresh_token)
+        if (!refreshed) return json(response, 401, { detail: 'Invalid or expired synthetic refresh token.' })
+        return json(response, 200, {
+            access_token: refreshed.accessToken,
+            refresh_token: refreshed.refreshToken,
+            token_type: 'bearer',
+            user: refreshed.account,
+        })
+    }
+
+    if (request.method === 'POST' && path === '/api/v1/auth/logout') {
+        const payload = await readBody(request)
+        authSessions.revoke({ authorization: request.headers.authorization, refreshToken: payload.refresh_token })
+        return json(response, 200, { status: 'logged_out' })
+    }
+
     if (request.method === 'GET' && path === '/api/v1/communication/teacher/classes') {
-        if (syntheticRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
+        if (requestRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
         json(response, 200, announcementClasses)
         return
     }
@@ -859,7 +867,7 @@ const server = http.createServer(async (request, response) => {
         if (announcementsMode === 'loading') await new Promise(resolve => setTimeout(resolve, 2200))
         const visible = announcementsMode === 'empty'
             ? []
-            : syntheticRole === 'teacher'
+            : requestRole === 'teacher'
                 ? announcements
                 : announcements.filter(item => item.publish_state === 'published' && item.archived_at == null)
         json(response, 200, { items: visible })
@@ -867,7 +875,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === 'POST' && path === '/api/v1/communication/announcements') {
-        if (syntheticRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
+        if (requestRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
         const payload = await readBody(request)
         const now = new Date().toISOString()
         const section = announcementClasses.find(item => item.id === payload.class_section_id)
@@ -888,7 +896,7 @@ const server = http.createServer(async (request, response) => {
     const announcementMatch = path.match(/^\/api\/v1\/communication\/announcements\/([^/]+)$/)
     if (announcementMatch && request.method === 'GET') {
         const item = announcements.find(entry => entry.id === announcementMatch[1])
-        const visible = item && (syntheticRole === 'teacher' || (item.publish_state === 'published' && item.archived_at == null))
+        const visible = item && (requestRole === 'teacher' || (item.publish_state === 'published' && item.archived_at == null))
         if (!visible || announcementsMode === 'deleted') return json(response, 404, { detail: 'Announcement not found.' })
         if (announcementsMode === 'forbidden') return json(response, 403, { detail: 'This announcement is not for your enrollment.' })
         json(response, 200, item)
@@ -896,7 +904,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (announcementMatch && request.method === 'PUT') {
-        if (syntheticRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
+        if (requestRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
         const index = announcements.findIndex(entry => entry.id === announcementMatch[1])
         if (index < 0) return json(response, 404, { detail: 'Announcement not found.' })
         const payload = await readBody(request)
@@ -970,7 +978,7 @@ const server = http.createServer(async (request, response) => {
             if (record) record.status = update.status
         }
         attendanceRevision += 1
-        json(response, 200, attendanceSheet())
+        json(response, 200, attendanceSheet(attendanceMode === 'submitted' ? 'submitted' : 'draft'))
         return
     }
 
@@ -995,7 +1003,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && path === '/api/v1/attendance/corrections') {
-        json(response, 200, syntheticRole === 'principal'
+        json(response, 200, requestRole === 'principal'
             ? [{ id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: attendanceRecords[3].id, student_id: attendanceRecords[3].student_id, requested_by_user_id: attendanceRecords[3].student_id, requested_by_role: 'student', reason: 'I was present after the school bus arrived late.', status: leaderAttendanceCorrectionStatus, resolved_by_user_id: leaderAttendanceCorrectionStatus === 'pending' ? null : 'leader', resolved_by_role: leaderAttendanceCorrectionStatus === 'pending' ? null : 'principal', resolved_at: leaderAttendanceCorrectionStatus === 'pending' ? null : '2026-08-19T17:10:00.000Z', resolution_note: leaderAttendanceCorrectionStatus === 'pending' ? null : 'Reviewed against the teacher register.' }]
             : studentAttendanceCorrection ? [studentAttendanceCorrection] : [])
         return
@@ -1010,7 +1018,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'POST' && path === '/api/v1/attendance/corrections') {
         const payload = await readBody(request)
-        studentAttendanceCorrection = { id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: payload.record_id, student_id: 'a2000000-0000-4000-8000-000000000001', requested_by_user_id: null, requested_by_role: syntheticRole, reason: payload.reason, status: 'pending', resolved_by_user_id: null, resolved_by_role: null, resolved_at: null, resolution_note: null }
+        studentAttendanceCorrection = { id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: payload.record_id, student_id: 'a2000000-0000-4000-8000-000000000001', requested_by_user_id: null, requested_by_role: requestRole, reason: payload.reason, status: 'pending', resolved_by_user_id: null, resolved_by_role: null, resolved_at: null, resolution_note: null }
         json(response, 200, studentAttendanceCorrection)
         return
     }
@@ -1389,6 +1397,77 @@ const server = http.createServer(async (request, response) => {
         return
     }
 
+    if (request.method === 'GET' && path === '/api/v1/attendance/students/me/history') {
+        json(response, 200, attendanceRecords.slice(0, 6).map((row, index) => ({
+            record_id: row.id,
+            attendance_date: `2026-08-${String(19 - index).padStart(2, '0')}`,
+            status: row.status,
+            note: row.note,
+            class_note: null,
+            standard: '10',
+            division: 'A',
+        })))
+        return
+    }
+
+    if (request.method === 'GET' && path === '/api/v1/attendance/leaves') {
+        const status = url.searchParams.get('status')
+        json(response, 200, status ? attendanceLeaves.filter((leave) => leave.status === status) : attendanceLeaves)
+        return
+    }
+
+    if (request.method === 'POST' && path === '/api/v1/attendance/leaves') {
+        const payload = await readBody(request)
+        const leave = {
+            id: `a9000000-0000-4000-8000-${String(attendanceLeaves.length + 1).padStart(12, '0')}`,
+            class_section_id: 'a7000000-0000-4000-8000-000000000001',
+            student_id: 'a2000000-0000-4000-8000-000000000001',
+            student_name: 'Aarav Jain',
+            student_code: 'ST-001',
+            standard: '10',
+            division: 'A',
+            start_date: payload.start_date,
+            end_date: payload.end_date,
+            reason: payload.reason,
+            status: 'pending',
+            requested_by_user_id: 'a2000000-0000-4000-8000-000000000001',
+            requested_by_role: 'student',
+            resolved_by_user_id: null,
+            resolved_by_role: null,
+            resolved_at: null,
+            resolution_note: null,
+            attachments: (payload.attachments || []).map((attachment, index) => ({
+                id: `aa000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+                file_name: attachment.file_name,
+                content_type: attachment.content_type,
+                file_size: Buffer.from(attachment.data_base64, 'base64').length,
+                url: `/api/v1/attendance/leaves/attachment-${index + 1}`,
+            })),
+            attachment: null,
+            created_at: '2026-08-19T17:20:00.000Z',
+        }
+        attendanceLeaves = [leave, ...attendanceLeaves]
+        json(response, 200, leave)
+        return
+    }
+
+    const leaveResolutionMatch = path.match(/^\/api\/v1\/attendance\/leaves\/([^/]+)\/resolve$/)
+    if (request.method === 'POST' && leaveResolutionMatch) {
+        const payload = await readBody(request)
+        const index = attendanceLeaves.findIndex((leave) => leave.id === leaveResolutionMatch[1])
+        if (index < 0) return json(response, 404, { detail: 'Leave request not found.' })
+        if (attendanceLeaves[index].status !== 'pending') return json(response, 409, { detail: 'This leave request has already been decided.' })
+        attendanceLeaves[index] = {
+            ...attendanceLeaves[index],
+            status: payload.status,
+            resolved_by_user_id: 'a3000000-0000-4000-8000-000000000001',
+            resolved_by_role: 'teacher',
+            resolved_at: '2026-08-19T17:25:00.000Z',
+            resolution_note: payload.resolution_note || null,
+        }
+        json(response, 200, attendanceLeaves[index])
+        return
+    }
     if (request.method === 'GET' && path === `/api/v1/papers/${GENERATED_PAPER_ID}/submission`) {
         json(response, 404, { detail: 'No synthetic submission yet.' })
         return
@@ -1627,7 +1706,7 @@ const server = http.createServer(async (request, response) => {
             })
             return
         }
-        if (syntheticRole === 'student' || syntheticRole === 'teacher') {
+        if (requestRole === 'student' || requestRole === 'teacher') {
             if (schoolPreviousPapersMode === 'loading') await new Promise(resolve => setTimeout(resolve, 2500))
             if (schoolPreviousPapersMode === 'error') {
                 json(response, 503, { detail: 'Structured school papers are temporarily unavailable.' })
@@ -1648,7 +1727,7 @@ const server = http.createServer(async (request, response) => {
                     total_marks: previousAttemptPaper.total_marks,
                     duration_minutes: previousAttemptPaper.duration_minutes,
                     status: 'published',
-                    is_submitted_by_me: syntheticRole === 'student',
+                    is_submitted_by_me: requestRole === 'student',
                     created_at: '2025-03-10T09:00:00.000Z',
                     question_count: previousAttemptPaper.questions.length,
                 },

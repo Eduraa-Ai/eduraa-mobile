@@ -114,7 +114,7 @@ export const mobileControls: MobileControl[] = [
     id: 'attendance',
     label: 'Attendance',
     webPath: '/attendance',
-    roles: ['student', 'teacher', 'principal', 'school_super_admin', 'branch_admin', 'admin', 'developer'],
+    roles: ['student', 'teacher', 'principal', 'school_super_admin'],
     description: 'Student attendance summaries, teacher marking, leadership dashboards, corrections, and exports.',
     icon: 'today',
     section: 'operations',

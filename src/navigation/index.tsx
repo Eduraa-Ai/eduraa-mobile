@@ -600,11 +600,13 @@ function StaffTabs({ user }: { user: AccountMinimal }) {
           options={{ title: "Approvals", tabBarStyle: { display: 'none' } }}
         />
       ) : null}
-      <StaffTab.Screen
-        name="StaffAttendance"
-        component={AttendanceScreen}
-        options={{ title: "Attendance" }}
-      />
+      {user.role === 'teacher' || user.role === 'principal' || user.role === 'school_super_admin' ? (
+        <StaffTab.Screen
+          name="StaffAttendance"
+          component={AttendanceScreen}
+          options={{ title: "Attendance" }}
+        />
+      ) : null}
       <StaffTab.Screen
         name="StaffScanUpload"
         component={ScanUploadScreen}
