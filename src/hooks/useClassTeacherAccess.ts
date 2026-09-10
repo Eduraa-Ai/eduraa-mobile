@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/authStore'
 export const classTeacherKeys = {
   classes: ['class-teacher', 'classes'] as const,
   identity: ['class-teacher', 'identity'] as const,
+  options: (standard?: string) => ['class-teacher', 'options', standard ?? 'all'] as const,
   requests: ['class-teacher', 'requests', 'me'] as const,
   semesters: ['class-teacher', 'semesters'] as const,
   subjects: ['class-teacher', 'subjects'] as const,
@@ -30,6 +31,7 @@ export interface ClassTeacherIdentity {
   division?: string | null
   isApproved?: boolean | null
   assignmentStatus?: string | null
+  classTeacherOptIn?: boolean | null
 }
 
 interface TeacherMasterProfileResponse {
@@ -111,22 +113,34 @@ export function useClassTeacherIdentity() {
       division: profile?.class_teacher_division ?? user?.class_teacher_division ?? null,
       isApproved: profile?.is_approved ?? null,
       assignmentStatus: query.data?.assignment_status ?? null,
+      classTeacherOptIn: profile?.class_teacher_opt_in ?? user?.class_teacher_opt_in ?? null,
     }
   }, [query.data, user])
 
   return { identity, isLoading: query.isLoading, isPartial: Boolean(query.error) }
 }
 
+/** Keep every class-teacher screen on the class explicitly selected in the workspace. */
+export function useActiveClassSection(classSections: ClassSection[]) {
+  const activeClassId = useClassTeacherStore((state) => state.activeClassId)
+  const setActiveClassId = useClassTeacherStore((state) => state.setActiveClassId)
+  const activeClassSection = classSections.find((section) => section.id === activeClassId) ?? classSections[0]
+
+  return { activeClassId: activeClassSection?.id ?? null, activeClassSection, setActiveClassId }
+}
+
 /**
  * The semester every class-teacher surface is acting on. Shared so the context
  * bar names the real semester instead of claiming none is selected.
  */
-export function useActiveSemester() {
+export function useActiveSemester(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true
   const activeSemesterId = useClassTeacherStore((state) => state.activeSemesterId)
 
   const query = useQuery<Semester[], unknown>({
     queryKey: classTeacherKeys.semesters,
     queryFn: classTeacherApi.getSemesters,
+    enabled,
     retry: false,
     staleTime: 60_000,
   })
@@ -134,5 +148,5 @@ export function useActiveSemester() {
   const semesters = query.data ?? []
   const activeSemester = semesters.find((semester) => semester.id === activeSemesterId) ?? semesters[0]
 
-  return { activeSemester, semesters, isLoading: query.isLoading }
+  return { activeSemester, semesters, isLoading: enabled && query.isLoading }
 }

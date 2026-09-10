@@ -17,6 +17,11 @@ export interface ClassTeacherProfile {
   division: string | null
 }
 
+export interface ClassTeacherOptions {
+  standards: string[]
+  divisions: string[]
+}
+
 /** The server currently supports pending and approved requests. Keep this
  * open-ended so a future server-side status remains visible rather than being
  * misrepresented by the app. */
@@ -42,6 +47,7 @@ export interface ClassTeacherRequest {
   standard: string
   division: string
   assignments: ClassTeacherAssignment[]
+  rejection_reason?: string | null
 }
 
 export interface ClassTeacherAssignmentInput {
@@ -165,6 +171,18 @@ export interface ClassValidationReport {
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const classTeacherApi = {
+  async getOptions(standard?: string) {
+    const response = await apiClient.get<ClassTeacherOptions>('/class-teacher/options', {
+      params: standard ? { standard } : undefined,
+    })
+    return response.data
+  },
+
+  async updateProfile(input: { opt_in: boolean; standard?: string; division?: string }) {
+    const response = await apiClient.post<ClassTeacherProfile>('/class-teacher/opt-in', input)
+    return response.data
+  },
+
   async getAssignmentTeachers() {
     const response = await apiClient.get<AssignmentTeacherOption[]>('/class-teacher/teachers')
     return response.data

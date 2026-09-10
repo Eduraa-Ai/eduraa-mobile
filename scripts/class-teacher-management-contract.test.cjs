@@ -8,6 +8,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 
 test('class teacher assignment APIs use the existing web/backend endpoints', () => {
   const source = read('src/api/classTeacher.ts')
+  assert.match(source, /getOptions\(standard\?[\s\S]*?\/class-teacher\/options/)
+  assert.match(source, /updateProfile\(input[\s\S]*?\/class-teacher\/opt-in/)
   assert.match(source, /getAssignmentTeachers\(\)[\s\S]*?\/class-teacher\/teachers/)
   assert.match(source, /getMyRequests\(\)[\s\S]*?\/class-teacher\/requests\/me/)
   assert.match(source, /createRequest\(assignments[\s\S]*?post<ClassTeacherRequest>\('\/class-teacher\/requests'/)
@@ -20,7 +22,40 @@ test('assignment management presents server status and protects duplicate writes
   assert.match(source, /activeRequest\.status === 'approved'/)
   assert.match(source, /selectedTeacherIds\.size !== rows\.length/)
   assert.match(source, /submitGuard\.current/)
+  assert.match(source, /profileSubmitGuard\.current/)
+  assert.match(source, /activeRequest\.status === 'rejected'/)
+  assert.match(source, /rejection_reason/)
   assert.match(source, /Assignments submitted for principal approval\./)
+})
+
+test('first-time teachers can enter setup and management waits for approval', () => {
+  const catalog = read('src/data/mobileControlCatalog.ts')
+  const assignments = read('src/screens/classTeacher/ClassTeacherAssignmentsScreen.tsx')
+  const overview = read('src/screens/classTeacher/ClassTeacherOverviewScreen.tsx')
+
+  const entry = catalog.match(/\{\s*id: 'class-teacher',[\s\S]*?\n  \},/)
+  assert.ok(entry)
+  assert.doesNotMatch(entry[0], /requiresClassTeacher: true/)
+  assert.match(assignments, /Continue to teaching plan/)
+  assert.match(assignments, /classTeacherApi\.updateProfile/)
+  assert.match(overview, /enabled: access\.isAuthorized && planIsApproved/)
+  assert.match(overview, /Plan awaiting approval/)
+})
+
+test('all class management screens preserve the selected class', () => {
+  const hook = read('src/hooks/useClassTeacherAccess.ts')
+  assert.match(hook, /export function useActiveClassSection/)
+
+  for (const screen of [
+    'ClassTeacherAssignmentsScreen.tsx',
+    'ClassTeacherOverviewScreen.tsx',
+    'ClassRosterScreen.tsx',
+    'ClassSubjectsScreen.tsx',
+    'ClassValidationScreen.tsx',
+    'SubjectEnrollmentScreen.tsx',
+  ]) {
+    assert.match(read(`src/screens/classTeacher/${screen}`), /useActiveClassSection/)
+  }
 })
 
 test('overview and subject setup consume the request cache', () => {

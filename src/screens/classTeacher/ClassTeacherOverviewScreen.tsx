@@ -3,9 +3,9 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, T
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { AnimatedCard, AppScreen, GradientHeroCard } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, GradientHeroCard } from '../../components/ui'
 import { classTeacherApi, ClassTeacherRequest, ClassValidationReport, Semester, toApiFailure } from '../../api/classTeacher'
-import { classTeacherKeys, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
+import { classTeacherKeys, useActiveClassSection, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
 import { useClassTeacherStore } from '../../stores/classTeacherStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
@@ -37,12 +37,23 @@ export default function ClassTeacherOverviewScreen() {
   const activeSemesterId = useClassTeacherStore((state) => state.activeSemesterId)
   const setActiveSemesterId = useClassTeacherStore((state) => state.setActiveSemesterId)
 
-  const classSection = access.classSections[0]
+  const { activeClassSection: classSection, activeClassId, setActiveClassId } = useActiveClassSection(access.classSections)
+
+  const requestsQuery = useQuery<ClassTeacherRequest[], unknown>({
+    queryKey: classTeacherKeys.requests,
+    queryFn: classTeacherApi.getMyRequests,
+    enabled: access.isAuthorized,
+    retry: false,
+  })
+  const request = requestsQuery.data?.find(
+    (item) => item.standard === classSection?.standard && item.division === classSection?.division,
+  )
+  const planIsApproved = request?.status === 'approved'
 
   const semestersQuery = useQuery<Semester[], unknown>({
     queryKey: classTeacherKeys.semesters,
     queryFn: classTeacherApi.getSemesters,
-    enabled: access.isAuthorized,
+    enabled: access.isAuthorized && planIsApproved,
     retry: false,
   })
 
@@ -59,21 +70,14 @@ export default function ClassTeacherOverviewScreen() {
   const validationQuery = useQuery<ClassValidationReport, unknown>({
     queryKey: classTeacherKeys.validation(classSection?.id, activeSemester?.id),
     queryFn: () => classTeacherApi.getValidation(classSection!.id, activeSemester?.id),
-    enabled: Boolean(classSection?.id) && access.isAuthorized,
-    retry: false,
-  })
-
-  const requestsQuery = useQuery<ClassTeacherRequest[], unknown>({
-    queryKey: classTeacherKeys.requests,
-    queryFn: classTeacherApi.getMyRequests,
-    enabled: access.isAuthorized,
+    enabled: Boolean(classSection?.id) && access.isAuthorized && planIsApproved,
     retry: false,
   })
 
   const rosterQuery = useQuery({
     queryKey: classTeacherKeys.roster(classSection?.standard),
     queryFn: () => classTeacherApi.getRoster(classSection?.standard),
-    enabled: Boolean(classSection?.standard) && access.isAuthorized,
+    enabled: Boolean(classSection?.standard) && access.isAuthorized && planIsApproved,
     retry: false,
   })
 
@@ -122,6 +126,42 @@ export default function ClassTeacherOverviewScreen() {
           title="Nothing to manage yet"
           body="Once a principal approves your class-teacher request, your class, roster, and semester setup appear here. Nothing is hidden behind this screen in the meantime."
         />
+        <AnimatedButton label="Set up my class" onPress={() => navigation.navigate('ClassTeacherAssignments')} />
+      </AppScreen>
+    )
+  }
+
+  if (requestsQuery.isLoading) {
+    return (
+      <AppScreen scroll={false} contentStyle={styles.center}>
+        <ActivityIndicator color={colors.accent} />
+        <Text style={styles.loadingText}>Checking your teaching plan</Text>
+      </AppScreen>
+    )
+  }
+
+  if (requestsQuery.error) {
+    return (
+      <AppScreen contentStyle={styles.screen}>
+        <FailureCard failure={toApiFailure(requestsQuery.error)} onRetry={() => void requestsQuery.refetch()} />
+      </AppScreen>
+    )
+  }
+
+  if (!planIsApproved) {
+    const rejected = request?.status === 'rejected'
+    return (
+      <AppScreen contentStyle={styles.screen}>
+        <GradientHeroCard
+          eyebrow="CLASS TEACHER"
+          title={request?.status === 'pending' ? 'Plan awaiting approval' : rejected ? 'Plan needs an update' : 'One quick setup left'}
+          subtitle={request?.status === 'pending' ? 'Your principal is reviewing the teaching plan. Class management will open automatically after approval.' : rejected ? request.rejection_reason || 'Update the teaching plan and send it again.' : 'Choose your class and send its teaching plan to your principal.'}
+        />
+        <AnimatedButton
+          label={request?.status === 'pending' ? 'Check approval status' : rejected ? 'Update teaching plan' : 'Set up teaching plan'}
+          variant={request?.status === 'pending' ? 'secondary' : 'primary'}
+          onPress={() => request?.status === 'pending' ? void requestsQuery.refetch() : navigation.navigate('ClassTeacherAssignments')}
+        />
       </AppScreen>
     )
   }
@@ -130,8 +170,6 @@ export default function ClassTeacherOverviewScreen() {
   const rosterCount = rosterQuery.data?.length
   const validationFailure = validationQuery.error ? toApiFailure(validationQuery.error) : null
   const semestersFailure = semestersQuery.error ? toApiFailure(semestersQuery.error) : null
-  const request = requestsQuery.data?.[0]
-  const requestFailure = requestsQuery.error ? toApiFailure(requestsQuery.error) : null
 
   return (
     <AppScreen
@@ -148,6 +186,29 @@ export default function ClassTeacherOverviewScreen() {
         semesterName={activeSemester?.name}
         isStale={validationQuery.isFetching && Boolean(report)}
       />
+
+      {access.classSections.length > 1 ? (
+        <View style={styles.classPicker} accessibilityRole="radiogroup" accessibilityLabel="Select class">
+          <Text style={styles.classPickerLabel}>Managing</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.semesterRow}>
+            {access.classSections.map((section) => {
+              const selected = section.id === activeClassId
+              return (
+                <Pressable
+                  key={section.id}
+                  onPress={() => setActiveClassId(section.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`Class ${section.standard}-${section.division}`}
+                  style={({ pressed }) => [styles.semesterChip, selected && styles.semesterChipActive, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.semesterChipText, selected && styles.semesterChipTextActive]}>Class {section.standard}-{section.division}</Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
 
       {identityPartial ? (
         <Text style={styles.partialNote}>School details could not load, so only your class assignment is shown.</Text>
@@ -182,8 +243,7 @@ export default function ClassTeacherOverviewScreen() {
 
       <SectionHeaderRow title="Teacher assignment" meta="The principal approves this plan before it becomes active." />
 
-      {requestFailure ? <FailureCard failure={requestFailure} onRetry={() => void requestsQuery.refetch()} /> : (
-        <NavRow
+      <NavRow
           icon={request?.status === 'approved' ? 'checkmark-circle' : request?.status === 'pending' ? 'time' : 'person-add'}
           title={request ? `Plan ${request.status}` : 'Plan subject teachers'}
           body={
@@ -196,8 +256,7 @@ export default function ClassTeacherOverviewScreen() {
           tone={request?.status === 'approved' ? colors.success : request?.status === 'pending' ? colors.warning : colors.accent}
           meta={requestsQuery.isLoading ? 'Loading' : request ? `${request.assignments.length}` : 'Start'}
           onPress={() => navigation.navigate('ClassTeacherAssignments')}
-        />
-      )}
+      />
 
       <SectionHeaderRow
         title="Semester"
@@ -330,6 +389,13 @@ const styles = StyleSheet.create({
   semesterRow: {
     gap: spacing[2],
     paddingRight: spacing[4],
+  },
+  classPicker: {
+    gap: spacing[2],
+  },
+  classPickerLabel: {
+    ...typography.roles.eyebrow,
+    color: colors.textMuted,
   },
   semesterChip: {
     minHeight: 44,

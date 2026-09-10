@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatedButton, AppScreen } from '../../components/ui'
 import { classTeacherApi, RosterStudent, toApiFailure } from '../../api/classTeacher'
-import { classTeacherKeys, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
+import { classTeacherKeys, useActiveClassSection, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
 import { useClassTeacherStore } from '../../stores/classTeacherStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
@@ -66,7 +66,7 @@ export default function ClassRosterScreen() {
   const { activeSemester } = useActiveSemester()
   const activeSemesterId = useClassTeacherStore((state) => state.activeSemesterId)
 
-  const classSection = access.classSections[0]
+  const { activeClassSection: classSection } = useActiveClassSection(access.classSections)
   const standard = classSection?.standard
 
   const [search, setSearch] = useState('')
