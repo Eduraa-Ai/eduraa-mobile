@@ -19,9 +19,26 @@ export interface PaperManifestIssue {
   occurrence_id?: string | null
 }
 
+export interface PaperManifestCurriculumMapping {
+  status: 'unmapped' | 'suggested' | 'confirmed'
+  subject_id?: string | null
+  chapter_id?: string | null
+  topic_id?: string | null
+  subtopic_id?: string | null
+  subtopic_name?: string | null
+}
+
+export interface PaperManifestSourceReference {
+  artifact_role: 'question_paper' | 'answer_key' | 'marking_scheme'
+  page_number: number
+  bbox?: [number, number, number, number] | null
+  visible_text?: string | null
+}
+
 export interface PaperManifestOccurrence {
   id: string
   occurrence_id: string
+  paper_question_id?: string | null
   parent_occurrence_id?: string | null
   ordinal: number
   display_label: string
@@ -32,8 +49,11 @@ export interface PaperManifestOccurrence {
     question_type?: string | null
     instructions?: string | null
     options?: unknown
+    curriculum_mapping?: PaperManifestCurriculumMapping | null
   }
   answer_key_content?: unknown
+  rubric?: unknown
+  source_references: PaperManifestSourceReference[]
   resolution_status: ManifestResolutionStatus
   issues: PaperManifestIssue[]
 }
@@ -43,6 +63,7 @@ export interface PaperManifestVersion {
   paper_id: string
   revision: number
   status: ManifestStatus
+  structure: Record<string, unknown>
   total_marks?: number | string | null
   validation_status: ManifestValidationStatus
   validation_report: {
@@ -62,6 +83,14 @@ export interface PaperManifestVersion {
     original_filename: string
     page_count: number
   }>
+}
+
+export interface CurriculumTopicOption {
+  id: string
+  subject_id: string
+  name: string
+  parent_topic_id?: string | null
+  display_order: number
 }
 
 export interface CustomPaperFile {
@@ -150,6 +179,38 @@ export const paperManifestsApi = {
   retryExtraction: async (paperId: string): Promise<PaperManifestVersion> => {
     const response = await apiClient.post<PaperManifestVersion>(
       `/papers/${paperId}/manifest/extract`,
+    )
+    return response.data
+  },
+
+  getCurriculumTopics: async (
+    subjectId: string,
+  ): Promise<CurriculumTopicOption[]> => {
+    const response = await apiClient.get<CurriculumTopicOption[]>('/topics', {
+      params: { subject_id: subjectId },
+    })
+    return response.data
+  },
+
+  updateDraft: async (
+    manifest: PaperManifestVersion,
+    occurrences: PaperManifestOccurrence[],
+    idempotencyKey: string,
+  ): Promise<PaperManifestVersion> => {
+    if (!manifest.manifest_sha256) {
+      throw new Error('The extracted question map has no review hash yet.')
+    }
+    const response = await apiClient.patch<PaperManifestVersion>(
+      `/papers/${manifest.paper_id}/manifest`,
+      {
+        structure: manifest.structure,
+        occurrences,
+        unresolved_items: manifest.unresolved_items,
+        extraction_metadata: manifest.extraction_metadata,
+        expected_revision: manifest.revision,
+        expected_manifest_sha256: manifest.manifest_sha256,
+        idempotency_key: idempotencyKey,
+      },
     )
     return response.data
   },

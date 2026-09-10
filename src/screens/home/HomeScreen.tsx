@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect} from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Image,
   Pressable,
@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path } from "react-native-svg";
@@ -164,7 +164,7 @@ const useHomeModel = (
   }, [analytics, displayName]);
 };
 
-function Header({ name, detail }: { name: string; detail?: string }) {
+function Header({ name, detail, onHelp, onDashboard }: { name: string; detail?: string; onHelp: () => void; onDashboard: () => void }) {
   return (
     <View style={styles.header}>
       <View style={styles.logoMark}>
@@ -182,8 +182,23 @@ function Header({ name, detail }: { name: string; detail?: string }) {
           </Text>
         ) : null}
       </View>
-      <View style={styles.headerIcon}>
-        <Ionicons name="help" size={18} color="#101828" />
+      <View style={styles.headerActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open full learning dashboard"
+          onPress={onDashboard}
+          style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}
+        >
+          <Ionicons name="analytics-outline" size={18} color="#101828" />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Ask Eduraa AI"
+          onPress={onHelp}
+          style={({ pressed }) => [styles.headerIcon, pressed && styles.pressed]}
+        >
+          <Ionicons name="help" size={18} color="#101828" />
+        </Pressable>
       </View>
     </View>
   );
@@ -248,6 +263,8 @@ function Hero({
           />
         </Svg>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Ask Eduraa AI about this learning plan"
           onPress={onAskAi}
           style={[styles.routeNode, styles.routeNodeReview]}
         >
@@ -259,6 +276,8 @@ function Hero({
           <Text style={styles.routeNodeText}>Learn</Text>
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Generate a practice paper"
           onPress={onPractice}
           style={[styles.routeNode, styles.routeNodePractice]}
         >
@@ -337,12 +356,12 @@ function ActivityList({
   submissions,
   exams,
   onResult,
-  onPapers,
+  onExams,
 }: {
   submissions: DashboardSubmission[];
   exams: StudentDashboardLab["upcoming_exams"];
   onResult: (submissionId: string) => void;
-  onPapers: () => void;
+  onExams: () => void;
 }) {
   const rows = [
     ...exams.map((exam) => ({
@@ -351,17 +370,22 @@ function ActivityList({
       title: exam.name,
       meta: `${formatDate(exam.date)} - ${exam.subject || exam.cat || "Exam"}`,
       color: colors.info,
-      onPress: onPapers,
+      accessibilityLabel: `Open exam ${exam.name}`,
+      onPress: onExams,
+      disabled: false,
     })),
-    ...submissions.map((submission) => {
+    ...submissions.map((submission, index) => {
       const pct = safePercent(submission.score, submission.max_score);
+      const canOpen = Boolean(submission.id);
       return {
-        id: `sub-${submission.id}`,
+        id: `sub-${submission.id ?? index}`,
         icon: "checkmark-done-outline" as keyof typeof Ionicons.glyphMap,
         title: submission.paper,
         meta: `${submission.subject || "Subject"} - ${pct != null ? `${pct}%` : "Pending review"}`,
         color: masteryTone(pct),
-        onPress: () => onResult(submission.id),
+        accessibilityLabel: canOpen ? `Open result for ${submission.paper}` : `${submission.paper} result is not available yet`,
+        onPress: () => { if (submission.id) onResult(submission.id); },
+        disabled: !canOpen,
       };
     }),
   ].slice(0, 4);
@@ -409,9 +433,11 @@ function ActivityList({
             </Text>
           </View>
           <AnimatedButton
-            label="View"
+            label={row.disabled ? "Pending" : "View"}
+            accessibilityLabel={row.accessibilityLabel}
             variant="ghost"
             onPress={row.onPress}
+            disabled={row.disabled}
             style={styles.smallButton}
           />
         </View>
@@ -426,6 +452,9 @@ function NextActionStack({ items }: { items: Shortcut[] }) {
       {items.map((item) => (
         <Pressable
           key={item.label}
+          accessibilityRole="button"
+          accessibilityLabel={item.label}
+          accessibilityHint={item.body}
           onPress={item.onPress}
           style={({ pressed }) => [
             styles.nextActionBox,
@@ -562,6 +591,8 @@ function NextBestActionCard({
         </View>
         <View style={styles.planActions}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start Agentic Learning"
             onPress={onStart}
             style={({ pressed }) => [
               styles.planPrimary,
@@ -571,6 +602,8 @@ function NextBestActionCard({
             <Text style={styles.planPrimaryText}>Start learning</Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open checked results"
             onPress={onResult}
             style={({ pressed }) => [
               styles.planGhost,
@@ -675,6 +708,7 @@ function CompetitiveHome({
           title="Dashboard could not load"
           message="Refresh and try again. Your JEE prep data is safe."
           actionLabel="Retry"
+          loading={isRefetching}
           onAction={() => refetch()}
         />
       </AppScreen>
@@ -713,12 +747,24 @@ function CompetitiveHome({
             {trackLabel}
           </Text>
         </View>
-        <Pressable
-          onPress={() => navigation.navigate("Profile")}
-          style={styles.compHeaderBell}
-        >
-          <Ionicons name="notifications-outline" size={20} color="#101828" />
-        </Pressable>
+        <View style={styles.compHeaderActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open full learning dashboard"
+            onPress={() => navigation.navigate("LearnerDashboard")}
+            style={styles.compHeaderBell}
+          >
+            <Ionicons name="analytics-outline" size={20} color="#101828" />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            onPress={() => navigation.navigate("Profile")}
+            style={styles.compHeaderBell}
+          >
+            <Ionicons name="person-outline" size={20} color="#101828" />
+          </Pressable>
+        </View>
       </View>
 
       {/* Glassmorphism Hero */}
@@ -781,6 +827,8 @@ function CompetitiveHome({
               </View>
             ) : null}
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Generate a focus paper"
               onPress={() =>
                 navigation.navigate("Papers", { screen: "GeneratePaper" })
               }
@@ -837,6 +885,8 @@ function CompetitiveHome({
           </Text>
           <View style={styles.compAiActions}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Start Agentic Learning"
               onPress={() => navigation.navigate("AgenticLearning")}
               style={({ pressed }) => [
                 styles.compAiPrimary,
@@ -846,6 +896,8 @@ function CompetitiveHome({
               <Text style={styles.compAiPrimaryText}>Start learning</Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Ask Eduraa AI"
               onPress={() => navigation.navigate("AIStudio")}
               style={({ pressed }) => [
                 styles.compAiSecondary,
@@ -872,6 +924,8 @@ function CompetitiveHome({
         {subjectData.map((subject) => (
           <Pressable
             key={subject.name}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${subject.name} learning resources`}
             onPress={() =>
               navigation.navigate("CompetitiveSubject", {
                 subjectName: subject.name,
@@ -963,6 +1017,8 @@ function CompetitiveHome({
 
       {/* JEE Launchpad Banner */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open JEE learning resources"
         onPress={() => navigation.navigate("CompetitiveExam")}
         style={({ pressed }) => [
           styles.compLaunchpad,
@@ -1014,7 +1070,7 @@ function CompetitiveHome({
             params: { checkedPaperId: submissionId },
           })
         }
-        onPapers={() => navigation.navigate("Papers", { screen: "PapersList" })}
+        onExams={() => navigation.navigate("Exams")}
       />
     </AppScreen>
   );
@@ -1035,6 +1091,9 @@ function QuickAction({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={body}
       onPress={onPress}
       style={({ pressed }) => [styles.compQuickCard, pressed && styles.pressed]}
     >
@@ -1099,6 +1158,11 @@ export default function HomeScreen() {
   });
 
   const model = useHomeModel(analytics, user?.display_name);
+  const hasFocusedHome = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (hasFocusedHome.current) void refetch();
+    hasFocusedHome.current = true;
+  }, [refetch]));
 
   if (competitive) {
     return (
@@ -1208,6 +1272,8 @@ export default function HomeScreen() {
       <Header
         name={model.firstName}
         detail={model.detail || user?.identifier}
+        onHelp={() => navigation.navigate("AIStudio")}
+        onDashboard={() => navigation.navigate("LearnerDashboard")}
       />
 
       {isLoading ? (
@@ -1217,6 +1283,7 @@ export default function HomeScreen() {
           title="Home could not load"
           message="Refresh and try again. Your token and routes are unchanged."
           actionLabel="Retry"
+          loading={isRefetching}
           onAction={() => refetch()}
         />
       ) : (
@@ -1273,9 +1340,7 @@ export default function HomeScreen() {
                 params: { checkedPaperId: submissionId },
               })
             }
-            onPapers={() =>
-              navigation.navigate("Papers", { screen: "PapersList" })
-            }
+            onExams={() => navigation.navigate("Exams")}
           />
         </>
       )}
@@ -1313,6 +1378,11 @@ const styles = StyleSheet.create({
   },
   headerCopy: {
     flex: 1,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
   },
   headerTitle: {
     fontFamily: "Georgia",
@@ -1638,7 +1708,8 @@ const styles = StyleSheet.create({
     gap: spacing[3],
   },
   nextActionBox: {
-    width: "31%",
+    flexBasis: "30%",
+    flexGrow: 1,
     height: 144,
     minHeight: 144,
     justifyContent: "space-between",
@@ -1915,6 +1986,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e0d6c8",
     ...shadows.sm,
+  },
+  compHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
   },
   compTrackPill: {
     borderRadius: radius.full,

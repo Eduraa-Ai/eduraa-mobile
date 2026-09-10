@@ -30,6 +30,14 @@ import { colors } from '../../theme/colors'
 import { fonts } from '../../theme/fonts'
 import { layout, radius, spacing } from '../../theme/spacing'
 import {
+  curriculumDraftsFromOccurrences,
+  curriculumMappingFingerprint,
+  gradableManifestOccurrences,
+  mappedQuestionCount,
+  occurrencesWithCurriculumMappings,
+  type CurriculumMappingDrafts,
+} from './customPaperCurriculumModel'
+import {
   customPaperDraftFingerprint,
   customPaperFilesMatch,
   createIdempotencyKey,
@@ -125,6 +133,10 @@ export default function CustomPaperScreen() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pollingError, setPollingError] = useState<string | null>(null)
+  const [curriculumDrafts, setCurriculumDrafts] =
+    useState<CurriculumMappingDrafts>({})
+  const [savedCurriculumFingerprint, setSavedCurriculumFingerprint] =
+    useState('')
 
   // Reuse the key for a retry of the same draft, but rotate it whenever the
   // teacher changes the class, subject, title, or either source file.
@@ -136,6 +148,23 @@ export default function CustomPaperScreen() {
     queryFn: papersApi.getOptions,
   })
   const options = optionsQuery.data
+  const review = describeManifest(manifest)
+
+  const topicsQuery = useQuery({
+    queryKey: ['curriculum-topics', subjectId],
+    queryFn: () => paperManifestsApi.getCurriculumTopics(subjectId),
+    enabled: Boolean(
+      subjectId &&
+        manifest &&
+        !review.isPolling &&
+        review.phase !== 'failed',
+    ),
+  })
+  const curriculumTopics = topicsQuery.data ?? []
+  const rootTopics = useMemo(() => {
+    const parents = curriculumTopics.filter((topic) => !topic.parent_topic_id)
+    return parents.length ? parents : curriculumTopics
+  }, [curriculumTopics])
 
   const scope = useMemo(
     () => resolvePaperScope(options ?? {}, { standard, division, subjectId }),
@@ -157,7 +186,20 @@ export default function CustomPaperScreen() {
     subjectId,
   ])
 
-  const review = describeManifest(manifest)
+  useEffect(() => {
+    if (!manifest) return
+    const drafts = curriculumDraftsFromOccurrences(manifest.occurrences ?? [])
+    setCurriculumDrafts(drafts)
+    setSavedCurriculumFingerprint(curriculumMappingFingerprint(drafts))
+  }, [manifest?.id, manifest?.revision])
+
+  const gradableOccurrences = useMemo(
+    () => gradableManifestOccurrences(manifest?.occurrences ?? []),
+    [manifest?.occurrences],
+  )
+  const mappedCount = mappedQuestionCount(curriculumDrafts)
+  const curriculumFingerprint = curriculumMappingFingerprint(curriculumDrafts)
+  const curriculumDirty = curriculumFingerprint !== savedCurriculumFingerprint
 
   const pickPdf = useCallback(
     async (role: FileRole) => {
@@ -308,8 +350,23 @@ export default function CustomPaperScreen() {
     setBusy(true)
     setError(null)
     try {
+      let reviewedManifest = manifest
+      if (curriculumDirty) {
+        reviewedManifest = await paperManifestsApi.updateDraft(
+          manifest,
+          occurrencesWithCurriculumMappings(
+            manifest.occurrences,
+            curriculumDrafts,
+            subjectId,
+            curriculumTopics,
+          ),
+          createIdempotencyKey(),
+        )
+        setManifest(reviewedManifest)
+        setSavedCurriculumFingerprint(curriculumFingerprint)
+      }
       const confirmed = await paperManifestsApi.confirm(
-        manifest,
+        reviewedManifest,
         createIdempotencyKey(),
       )
       setManifest(confirmed)
@@ -442,6 +499,68 @@ export default function CustomPaperScreen() {
               </View>
             ) : null}
 
+            {review.phase === 'needs_confirmation' ? (
+              <View style={styles.curriculumSummary}>
+                <View style={styles.curriculumSummaryTop}>
+                  <View style={styles.curriculumSummaryCopy}>
+                    <Text style={styles.curriculumTitle}>Learning insight coverage</Text>
+                    <Text style={styles.curriculumBody}>
+                      Map questions so student dashboards can explain exactly which
+                      topic or subtopic needs work.
+                    </Text>
+                  </View>
+                  <View
+                    accessibilityLabel={`${mappedCount} of ${gradableOccurrences.length} questions mapped`}
+                    style={[
+                      styles.coverageBadge,
+                      mappedCount === gradableOccurrences.length &&
+                        gradableOccurrences.length > 0 &&
+                        styles.coverageBadgeComplete,
+                    ]}
+                  >
+                    <Text style={styles.coverageBadgeText}>
+                      {mappedCount}/{gradableOccurrences.length}
+                    </Text>
+                  </View>
+                </View>
+                {topicsQuery.isLoading ? (
+                  <View style={styles.curriculumStateRow}>
+                    <ActivityIndicator size="small" color={colors.accentStrong} />
+                    <Text style={styles.curriculumStateText}>Loading curriculum…</Text>
+                  </View>
+                ) : topicsQuery.isError ? (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    activeOpacity={0.84}
+                    onPress={() => void topicsQuery.refetch()}
+                    style={styles.curriculumStateRow}
+                  >
+                    <Ionicons name="refresh" size={16} color={colors.danger} />
+                    <Text style={[styles.curriculumStateText, styles.curriculumErrorText]}>
+                      Curriculum could not load. Tap to retry.
+                    </Text>
+                  </TouchableOpacity>
+                ) : curriculumTopics.length === 0 ? (
+                  <Text style={styles.curriculumStateText}>
+                    No curriculum topics exist for this subject yet. You can confirm
+                    the paper now and map it after your school adds the curriculum.
+                  </Text>
+                ) : mappedCount < gradableOccurrences.length ? (
+                  <Text style={styles.curriculumHint}>
+                    Unmapped questions can still be graded, but they cannot create
+                    specific topic insights.
+                  </Text>
+                ) : (
+                  <View style={styles.curriculumStateRow}>
+                    <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                    <Text style={styles.curriculumCompleteText}>
+                      Every gradable question will contribute to learning insights.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
             <ScrollView style={styles.preview} nestedScrollEnabled>
               {(manifest.occurrences ?? []).slice(0, 40).map((item) => (
                 <View key={item.id} style={styles.question}>
@@ -456,6 +575,97 @@ export default function CustomPaperScreen() {
                   <Text style={styles.questionText} numberOfLines={3}>
                     {item.question_content?.question_text ?? 'No question text found.'}
                   </Text>
+                  {review.phase === 'needs_confirmation' &&
+                  curriculumDrafts[item.occurrence_id] &&
+                  curriculumTopics.length ? (
+                    <View style={styles.questionMapping}>
+                      <SelectField
+                        label="Topic"
+                        value={curriculumDrafts[item.occurrence_id]?.topicId}
+                        placeholder="Choose a topic"
+                        searchable={rootTopics.length > 8}
+                        options={rootTopics.map((topic) => ({
+                          value: topic.id,
+                          label: topic.name,
+                        }))}
+                        onChange={(topicId) => {
+                          setCurriculumDrafts((current) => ({
+                            ...current,
+                            [item.occurrence_id]: { topicId, subtopicId: '' },
+                          }))
+                          setError(null)
+                        }}
+                      />
+                      {curriculumTopics.some(
+                        (topic) =>
+                          topic.parent_topic_id ===
+                          curriculumDrafts[item.occurrence_id]?.topicId,
+                      ) ? (
+                        <SelectField
+                          label="Subtopic (recommended)"
+                          value={curriculumDrafts[item.occurrence_id]?.subtopicId}
+                          placeholder="Choose the exact concept"
+                          searchable
+                          options={curriculumTopics
+                            .filter(
+                              (topic) =>
+                                topic.parent_topic_id ===
+                                curriculumDrafts[item.occurrence_id]?.topicId,
+                            )
+                            .map((topic) => ({ value: topic.id, label: topic.name }))}
+                          onChange={(subtopicId) => {
+                            setCurriculumDrafts((current) => ({
+                              ...current,
+                              [item.occurrence_id]: {
+                                topicId: current[item.occurrence_id]?.topicId ?? '',
+                                subtopicId,
+                              },
+                            }))
+                            setError(null)
+                          }}
+                        />
+                      ) : null}
+                      {curriculumDrafts[item.occurrence_id]?.topicId ? (
+                        <View style={styles.mappingActions}>
+                          {mappedCount < gradableOccurrences.length ? (
+                            <TouchableOpacity
+                              accessibilityRole="button"
+                              activeOpacity={0.82}
+                              onPress={() => {
+                                const selected = curriculumDrafts[item.occurrence_id]
+                                setCurriculumDrafts((current) =>
+                                  Object.fromEntries(
+                                    Object.entries(current).map(([id, value]) => [
+                                      id,
+                                      value.topicId || value.subtopicId ? value : selected,
+                                    ]),
+                                  ),
+                                )
+                              }}
+                              style={styles.mappingAction}
+                            >
+                              <Text style={styles.mappingActionText}>
+                                Apply to unmapped
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                          <TouchableOpacity
+                            accessibilityRole="button"
+                            activeOpacity={0.82}
+                            onPress={() =>
+                              setCurriculumDrafts((current) => ({
+                                ...current,
+                                [item.occurrence_id]: { topicId: '', subtopicId: '' },
+                              }))
+                            }
+                            style={styles.mappingAction}
+                          >
+                            <Text style={styles.mappingClearText}>Clear</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
               ))}
             </ScrollView>
@@ -787,6 +997,72 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   metaChipText: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted },
+  curriculumSummary: {
+    gap: spacing[2],
+    padding: spacing[3],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundTint,
+  },
+  curriculumSummaryTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+  },
+  curriculumSummaryCopy: { flex: 1, gap: spacing[1] },
+  curriculumTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.text,
+  },
+  curriculumBody: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textMuted,
+  },
+  coverageBadge: {
+    minWidth: 48,
+    minHeight: 32,
+    paddingHorizontal: spacing[2],
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.warningSurface,
+  },
+  coverageBadgeComplete: { backgroundColor: colors.successSurface },
+  coverageBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.text,
+  },
+  curriculumStateRow: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  curriculumStateText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textMuted,
+  },
+  curriculumErrorText: { color: colors.danger },
+  curriculumHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.warning,
+  },
+  curriculumCompleteText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.success,
+  },
   issues: { gap: spacing[2] },
   issueRow: { flexDirection: 'row', gap: spacing[2], alignItems: 'flex-start' },
   issueText: {
@@ -815,6 +1091,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     color: colors.text,
+  },
+  questionMapping: {
+    gap: spacing[3],
+    paddingTop: spacing[2],
+  },
+  mappingActions: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing[2],
+  },
+  mappingAction: {
+    minHeight: 44,
+    paddingHorizontal: spacing[3],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mappingActionText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.accentStrong,
+  },
+  mappingClearText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.danger,
   },
   error: {
     padding: spacing[3],

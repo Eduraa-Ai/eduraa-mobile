@@ -27,6 +27,7 @@ const models = [
   'src/screens/workspace/announcementModel.ts',
   'src/screens/workspace/attendanceModel.ts',
   'src/screens/workspace/dashboardModel.ts',
+  'src/screens/home/learnerDashboardModel.ts',
   'src/screens/workspace/doubtWorkspaceModel.ts',
   'src/screens/workspace/checkedPaperPipelineModel.ts',
   'src/screens/workspace/scanUploadModel.ts',
@@ -149,6 +150,10 @@ const suites = [
   {
     file: 'scripts/dashboard-model.test.cjs',
     env: { DASHBOARD_MODEL_PATH: path.join(outDir, 'screens/workspace/dashboardModel.js') },
+  },
+  {
+    file: 'scripts/learner-dashboard-model.test.cjs',
+    env: { LEARNER_DASHBOARD_MODEL_PATH: path.join(outDir, 'screens/home/learnerDashboardModel.js') },
   },
   {
     file: 'scripts/paper-detail-contract.test.cjs',

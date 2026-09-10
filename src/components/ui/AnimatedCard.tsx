@@ -1,11 +1,11 @@
 import React, { ReactNode, useEffect, useRef } from 'react'
-import { Animated, StyleSheet, ViewStyle } from 'react-native'
+import { Animated, StyleProp, StyleSheet, ViewStyle } from 'react-native'
 import { colors, motion, radius, shadows, spacing } from '../../theme'
 
 interface AnimatedCardProps {
   children: ReactNode
   delay?: number
-  style?: ViewStyle
+  style?: StyleProp<ViewStyle>
   elevated?: boolean
 }
 

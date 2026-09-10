@@ -24,6 +24,7 @@ import VerifyEmailScreen from '../screens/auth/VerifyEmailScreen'
 import RegistrationCompleteScreen from '../screens/auth/RegistrationCompleteScreen'
 import SchoolApprovalStatusScreen from '../screens/auth/SchoolApprovalStatusScreen'
 import HomeScreen from '../screens/home/HomeScreen'
+import LearnerDashboardScreen from '../screens/home/LearnerDashboardScreen'
 import PapersScreen from '../screens/papers/PapersScreen'
 import GeneratePaperScreen from '../screens/papers/GeneratePaperScreen'
 import CustomPaperScreen from '../screens/papers/CustomPaperScreen'
@@ -44,6 +45,8 @@ import PreviousPapersScreen from '../screens/learning/PreviousPapersScreen'
 import CheatSheetsScreen from '../screens/learning/CheatSheetsScreen'
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen'
 import DashboardScreen from '../screens/workspace/DashboardScreen'
+import { DashboardPaperDetailScreen, DashboardStudentDetailScreen } from '../screens/workspace/DashboardDetailScreen'
+import type { DashboardFilterParams } from '../api/dashboard'
 import FeatureScreen from '../screens/workspace/FeatureScreen'
 import ApprovalsScreen from '../screens/workspace/ApprovalsScreen'
 import AttendanceScreen from '../screens/workspace/AttendanceScreen'
@@ -74,7 +77,13 @@ export type AuthStackParamList = {
 
 export type PapersStackParamList = {
   PapersList: undefined
-  GeneratePaper: undefined
+  GeneratePaper: {
+    dashboardSource?: 'learner-dashboard'
+    subjectName?: string
+    chapterName?: string
+    topicName?: string
+    difficulty?: string
+  } | undefined
   CustomPaper: undefined
   PaperDetail: {
     paperId: string
@@ -111,6 +120,7 @@ export type ScanUploadParams = {
 
 export type HomeStackParamList = {
   HomeMain: undefined
+  LearnerDashboard: undefined
   CompetitiveExam: undefined
   CompetitiveSubject: { subjectName: string }
   CompetitiveChapter: { subjectName: string; chapterKey: string }
@@ -121,7 +131,7 @@ export type HomeStackParamList = {
   Approvals: undefined
   Attendance: undefined
   ScanUpload: ScanUploadParams
-  Exams: undefined
+  Exams: { focusExamId?: string } | undefined
   Announcements: { announcementId?: string } | undefined
   Doubts: { doubtId?: string } | undefined
   AIStudio: undefined
@@ -129,7 +139,9 @@ export type HomeStackParamList = {
 
 export type StaffWorkspaceStackParamList = {
   StaffWorkspace: undefined;
-  Dashboard: undefined;
+  Dashboard: { openFilters?: boolean } | undefined;
+  DashboardStudentDetail: { studentId: string; source: 'teacher' | 'institution'; filters?: DashboardFilterParams };
+  DashboardPaperDetail: { paperId: string; filters?: DashboardFilterParams };
   ClassTeacherOverview: undefined;
   ClassTeacherAssignments: undefined;
   ClassRoster: undefined;
@@ -164,7 +176,7 @@ export type ProfileStackParamList = {
 
 export type TabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList> | undefined
-  Papers: undefined
+  Papers: NavigatorScreenParams<PapersStackParamList> | undefined
   Results: NavigatorScreenParams<ResultsStackParamList> | undefined
   Profile: undefined
   PreviousPapers: undefined
@@ -207,11 +219,17 @@ const linking: LinkingOptions<any> = {
           // Without an explicit path the router falls back to the route name and
           // parks the shell on "/HomeMain" after sign-in.
           HomeMain: '',
+          LearnerDashboard: 'student/dashboard',
           AgenticLearning: 'learning/agentic',
           AgenticSubject: 'learning/agentic/subjects/:subjectId',
           AgenticTopic: 'learning/agentic/topics/:topicId',
           Announcements: 'announcements/:announcementId?',
           Doubts: 'student/doubts/:doubtId?',
+        },
+      },
+      Papers: {
+        screens: {
+          GeneratePaper: 'papers/generate',
         },
       },
       StaffHome: {
@@ -222,7 +240,7 @@ const linking: LinkingOptions<any> = {
       },
       Results: {
         screens: {
-          ResultDetail: 'results/checked/:checkedPaperId',
+          ResultDetail: 'results/checked/:checkedPaperId?',
           CheckedPaperWorkspace: 'results/checked/:checkedPaperId/review',
         },
       },
@@ -368,6 +386,7 @@ function HomeNavigator() {
   return (
     <HomeStack.Navigator screenOptions={stackScreenOptions}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} options={{ headerShown: false }} />
+      <HomeStack.Screen name="LearnerDashboard" component={LearnerDashboardScreen} options={{ title: 'Dashboard' }} />
       <HomeStack.Screen name="CompetitiveExam" component={CompetitiveExamScreen} options={{ title: 'JEE resources' }} />
       <HomeStack.Screen name="CompetitiveSubject" component={CompetitiveSubjectScreen} options={{ title: 'Competitive subject' }} />
       <HomeStack.Screen name="CompetitiveChapter" component={CompetitiveChapterScreen} options={{ title: 'Chapter workspace' }} />
@@ -454,6 +473,16 @@ function StaffWorkspaceNavigator() {
         name="Dashboard"
         component={DashboardScreen}
         options={{ title: "Dashboard" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="DashboardStudentDetail"
+        component={DashboardStudentDetailScreen}
+        options={{ title: "Student analysis" }}
+      />
+      <StaffWorkspaceStack.Screen
+        name="DashboardPaperDetail"
+        component={DashboardPaperDetailScreen}
+        options={{ title: "Paper analysis" }}
       />
       <StaffWorkspaceStack.Screen
         name="ClassTeacherOverview"

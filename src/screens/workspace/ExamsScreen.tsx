@@ -1,7 +1,7 @@
 import React, { ReactNode, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatedButton, AnimatedCard, AppScreen, DateField, ErrorState, MultiSelectField, SelectField, SkeletonCard, TextInputField } from '../../components/ui'
 import { examsApi, ExamPayload } from '../../api/exams'
@@ -493,11 +493,13 @@ function ActionConfirmationSheet({
 
 function LearnerExamCard({
   exam,
+  focused,
   onOpenPaper,
   onMore,
   busyFor,
 }: {
   exam: StudentExamRead
+  focused?: boolean
   onOpenPaper: (paper: StudentExamPaper) => void
   onMore: (target: LearnerPaperTarget) => void
   busyFor: (target: LearnerPaperTarget) => LearnerPaperAction | undefined
@@ -508,7 +510,13 @@ function LearnerExamCard({
   const examMarks = exam.papers.reduce((sum, paper) => sum + paper.total_marks, 0)
 
   return (
-    <AnimatedCard style={styles.examCard}>
+    <AnimatedCard style={[styles.examCard, focused && styles.examCardFocused]}>
+      {focused ? (
+        <View style={styles.dashboardFocusPill}>
+          <Ionicons name="locate-outline" size={14} color={colors.accentStrong} />
+          <Text style={styles.dashboardFocusPillText}>Selected from your dashboard</Text>
+        </View>
+      ) : null}
       <View style={styles.examCardTop}>
         <View style={[styles.examSubjectIcon, { backgroundColor: `${visual.tone}14`, borderColor: `${visual.tone}35` }]}>
           <Ionicons name={visual.icon} size={19} color={visual.tone} />
@@ -672,7 +680,7 @@ function LearnerEmptyState({
   )
 }
 
-function StudentExamsView({ role }: { role?: Role }) {
+function StudentExamsView({ role, focusExamId }: { role?: Role; focusExamId?: string }) {
   const navigation = useNavigation<any>()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<ExamTab>(role === 'b2c_student' ? 'practice' : 'teacher')
@@ -693,11 +701,23 @@ function StudentExamsView({ role }: { role?: Role }) {
   })
 
   const teacherExams = teacherExamsQuery.data ?? []
+  const orderedTeacherExams = useMemo(() => {
+    if (!focusExamId) return teacherExams
+    return [...teacherExams].sort((a, b) => {
+      if (a.id === focusExamId) return -1
+      if (b.id === focusExamId) return 1
+      return 0
+    })
+  }, [focusExamId, teacherExams])
   const practicePapers = practiceQuery.data ?? []
   const completedAssignedCount = teacherExams.reduce((sum, exam) => sum + exam.papers.filter((paper) => paper.is_submitted_by_me).length, 0)
   const completedPracticeCount = practicePapers.filter((paper) => paper.is_submitted_by_me).length
   const isLoading = teacherExamsQuery.isLoading || practiceQuery.isLoading
   const refreshing = teacherExamsQuery.isRefetching || practiceQuery.isRefetching
+
+  React.useEffect(() => {
+    if (focusExamId && !isB2C) setActiveTab('teacher')
+  }, [focusExamId, isB2C])
 
   const downloadMutation = useMutation({
     mutationFn: async (target: LearnerPaperTarget) => {
@@ -863,10 +883,11 @@ function StudentExamsView({ role }: { role?: Role }) {
               }}
             />
           ) : (
-            teacherExams.map((exam) => (
+            orderedTeacherExams.map((exam) => (
               <LearnerExamCard
                 key={exam.id}
                 exam={exam}
+                focused={exam.id === focusExamId}
                 onOpenPaper={(paper) => openPaperAttempt(navigation, paper.id, exam.id)}
                 onMore={setActionTarget}
                 busyFor={busyFor}
@@ -1448,6 +1469,9 @@ function StaffExamsView({ role }: { role?: Role }) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['exams', 'staff'] }),
         queryClient.invalidateQueries({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['student-dashboard-lab'] }),
+        queryClient.invalidateQueries({ queryKey: ['student-dashboard-insights'] }),
+        queryClient.invalidateQueries({ queryKey: ['agentic-subjects'] }),
       ])
       notify(selectedExam ? 'Exam updated' : 'Exam created', 'The exam list has been refreshed.')
       resetForm()
@@ -1807,7 +1831,9 @@ function StaffExamsView({ role }: { role?: Role }) {
 
 export default function ExamsScreen() {
   const role = useAuthStore((state) => state.user?.role)
-  return isLearner(role) ? <StudentExamsView role={role} /> : <StaffExamsView role={role} />
+  const route = useRoute()
+  const focusExamId = (route.params as { focusExamId?: string } | undefined)?.focusExamId
+  return isLearner(role) ? <StudentExamsView role={role} focusExamId={focusExamId} /> : <StaffExamsView role={role} />
 }
 
 const styles = StyleSheet.create({
@@ -2011,6 +2037,27 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: colors.accent,
     padding: spacing[4],
+  },
+  examCardFocused: {
+    borderColor: colors.accentStrong,
+    backgroundColor: colors.accentSurface,
+  },
+  dashboardFocusPill: {
+    alignSelf: 'flex-start',
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[3],
+    borderRadius: radius.full,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+  },
+  dashboardFocusPillText: {
+    color: colors.accentStrong,
+    fontFamily: typography.fonts.bodyBold,
+    fontSize: 10,
   },
   examCardTop: {
     flexDirection: 'row',
