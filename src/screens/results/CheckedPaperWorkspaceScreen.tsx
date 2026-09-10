@@ -204,11 +204,21 @@ export default function CheckedPaperWorkspaceScreen() {
         ? checkedPapersApi.approve(paper.id, payload)
         : checkedPapersApi.publish(paper.id, payload)
     },
-    onSuccess: async (_paper, action) => {
-      setNotice({ tone: 'success', text: action === 'approve' ? 'Paper approved. Publish when you are ready.' : 'Marks published to the student.' })
+    onSuccess: async (updatedPaper, action) => {
+      setNotice({
+        tone: 'success',
+        text: action === 'approve'
+          ? 'Paper approved. Publish when you are ready.'
+          : updatedPaper.results_visible_to_student
+            ? 'Marks released to the student.'
+            : 'Result prepared for release. It will appear when the exam results are released.',
+      })
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['checked-paper', params.checkedPaperId] }),
         queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
+        queryClient.invalidateQueries({ queryKey: ['student-dashboard-lab'] }),
+        queryClient.invalidateQueries({ queryKey: ['student-dashboard-insights'] }),
+        queryClient.invalidateQueries({ queryKey: ['agentic-subjects'] }),
       ])
     },
     onError: (error) => setNotice({ tone: 'error', text: errorMessage(error, 'Could not update the release status.') }),

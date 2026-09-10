@@ -18,7 +18,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,6 +47,7 @@ import {
 import { usePaperGenerationJob } from "./usePaperGenerationJob";
 
 type Nav = NativeStackNavigationProp<PapersStackParamList, "GeneratePaper">;
+type GeneratePaperRoute = RouteProp<PapersStackParamList, "GeneratePaper">;
 type Stage = 0 | 1 | 2;
 type ChapterSource = "books" | "ai";
 
@@ -657,6 +658,15 @@ function GenerateStudioHeader({
 
 export default function GeneratePaperScreen() {
   const navigation = useNavigation<Nav>();
+  const { params } = useRoute<GeneratePaperRoute>();
+  const dashboardPrefill = params?.dashboardSource === "learner-dashboard"
+    ? {
+        subjectName: params.subjectName,
+        chapterName: params.chapterName,
+        topicName: params.topicName,
+        difficulty: params.difficulty,
+      }
+    : undefined;
   // Teacher papers are timed by the exam they are attached to, not by the paper.
   const isTeacher = useAuthStore((state) => state.user?.role) === "teacher";
   const [stage, setStage] = useState<Stage>(0);
@@ -687,6 +697,9 @@ export default function GeneratePaperScreen() {
   // Latches once the student picks a source themselves, so the smart default
   // below never overrides a deliberate choice. Reset on subject/exam pivot.
   const userChoseSourceRef = useRef(false);
+  const appliedDashboardSubjectRef = useRef("");
+  const appliedDashboardChapterRef = useRef("");
+  const appliedDashboardTopicRef = useRef("");
   const durationResult = useMemo(
     () => parsePaperDuration(durationInput),
     [durationInput],
@@ -814,6 +827,42 @@ export default function GeneratePaperScreen() {
     }
   }, [division, options, scope, standard, subjectId]);
 
+  useEffect(() => {
+    if (!dashboardPrefill) return;
+    const prefillKey = [
+      dashboardPrefill.subjectName,
+      dashboardPrefill.chapterName,
+      dashboardPrefill.topicName,
+      dashboardPrefill.difficulty,
+    ].join("|");
+    if (appliedDashboardSubjectRef.current === prefillKey) return;
+
+    const requestedSubject = dashboardPrefill.subjectName?.trim().toLocaleLowerCase();
+    const matchingSubject = requestedSubject
+      ? subjects.find((item) => {
+          const candidate = item.name.trim().toLocaleLowerCase();
+          return candidate === requestedSubject
+            || candidate.includes(requestedSubject)
+            || requestedSubject.includes(candidate);
+        })
+      : undefined;
+
+    if (requestedSubject && !matchingSubject) return;
+    if (matchingSubject && matchingSubject.id !== subjectId) {
+      setSubjectId(matchingSubject.id);
+    }
+    if (dashboardPrefill.difficulty === "easy"
+      || dashboardPrefill.difficulty === "medium"
+      || dashboardPrefill.difficulty === "hard") {
+      setDifficulty(dashboardPrefill.difficulty);
+    }
+    const focusName = dashboardPrefill.topicName || dashboardPrefill.chapterName;
+    if (focusName) setPaperName(`Practice · ${focusName}`);
+    setStage(0);
+    setMaxStageReached(0);
+    appliedDashboardSubjectRef.current = prefillKey;
+  }, [dashboardPrefill, subjectId, subjects]);
+
   // Smart default: prefer Books whenever this (exam, subject) pair actually has
   // indexed book chapters, and only fall back to AI when the book shelf comes
   // back empty. Keying off `chapters.length` rather than `aiSourceAvailable`
@@ -891,6 +940,25 @@ export default function GeneratePaperScreen() {
   }, [board, chapterLoadKey, effectiveStandard, subjectId]);
 
   useEffect(() => {
+    if (!dashboardPrefill || activeChapters.length === 0) return;
+    const prefillKey = [subjectId, dashboardPrefill.chapterName, dashboardPrefill.topicName].join("|");
+    if (appliedDashboardChapterRef.current === prefillKey) return;
+
+    const requestedChapter = dashboardPrefill.chapterName?.trim().toLocaleLowerCase();
+    const requestedTopic = dashboardPrefill.topicName?.trim().toLocaleLowerCase();
+    const matchingChapter = activeChapters.find((chapter) => {
+      const title = chapter.title.trim().toLocaleLowerCase();
+      if (requestedChapter && (title === requestedChapter || title.includes(requestedChapter) || requestedChapter.includes(title))) {
+        return true;
+      }
+      return Boolean(requestedTopic && (title === requestedTopic || title.includes(requestedTopic) || requestedTopic.includes(title)));
+    });
+
+    if (matchingChapter) setChapterIds([matchingChapter.id]);
+    appliedDashboardChapterRef.current = prefillKey;
+  }, [activeChapters, dashboardPrefill, subjectId]);
+
+  useEffect(() => {
     setSubtopicNames((current) => {
       const next = current.filter((name) => derivedSubtopics.includes(name));
       return next.length === current.length &&
@@ -899,6 +967,16 @@ export default function GeneratePaperScreen() {
         : next;
     });
   }, [derivedSubtopics]);
+
+  useEffect(() => {
+    const requestedTopic = dashboardPrefill?.topicName?.trim().toLocaleLowerCase();
+    if (!requestedTopic || derivedSubtopics.length === 0) return;
+    const prefillKey = `${subjectId}|${chapterIds.join(",")}|${requestedTopic}`;
+    if (appliedDashboardTopicRef.current === prefillKey) return;
+    const matchingTopic = derivedSubtopics.find((item) => item.trim().toLocaleLowerCase() === requestedTopic);
+    if (matchingTopic) setSubtopicNames([matchingTopic]);
+    appliedDashboardTopicRef.current = prefillKey;
+  }, [chapterIds, dashboardPrefill?.topicName, derivedSubtopics, subjectId]);
 
   useEffect(() => {
     if (!isCompetitive) return;
@@ -1201,6 +1279,24 @@ export default function GeneratePaperScreen() {
         }
       />
       <Screen contentStyle={styles.screenContentAfterHeader}>
+        {dashboardPrefill ? (
+          <View style={styles.dashboardFocusBanner} accessibilityLiveRegion="polite">
+            <View style={styles.dashboardFocusIcon}>
+              <Ionicons name="analytics-outline" size={18} color={colors.accentStrong} />
+            </View>
+            <View style={styles.dashboardFocusCopy}>
+              <Text style={styles.dashboardFocusEyebrow}>FROM YOUR DASHBOARD</Text>
+              <Text style={styles.dashboardFocusTitle}>
+                {dashboardPrefill.topicName
+                  ? `Focused practice for ${dashboardPrefill.topicName}`
+                  : `Focused practice${dashboardPrefill.subjectName ? ` for ${dashboardPrefill.subjectName}` : ""}`}
+              </Text>
+              <Text style={styles.dashboardFocusBody}>
+                We carried your learning context here. Review the suggested scope before continuing.
+              </Text>
+            </View>
+          </View>
+        ) : null}
         <View style={styles.progress}>
           {[0, 1, 2].map((item) => {
             const done =
@@ -2069,6 +2165,48 @@ const styles = StyleSheet.create({
     paddingTop: spacing[4],
     paddingBottom: layout.bottomTabHeight + spacing[6],
     gap: spacing[3],
+  },
+  dashboardFocusBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[3],
+    padding: spacing[4],
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderBrand,
+    backgroundColor: colors.accentSurface,
+  },
+  dashboardFocusIcon: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+  },
+  dashboardFocusCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  dashboardFocusEyebrow: {
+    color: colors.accentStrong,
+    fontFamily: fonts.extrabold,
+    fontSize: 9,
+    letterSpacing: 1.1,
+  },
+  dashboardFocusTitle: {
+    marginTop: 2,
+    color: colors.nav,
+    fontFamily: fonts.displayBold,
+    fontSize: 16,
+    lineHeight: 21,
+  },
+  dashboardFocusBody: {
+    marginTop: spacing[1],
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
   },
   center: {
     flex: 1,

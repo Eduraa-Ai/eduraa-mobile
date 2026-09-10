@@ -223,7 +223,13 @@ export default function CheckedPaperStatusScreen() {
     setActionError(null)
     try {
       await action()
-      await refetch()
+      await Promise.all([
+        refetch(),
+        queryClient.invalidateQueries({ queryKey: ['checked-papers'] }),
+        queryClient.invalidateQueries({ queryKey: ['student-dashboard-lab'] }),
+        queryClient.invalidateQueries({ queryKey: ['student-dashboard-insights'] }),
+        queryClient.invalidateQueries({ queryKey: ['agentic-subjects'] }),
+      ])
       setConfirmChecked(false)
       setReviewComplete(false)
       setShowRevokeInput(false)

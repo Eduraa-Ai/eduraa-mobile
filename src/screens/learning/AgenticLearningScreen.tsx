@@ -155,7 +155,7 @@ export default function AgenticLearningScreen() {
       })
       return
     }
-    navigation.navigate('LearningHome')
+    navigation.navigate('HomeMain')
   }
   const hasCachedSubjects = subjects.length > 0
 

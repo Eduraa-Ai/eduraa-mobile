@@ -249,6 +249,7 @@ export default function ResultDetailScreen() {
     enabled: Boolean(id),
     refetchInterval: (activeQuery) => {
       const paper = activeQuery.state.data
+      if (paper?.results_visible_to_student === false) return false
       return paper && isCheckedPaperChecking(paper) ? CHECKED_PAPER_POLL_INTERVAL_MS : false
     },
     refetchIntervalInBackground: false,
@@ -404,6 +405,21 @@ export default function ResultDetailScreen() {
             title="Needs your input"
             message="Your paper is safe. Open it from Checked papers to review the specific item that needs you."
             action="Back to checked papers"
+            onAction={() => navigation.navigate('ResultsList')}
+          />
+        </View>
+      </View>
+    )
+  }
+
+  if (!isStaff && data.results_visible_to_student === false) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
+        <View style={styles.stateSurface}>
+          <ResultState
+            title="Result not released yet"
+            message="Your school has finished this result, but marks, answers, and analytics stay private until the school officially releases them. You do not need to resubmit anything."
+            action="Back to results"
             onAction={() => navigation.navigate('ResultsList')}
           />
         </View>

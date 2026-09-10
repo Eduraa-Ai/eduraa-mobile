@@ -683,8 +683,10 @@ export interface UserMemoryItem {
 // ─── Analytics ────────────────────────────────────────────────────────────────
 
 export interface DashboardSubmission {
-  id: string;
+  id?: string | null;
   kind: string;
+  paper_id?: string | null;
+  exam_id?: string | null;
   paper: string; // paper title
   exam: string | null;
   subject: string | null;
@@ -759,11 +761,22 @@ export interface DashboardAiUsageRow {
 }
 
 export interface DashboardTopicMastery {
+  subject_id?: string | null;
   topic: string;
+  topic_id?: string | null;
+  subtopic?: string | null;
+  subtopic_id?: string | null;
   subject?: string | null;
   mastery: number;
+  scored?: number;
+  total?: number;
+  evidence_count?: number;
+  evidence_level?: 'early' | 'developing' | 'established' | string;
+  last_assessed_at?: string | null;
+  sources?: string[];
   difficulty?: string | null;
   chapter?: string | null;
+  chapter_id?: string | null;
 }
 
 export interface DashboardChapterMastery {
@@ -806,6 +819,23 @@ export interface StudentDashboardLab {
   chapter_mastery: DashboardChapterMastery[];
   upcoming_exams: DashboardUpcomingExam[];
   ai_usage: DashboardAiUsageRow[];
+}
+
+export interface StudentDashboardInsightAction {
+  subject?: string | null;
+  chapter?: string | null;
+  topic?: string | null;
+  question_type?: string | null;
+  priority?: string | null;
+  recommendation: string;
+  evidence?: string | null;
+}
+
+export interface StudentDashboardInsights {
+  summary: string;
+  actions: StudentDashboardInsightAction[];
+  provider?: string | null;
+  generated_at: string;
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
