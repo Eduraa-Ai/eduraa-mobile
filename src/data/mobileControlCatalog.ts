@@ -201,7 +201,7 @@ export const mobileControls: MobileControl[] = [
     description: 'Class teacher roster, semester setup, enrollments, validation, and division assignment.',
     icon: 'school',
     section: 'operations',
-    requiresClassTeacher: true,
+    // First-time class teachers complete their class selection from this entry.
     nativeStatus: 'native',
     target: { kind: 'detail' },
   },

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { AppScreen } from '../../components/ui'
 import { ClassValidationReport, ValidationIssue, classTeacherApi, toApiFailure } from '../../api/classTeacher'
-import { classTeacherKeys, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
+import { classTeacherKeys, useActiveClassSection, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
 import { useClassTeacherStore } from '../../stores/classTeacherStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
@@ -64,7 +64,7 @@ export default function ClassValidationScreen() {
   const { identity } = useClassTeacherIdentity()
   const { activeSemester } = useActiveSemester()
   const activeSemesterId = useClassTeacherStore((state) => state.activeSemesterId)
-  const classSection = access.classSections[0]
+  const { activeClassSection: classSection } = useActiveClassSection(access.classSections)
   const classId = classSection?.id
   const [search, setSearch] = useState('')
 

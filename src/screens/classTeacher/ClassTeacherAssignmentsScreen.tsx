@@ -6,12 +6,13 @@ import { AnimatedButton, AppScreen, SelectField } from '../../components/ui'
 import {
   AssignmentTeacherOption,
   ClassTeacherAssignmentInput,
+  ClassTeacherOptions,
   ClassTeacherRequest,
   classTeacherApi,
   classTeacherAssignmentSubjects,
   toApiFailure,
 } from '../../api/classTeacher'
-import { classTeacherKeys, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
+import { classTeacherKeys, useActiveClassSection, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { ClassContextBar, EmptyCard, FailureCard, InlineLoading } from './components'
@@ -20,8 +21,9 @@ const maximumAssignments = 15
 
 function statusCopy(request: ClassTeacherRequest | undefined) {
   if (!request) return 'No plan has been sent for principal approval yet.'
-  if (request.status === 'pending') return 'Waiting for principal approval. You can keep managing your class while the plan is reviewed.'
+  if (request.status === 'pending') return 'Waiting for principal approval. Class management opens when the plan is approved.'
   if (request.status === 'approved') return 'Approved assignments are active for your class.'
+  if (request.status === 'rejected') return request.rejection_reason || 'Your principal asked for a revised plan. Update it and submit again.'
   return `This assignment plan is currently ${request.status}.`
 }
 
@@ -32,12 +34,23 @@ function teacherLabel(teacher: AssignmentTeacherOption) {
 export default function ClassTeacherAssignmentsScreen() {
   const queryClient = useQueryClient()
   const access = useClassTeacherAccess()
-  const { identity } = useClassTeacherIdentity()
-  const { activeSemester } = useActiveSemester()
-  const classSection = access.classSections[0]
+  const { identity, isLoading: identityLoading } = useClassTeacherIdentity()
+  const { activeClassSection: classSection } = useActiveClassSection(access.classSections)
+  const [configuredHere, setConfiguredHere] = useState(false)
+  const configured = Boolean(identity.classTeacherOptIn || configuredHere)
+  const [standard, setStandard] = useState(identity.standard ?? '')
+  const [division, setDivision] = useState(identity.division ?? '')
   const [rows, setRows] = useState<ClassTeacherAssignmentInput[]>([{ teacher_id: '', subject: '' }])
   const [editing, setEditing] = useState(false)
+  const profileSubmitGuard = useRef(false)
   const submitGuard = useRef(false)
+
+  const optionsQuery = useQuery<ClassTeacherOptions, unknown>({
+    queryKey: classTeacherKeys.options(standard || undefined),
+    queryFn: () => classTeacherApi.getOptions(standard || undefined),
+    enabled: !identityLoading && !configured,
+    retry: false,
+  })
 
   const requestsQuery = useQuery<ClassTeacherRequest[], unknown>({
     queryKey: classTeacherKeys.requests,
@@ -54,7 +67,8 @@ export default function ClassTeacherAssignmentsScreen() {
   })
 
   const activeRequest = requestsQuery.data?.[0]
-  const canEdit = !activeRequest || activeRequest.status === 'approved'
+  const { activeSemester } = useActiveSemester({ enabled: activeRequest?.status === 'approved' })
+  const canEdit = !activeRequest || activeRequest.status === 'approved' || activeRequest.status === 'rejected'
   const teachers = teachersQuery.data ?? []
   const selectedTeacherIds = useMemo(() => new Set(rows.map((row) => row.teacher_id).filter(Boolean)), [rows])
 
@@ -62,6 +76,27 @@ export default function ClassTeacherAssignmentsScreen() {
     if (!activeRequest || editing) return
     setRows(activeRequest.assignments.map(({ teacher_id, subject }) => ({ teacher_id, subject })).slice(0, maximumAssignments))
   }, [activeRequest, editing])
+
+  useEffect(() => {
+    const options = optionsQuery.data
+    if (!standard && options?.standards[0]) setStandard(options.standards[0])
+    if (options?.divisions.length && (!division || !options.divisions.includes(division))) {
+      setDivision(options.divisions[0])
+    }
+  }, [division, optionsQuery.data, standard])
+
+  const profileMutation = useMutation({
+    mutationFn: () => classTeacherApi.updateProfile({ opt_in: true, standard, division }),
+    onSuccess: async () => {
+      setConfiguredHere(true)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: classTeacherKeys.identity }),
+        access.refetch(),
+      ])
+    },
+    onError: (error) => Alert.alert('Class not saved', toApiFailure(error).message),
+    onSettled: () => { profileSubmitGuard.current = false },
+  })
 
   const submitMutation = useMutation({
     mutationFn: (assignments: ClassTeacherAssignmentInput[]) => classTeacherApi.createRequest(assignments),
@@ -117,6 +152,54 @@ export default function ClassTeacherAssignmentsScreen() {
     submitMutation.mutate(rows)
   }
 
+  const submitProfile = () => {
+    if (profileSubmitGuard.current || profileMutation.isPending) return
+    if (!standard || !division) {
+      Alert.alert('Choose your class', 'Select both a standard and division before continuing.')
+      return
+    }
+    profileSubmitGuard.current = true
+    profileMutation.mutate()
+  }
+
+  if (identityLoading) {
+    return <AppScreen scroll={false} contentStyle={styles.center}><ActivityIndicator color={colors.accent} /><Text style={styles.loadingText}>Checking your class profile</Text></AppScreen>
+  }
+
+  if (!configured) {
+    const optionsFailure = optionsQuery.error ? toApiFailure(optionsQuery.error) : null
+    return (
+      <AppScreen protectedChrome contentStyle={styles.screen}>
+        <View style={styles.editorCard}>
+          <View style={styles.editorCopy}>
+            <Text style={styles.kicker}>Class teacher setup</Text>
+            <Text style={styles.editorTitle}>Choose the class you lead</Text>
+            <Text style={styles.editorBody}>Select your standard and division once. Next, you will send the teaching plan to your principal.</Text>
+          </View>
+          {optionsFailure ? <FailureCard failure={optionsFailure} onRetry={() => void optionsQuery.refetch()} /> : optionsQuery.isLoading ? <InlineLoading label="Loading your school's classes" /> : (
+            <>
+              <SelectField
+                label="Standard"
+                value={standard}
+                placeholder="Select standard"
+                options={(optionsQuery.data?.standards ?? []).map((value) => ({ value, label: value }))}
+                onChange={setStandard}
+              />
+              <SelectField
+                label="Division"
+                value={division}
+                placeholder="Select division"
+                options={(optionsQuery.data?.divisions ?? []).map((value) => ({ value, label: value }))}
+                onChange={setDivision}
+              />
+              <AnimatedButton label="Continue to teaching plan" loading={profileMutation.isPending} disabled={profileMutation.isPending} onPress={submitProfile} />
+            </>
+          )}
+        </View>
+      </AppScreen>
+    )
+  }
+
   if (access.isLoading) {
     return <AppScreen scroll={false} contentStyle={styles.center}><ActivityIndicator color={colors.accent} /><Text style={styles.loadingText}>Checking your class assignment</Text></AppScreen>
   }
@@ -144,9 +227,9 @@ export default function ClassTeacherAssignmentsScreen() {
       {requestsQuery.isLoading ? <InlineLoading label="Loading assignment status" /> : null}
 
       {activeRequest ? (
-        <View style={[styles.statusCard, activeRequest.status === 'pending' ? styles.statusPending : styles.statusApproved]}>
+        <View style={[styles.statusCard, activeRequest.status === 'pending' ? styles.statusPending : activeRequest.status === 'rejected' ? styles.statusRejected : styles.statusApproved]}>
           <View style={styles.statusHeading}>
-            <View style={styles.statusIcon}><Ionicons name={activeRequest.status === 'pending' ? 'time-outline' : 'checkmark-circle-outline'} size={19} color={activeRequest.status === 'pending' ? colors.warning : colors.success} /></View>
+            <View style={styles.statusIcon}><Ionicons name={activeRequest.status === 'pending' ? 'time-outline' : activeRequest.status === 'rejected' ? 'alert-circle-outline' : 'checkmark-circle-outline'} size={19} color={activeRequest.status === 'pending' || activeRequest.status === 'rejected' ? colors.warning : colors.success} /></View>
             <View style={styles.statusCopy}>
               <Text style={styles.kicker}>Assignment status</Text>
               <Text style={styles.statusTitle}>{activeRequest.status}</Text>
@@ -203,6 +286,7 @@ const styles = StyleSheet.create({
   loadingText: { ...typography.roles.body, color: colors.textMuted },
   statusCard: { gap: spacing[3], borderRadius: radius.lg, borderWidth: 1, padding: spacing[4], ...shadows.xs },
   statusPending: { backgroundColor: colors.warningBg, borderColor: colors.warningBorder },
+  statusRejected: { backgroundColor: colors.warningBg, borderColor: colors.warningBorder },
   statusApproved: { backgroundColor: colors.successBg, borderColor: colors.successBorder },
   statusHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   statusIcon: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundElevated },

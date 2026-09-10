@@ -13,7 +13,7 @@ import {
   classTeacherApi,
   toApiFailure,
 } from '../../api/classTeacher'
-import { classTeacherKeys, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
+import { classTeacherKeys, useActiveClassSection, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
 import { useClassTeacherStore } from '../../stores/classTeacherStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
@@ -110,7 +110,7 @@ export default function ClassSubjectsScreen() {
   const { activeSemester } = useActiveSemester()
   const activeSemesterId = useClassTeacherStore((state) => state.activeSemesterId)
 
-  const classSection = access.classSections[0]
+  const { activeClassSection: classSection } = useActiveClassSection(access.classSections)
   const classId = classSection?.id
 
   const [draft, setDraft] = useState<Draft | null>(null)
