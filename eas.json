@@ -5,13 +5,13 @@
   },
   "build": {
     "development": {
-      "node": "20.19.4",
+      "node": "22.13.1",
       "developmentClient": true,
       "distribution": "internal",
       "environment": "development"
     },
     "preview": {
-      "node": "20.19.4",
+      "node": "22.13.1",
       "distribution": "internal",
       "environment": "preview",
       "android": {
@@ -19,7 +19,7 @@
       }
     },
     "production": {
-      "node": "20.19.4",
+      "node": "22.13.1",
       "autoIncrement": true,
       "environment": "production"
     }

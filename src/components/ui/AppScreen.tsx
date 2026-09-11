@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   ambientLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   orangeOrb: {
     position: 'absolute',

@@ -12,7 +12,7 @@ outcomes. It does not mean shrinking desktop layouts onto a phone.
 
 Requirements:
 
-- Node.js `20.19.4` and npm `10.8.2` (pinned by `.nvmrc` and `package.json`);
+- Node.js `22.13.1` and npm `10.8.2` (pinned by `.nvmrc` and `package.json`);
 - Azure CLI access to the Eduraa development subscription, or the public API
   origin supplied by a maintainer;
 - Expo Go for physical-device testing;

@@ -207,13 +207,13 @@ function PaperTile({
           ]}
           start={{ x: 0, y: 0.45 }}
           end={{ x: 1, y: 0.45 }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         <LinearGradient
           colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.28)"]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         <View style={styles.tileIcon}>
           <Ionicons
@@ -649,7 +649,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   headerPhoto: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: "100%",
     height: "100%",
     opacity: 0.98,
@@ -821,7 +821,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   tilePhoto: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: "100%",
     height: "100%",
   },

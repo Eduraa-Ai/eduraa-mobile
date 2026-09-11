@@ -2368,12 +2368,12 @@ const styles = StyleSheet.create({
     ...shadows.md,
   },
   heroImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: "100%",
     height: "100%",
   },
   heroWarmVeil: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(194,65,12,0.07)",
   },
   heroContent: {

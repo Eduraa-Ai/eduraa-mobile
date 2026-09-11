@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   glassSurface: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.90)',
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.78)',
   },
   constellationClip: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.82,
   },
   scroller: {

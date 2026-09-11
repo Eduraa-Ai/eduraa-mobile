@@ -1035,7 +1035,7 @@ function HistoryPanel({
 
 const hp = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(28,25,23,0.4)",
   },
   panel: {
@@ -1784,7 +1784,7 @@ function MemoryRow({ row }: { row: ContextRow }) {
 const sheet = StyleSheet.create({
   modal: { flex: 1, justifyContent: "flex-end" },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(7,21,45,0.48)",
   },
   panel: {
