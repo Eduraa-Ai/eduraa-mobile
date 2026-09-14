@@ -12,7 +12,10 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.eduraa.mobile"
+      "bundleIdentifier": "com.eduraa.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {

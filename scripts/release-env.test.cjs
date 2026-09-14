@@ -55,6 +55,7 @@ test('profileless production Expo config accepts a public HTTPS API origin', () 
     const config = JSON.parse(result.stdout)
     assert.equal(config.name, 'Eduraa')
     assert.equal(config.slug, 'eduraa-mobile')
+    assert.equal(config.ios?.infoPlist?.ITSAppUsesNonExemptEncryption, false)
 })
 
 test('anonymous Expo Go config omits EAS ownership for local phone testing', () => {
