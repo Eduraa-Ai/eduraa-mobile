@@ -195,7 +195,7 @@ export const mobileControls: MobileControl[] = [
   },
   {
     id: 'class-teacher',
-    label: 'Class Teacher Management',
+    label: 'My Class',
     webPath: '/class-teacher',
     roles: ['teacher'],
     description: 'Class teacher roster, semester setup, enrollments, validation, and division assignment.',

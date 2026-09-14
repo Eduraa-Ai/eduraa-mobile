@@ -45,10 +45,17 @@ export default function ClassTeacherOverviewScreen() {
     enabled: access.isAuthorized,
     retry: false,
   })
-  const request = requestsQuery.data?.find(
+  const latestPlan = requestsQuery.data?.find(
     (item) => item.standard === classSection?.standard && item.division === classSection?.division,
   )
-  const planIsApproved = request?.status === 'approved'
+  const approvedPlan = requestsQuery.data?.find(
+    (item) => item.standard === classSection?.standard
+      && item.division === classSection?.division
+      && item.status === 'approved',
+  )
+  const pendingRevision = latestPlan?.status === 'pending' && Boolean(approvedPlan)
+  const rejectedRevision = latestPlan?.status === 'rejected' && Boolean(approvedPlan)
+  const planIsApproved = Boolean(approvedPlan)
 
   const semestersQuery = useQuery<Semester[], unknown>({
     queryKey: classTeacherKeys.semesters,
@@ -149,18 +156,18 @@ export default function ClassTeacherOverviewScreen() {
   }
 
   if (!planIsApproved) {
-    const rejected = request?.status === 'rejected'
+    const rejected = latestPlan?.status === 'rejected'
     return (
       <AppScreen contentStyle={styles.screen}>
         <GradientHeroCard
           eyebrow="CLASS TEACHER"
-          title={request?.status === 'pending' ? 'Plan awaiting approval' : rejected ? 'Plan needs an update' : 'One quick setup left'}
-          subtitle={request?.status === 'pending' ? 'Your principal is reviewing the teaching plan. Class management will open automatically after approval.' : rejected ? request.rejection_reason || 'Update the teaching plan and send it again.' : 'Choose your class and send its teaching plan to your principal.'}
+          title={latestPlan?.status === 'pending' ? 'Plan awaiting approval' : rejected ? 'Plan needs an update' : 'One quick setup left'}
+          subtitle={latestPlan?.status === 'pending' ? 'Your principal is reviewing the teaching plan. Class management will open automatically after approval.' : rejected ? latestPlan.rejection_reason || 'Update the teaching plan and send it again.' : 'Choose your class and send its teaching plan to your principal.'}
         />
         <AnimatedButton
-          label={request?.status === 'pending' ? 'Check approval status' : rejected ? 'Update teaching plan' : 'Set up teaching plan'}
-          variant={request?.status === 'pending' ? 'secondary' : 'primary'}
-          onPress={() => request?.status === 'pending' ? void requestsQuery.refetch() : navigation.navigate('ClassTeacherAssignments')}
+          label={latestPlan?.status === 'pending' ? 'Check approval status' : rejected ? 'Update teaching plan' : 'Set up teaching plan'}
+          variant={latestPlan?.status === 'pending' ? 'secondary' : 'primary'}
+          onPress={() => latestPlan?.status === 'pending' ? void requestsQuery.refetch() : navigation.navigate('ClassTeacherAssignments')}
         />
       </AppScreen>
     )
@@ -186,6 +193,24 @@ export default function ClassTeacherOverviewScreen() {
         semesterName={activeSemester?.name}
         isStale={validationQuery.isFetching && Boolean(report)}
       />
+
+      {pendingRevision ? (
+        <View style={styles.pendingNote}>
+          <Ionicons name="time-outline" size={16} color={colors.warning} />
+          <Text style={styles.pendingNoteText}>
+            A teaching-plan update is awaiting principal approval. Your current approved class remains available.
+          </Text>
+        </View>
+      ) : null}
+
+      {rejectedRevision ? (
+        <View style={styles.pendingNote}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+          <Text style={styles.pendingNoteText}>
+            Your current approved class remains available. The proposed teaching-plan update needs changes before it can replace it.
+          </Text>
+        </View>
+      ) : null}
 
       {access.classSections.length > 1 ? (
         <View style={styles.classPicker} accessibilityRole="radiogroup" accessibilityLabel="Select class">
@@ -244,17 +269,17 @@ export default function ClassTeacherOverviewScreen() {
       <SectionHeaderRow title="Teacher assignment" meta="The principal approves this plan before it becomes active." />
 
       <NavRow
-          icon={request?.status === 'approved' ? 'checkmark-circle' : request?.status === 'pending' ? 'time' : 'person-add'}
-          title={request ? `Plan ${request.status}` : 'Plan subject teachers'}
+          icon={latestPlan?.status === 'approved' ? 'checkmark-circle' : latestPlan?.status === 'pending' ? 'time' : 'person-add'}
+          title={latestPlan ? `Plan ${latestPlan.status}` : 'Plan subject teachers'}
           body={
-            request?.status === 'pending'
+            latestPlan?.status === 'pending'
               ? 'Your plan is waiting for principal approval. Open it to review the submitted teachers and subjects.'
-              : request?.status === 'approved'
+              : latestPlan?.status === 'approved'
                 ? 'Your approved teacher-subject plan is active. Open it to review or submit an update.'
                 : 'Choose approved teachers and their subjects, then submit the plan for principal approval.'
           }
-          tone={request?.status === 'approved' ? colors.success : request?.status === 'pending' ? colors.warning : colors.accent}
-          meta={requestsQuery.isLoading ? 'Loading' : request ? `${request.assignments.length}` : 'Start'}
+          tone={latestPlan?.status === 'approved' ? colors.success : latestPlan?.status === 'pending' ? colors.warning : colors.accent}
+          meta={requestsQuery.isLoading ? 'Loading' : latestPlan ? `${latestPlan.assignments.length}` : 'Start'}
           onPress={() => navigation.navigate('ClassTeacherAssignments')}
       />
 
@@ -360,6 +385,23 @@ const styles = StyleSheet.create({
   },
   partialNote: {
     color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  pendingNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[2],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSurface,
+    padding: spacing[3],
+  },
+  pendingNoteText: {
+    flex: 1,
+    color: colors.textSecondary,
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 12,
     lineHeight: 17,
