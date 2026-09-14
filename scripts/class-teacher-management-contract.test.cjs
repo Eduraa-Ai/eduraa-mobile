@@ -42,6 +42,19 @@ test('first-time teachers can enter setup and management waits for approval', ()
   assert.match(overview, /Plan awaiting approval/)
 })
 
+test('approved class access survives a pending or rejected plan revision', () => {
+  const overview = read('src/screens/classTeacher/ClassTeacherOverviewScreen.tsx')
+  assert.match(overview, /const approvedPlan = requestsQuery\.data\?\.find/)
+  assert.match(overview, /const planIsApproved = Boolean\(approvedPlan\)/)
+  assert.match(overview, /current approved class remains available/)
+})
+
+test('validation findings provide direct recovery actions', () => {
+  const validation = read('src/screens/classTeacher/ClassValidationScreen.tsx')
+  assert.match(validation, /navigation\.navigate\('ClassRoster'\)/)
+  assert.match(validation, /navigation\.navigate\('ClassSubjects'\)/)
+})
+
 test('all class management screens preserve the selected class', () => {
   const hook = read('src/hooks/useClassTeacherAccess.ts')
   assert.match(hook, /export function useActiveClassSection/)

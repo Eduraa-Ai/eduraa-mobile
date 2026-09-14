@@ -144,9 +144,9 @@ Status: ✅ ported · 🟡 partial · ⛔ not in mobile.
 | `/approvals` `ApprovalsPage.tsx` | `/approvals/{principals,teachers,students,class-teacher-requests,teacher-profile-updates}/pending` + `/:id/approve` | [ApprovalsScreen](src/screens/workspace/ApprovalsScreen.tsx), `approvals.ts` | ✅ |
 | `/attendance` (teacher/leadership) | `/attendance/teacher/today`, `/dashboard/teacher-summary`, `/dashboard/leadership`, `/sheets/:id/{records,submit,reopen,mark-all-present}`, `/classes/:id/sheet`, `/records/:id/override` | [AttendanceScreen](src/screens/workspace/AttendanceScreen.tsx), `attendance.ts` | 🟡 — no `classes/:id/sheet` or record override |
 | `/exams` `Exams.tsx` | `/exams`, `/exams/:id`, `/papers`, `/papers/options`, `/papers/:id/export/pdf`, `/cheat-sheets/teacher/syllabi` | [ExamsScreen](src/screens/workspace/ExamsScreen.tsx), `exams.ts` | 🟡 |
-| `/teacher` `TeacherPage.tsx` | `/roster/teacher/master-profile`, `/roster/teacher/profile-update-request`, `/class-teacher/{opt-in,options}`, `/agentic-learning/cohort-insights` | [FeatureScreen](src/screens/workspace/FeatureScreen.tsx) read-only snapshot via `workspace.ts` | 🟡 |
+| `/teacher` `TeacherPage.tsx` | `/roster/teacher/master-profile`, `/roster/teacher/profile-update-request`, `/class-teacher/{opt-in,options}`, `/agentic-learning/cohort-insights` | [B2BProfileScreen](src/screens/profile/B2BProfileScreen.tsx) native profile, approval-aware edits, and security; cohort insights remain in the workspace snapshot | 🟢 |
 | `/teacher/students` `TeacherStudents.tsx` | `/roster/teacher/students(/:id)`, `/class-teacher/students` | `FeatureScreen` snapshot only | 🟡 |
-| `/class-teacher` `ClassTeacherManagement.tsx` | `/class-teacher/*` (11 routes) | `FeatureScreen` snapshot only | 🟡 |
+| `/class-teacher` `ClassTeacherManagement.tsx` | `/class-teacher/*` | Native My Class workflow covering approval-gated setup, assignments, roster, semesters, subjects, enrollments, and validation | ✅ |
 | `/teacher/question-papers`, `/teacher/paper/:id` | `/question-papers/teacher*`, `/analytics/teacher-dashboard-lab/paper/:id` | — | ⛔ |
 | `/index-books` `IndexBooks.tsx` | `/documents/*`, `/chapters/*`, `/topics`, `/previous-papers/questions/:id` | `FeatureScreen` snapshot only | 🟡 |
 | `/index-notes` `IndexNotes.tsx` | `/notes*` | `FeatureScreen` snapshot only | 🟡 |
