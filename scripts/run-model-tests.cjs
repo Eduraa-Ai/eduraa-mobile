@@ -248,7 +248,7 @@ try {
   const tscBin = require.resolve('typescript/bin/tsc')
   execFileSync(
     process.execPath,
-    [tscBin, ...models, '--outDir', outDir, '--module', 'commonjs', '--target', 'es2020', '--esModuleInterop', '--skipLibCheck'],
+    [tscBin, '--ignoreConfig', ...models, '--outDir', outDir, '--module', 'commonjs', '--target', 'es2022', '--esModuleInterop', '--skipLibCheck'],
     { cwd: root, stdio: 'inherit' },
   )
 

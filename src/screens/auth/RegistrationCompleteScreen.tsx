@@ -60,7 +60,7 @@ export default function RegistrationCompleteScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  ambientLayer: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  ambientLayer: { ...StyleSheet.absoluteFill, overflow: 'hidden' },
   orangeGlow: {
     position: 'absolute',
     width: 280,

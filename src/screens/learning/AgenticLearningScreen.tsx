@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   ringWrap: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center' },
-  ringCopy: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  ringCopy: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   ringValue: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 20, lineHeight: 23 },
   ringLabel: { color: '#B7C2D3', fontFamily: typography.fonts.bodyBold, fontSize: 8, textTransform: 'uppercase' },
   subjectList: { gap: spacing[2] },

@@ -292,7 +292,7 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: NAVY },
-  starLayer: { ...StyleSheet.absoluteFillObject },
+  starLayer: { ...StyleSheet.absoluteFill },
   star: { position: 'absolute' },
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 20 },

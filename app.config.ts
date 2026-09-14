@@ -1,6 +1,7 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
+import apiConfig from "./src/api/apiConfig.cjs";
 
-const { resolveReleaseApiBaseUrl } = require("./src/api/apiConfig.cjs") as {
+const { resolveReleaseApiBaseUrl } = apiConfig as {
   resolveReleaseApiBaseUrl: (environment: {
     universalUrl?: string;
     webUrl?: string;
