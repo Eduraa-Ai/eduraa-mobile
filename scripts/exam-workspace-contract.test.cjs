@@ -81,6 +81,7 @@ test('native scan uploads use Expo file-backed multipart while web keeps Axios',
   assert.match(scanApi, /async awaitCheckedPaper\(/)
   assert.match(scanDraft, /pendingUpload: ScanUploadReceipt \| null/)
   assert.match(scanDraft, /clientUploadId: string/)
+  assert.match(scanDraft, /await source\.copy\(destination\)/)
   assert.match(scanApi, /'Idempotency-Key': payload\.clientUploadId/)
   assert.match(scanScreen, /pendingUpload: receipt/)
   assert.match(scanScreen, /Resume checking/)

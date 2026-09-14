@@ -55,7 +55,7 @@ export async function persistScanUploadFile(file: ScanUploadFile, userId: string
   const safeName = safeSegment(file.name.replace(/\.[^.]+$/, ''))
   const extension = file.name.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? ''
   const destination = new File(directory, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}${extension}`)
-  source.copy(destination)
+  await source.copy(destination)
   return {
     ...file,
     uri: destination.uri,
