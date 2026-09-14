@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { ActivityIndicator, FlatList, StyleSheet, Text, View, RefreshControl } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { AppScreen } from '../../components/ui'
+import { AnimatedButton, AppScreen } from '../../components/ui'
 import { ClassValidationReport, ValidationIssue, classTeacherApi, toApiFailure } from '../../api/classTeacher'
 import { classTeacherKeys, useActiveClassSection, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
@@ -60,6 +61,7 @@ function IssueCard({ issue }: { issue: ValidationIssue }) {
 }
 
 export default function ClassValidationScreen() {
+  const navigation = useNavigation<any>()
   const access = useClassTeacherAccess()
   const { identity } = useClassTeacherIdentity()
   const { activeSemester } = useActiveSemester()
@@ -148,6 +150,17 @@ export default function ClassValidationScreen() {
               ? `No subject gaps found. Every student is enrolled in at least the ${report.expected_subject_count} expected subject${report.expected_subject_count === 1 ? '' : 's'}.`
               : `${report.issues.length} student${report.issues.length === 1 ? '' : 's'} need attention against the ${report.expected_subject_count} expected subject${report.expected_subject_count === 1 ? '' : 's'}.`}
           </Text>
+
+          {report.unassigned_students > 0 ? (
+            <AnimatedButton
+              label={`Assign ${report.unassigned_students} student${report.unassigned_students === 1 ? '' : 's'} to a division`}
+              variant="secondary"
+              onPress={() => navigation.navigate('ClassRoster')}
+            />
+          ) : null}
+          {report.issues.length > 0 ? (
+            <AnimatedButton label="Fix subject enrollment" onPress={() => navigation.navigate('ClassSubjects')} />
+          ) : null}
 
           {report.issues.length > 0 ? (
             <SearchField value={search} onChange={setSearch} placeholder="Search student or subject" accessibilityLabel="Search validation issues" />
