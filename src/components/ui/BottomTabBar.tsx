@@ -12,6 +12,7 @@ const MAX_SHELL_WIDTH = 410
 const MIN_SHELL_WIDTH = 288
 const SHELL_INSET = 14
 const SHELL_EDGE_PADDING = 5
+const SCROLLING_EDGE_PADDING = 28
 const SHELL_HEIGHT = 68
 const SCROLLING_ITEM_WIDTH = 66
 const ACTIVE_ORB_SIZE = 46
@@ -193,26 +194,27 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   const [isDragging, setIsDragging] = useState(false)
 
   const shellWidth = Math.min(MAX_SHELL_WIDTH, Math.max(MIN_SHELL_WIDTH, windowWidth - SHELL_INSET * 2))
-  const availableTabWidth = shellWidth - SHELL_EDGE_PADDING * 2
   // Keep the standard six student destinations inside one stable rail. A
   // horizontally centred active item cut the first and last controls at phone
   // edges, which made the tab bar look clipped and hid available destinations.
   const fitsWithoutScrolling = state.routes.length <= 6
+  const edgePadding = fitsWithoutScrolling ? SHELL_EDGE_PADDING : SCROLLING_EDGE_PADDING
+  const availableTabWidth = shellWidth - edgePadding * 2
   const itemWidth = fitsWithoutScrolling
     ? availableTabWidth / Math.max(1, state.routes.length)
     : SCROLLING_ITEM_WIDTH
   const contentWidth = fitsWithoutScrolling
     ? shellWidth
-    : state.routes.length * itemWidth + SHELL_EDGE_PADDING * 2
+    : state.routes.length * itemWidth + edgePadding * 2
   const activeIndicatorX = useRef(
     new Animated.Value(
-      SHELL_EDGE_PADDING + state.index * itemWidth + (itemWidth - ACTIVE_ORB_SIZE) / 2,
+      edgePadding + state.index * itemWidth + (itemWidth - ACTIVE_ORB_SIZE) / 2,
     ),
   ).current
   const activeRouteName = state.routes[previewIndex]?.name
   const indicatorPositionForIndex = useCallback(
-    (index: number) => SHELL_EDGE_PADDING + index * itemWidth + (itemWidth - ACTIVE_ORB_SIZE) / 2,
-    [itemWidth],
+    (index: number) => edgePadding + index * itemWidth + (itemWidth - ACTIVE_ORB_SIZE) / 2,
+    [edgePadding, itemWidth],
   )
 
   const measureShell = useCallback(() => {
@@ -223,11 +225,11 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   const scrollToIndex = useCallback((index: number, animated = true) => {
     if (!viewportWidth || fitsWithoutScrolling) return
-    const itemCenter = SHELL_EDGE_PADDING + index * itemWidth + itemWidth / 2
+    const itemCenter = edgePadding + index * itemWidth + itemWidth / 2
     const maxScroll = Math.max(0, contentWidth - viewportWidth)
     const centeredScroll = clamp(itemCenter - viewportWidth / 2, 0, maxScroll)
     scrollRef.current?.scrollTo({ x: centeredScroll, animated })
-  }, [contentWidth, fitsWithoutScrolling, itemWidth, viewportWidth])
+  }, [contentWidth, edgePadding, fitsWithoutScrolling, itemWidth, viewportWidth])
 
   const settleIndicator = useCallback((index: number) => {
     Animated.spring(activeIndicatorX, {
@@ -377,7 +379,7 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
           keyboardShouldPersistTaps="handled"
           removeClippedSubviews={false}
           style={styles.scroller}
-          contentContainerStyle={[styles.bar, { width: contentWidth }]}
+          contentContainerStyle={[styles.bar, { width: contentWidth, paddingHorizontal: edgePadding }]}
           onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
           onScroll={(event) => {
             scrollOffsetRef.current = event.nativeEvent.contentOffset.x
