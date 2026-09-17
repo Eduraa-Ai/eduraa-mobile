@@ -277,7 +277,7 @@ try {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ status: 'approved', resolution_note: 'Reviewed against the teacher register.' }),
   })
-  await resetAndLogin(session, 'attendance-leader@example.test', 'student / approved')
+  await resetAndLogin(session, 'attendance-leader@example.test', 'Reviewed against the teacher register.')
   await evaluate(session, `(() => { const scrollable=[...document.querySelectorAll('*')].filter((item)=>item.scrollHeight>item.clientHeight+80).sort((a,b)=>b.scrollHeight-b.clientHeight-a.scrollHeight+a.clientHeight)[0]; if(scrollable)scrollable.scrollTop=680; })()`)
   await sleep(800)
   await capture(session, 'leadership-correction-approved-390x844.png')

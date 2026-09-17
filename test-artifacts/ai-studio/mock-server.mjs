@@ -1004,7 +1004,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'GET' && path === '/api/v1/attendance/corrections') {
         json(response, 200, requestRole === 'principal'
-            ? [{ id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: attendanceRecords[3].id, student_id: attendanceRecords[3].student_id, requested_by_user_id: attendanceRecords[3].student_id, requested_by_role: 'student', reason: 'I was present after the school bus arrived late.', status: leaderAttendanceCorrectionStatus, resolved_by_user_id: leaderAttendanceCorrectionStatus === 'pending' ? null : 'leader', resolved_by_role: leaderAttendanceCorrectionStatus === 'pending' ? null : 'principal', resolved_at: leaderAttendanceCorrectionStatus === 'pending' ? null : '2026-08-19T17:10:00.000Z', resolution_note: leaderAttendanceCorrectionStatus === 'pending' ? null : 'Reviewed against the teacher register.' }]
+            ? [{ id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: attendanceRecords[3].id, student_id: attendanceRecords[3].student_id, student_name: attendanceRecords[3].student_name, student_code: attendanceRecords[3].student_code, attendance_date: '2026-08-19', standard: attendanceRecords[3].standard, division: attendanceRecords[3].division, current_status: attendanceRecords[3].status, requested_by_user_id: attendanceRecords[3].student_id, requested_by_role: 'student', reason: 'I was present after the school bus arrived late.', status: leaderAttendanceCorrectionStatus, resolved_by_user_id: leaderAttendanceCorrectionStatus === 'pending' ? null : 'leader', resolved_by_role: leaderAttendanceCorrectionStatus === 'pending' ? null : 'principal', resolved_at: leaderAttendanceCorrectionStatus === 'pending' ? null : '2026-08-19T17:10:00.000Z', resolution_note: leaderAttendanceCorrectionStatus === 'pending' ? null : 'Reviewed against the teacher register.' }]
             : studentAttendanceCorrection ? [studentAttendanceCorrection] : [])
         return
     }
@@ -1018,7 +1018,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'POST' && path === '/api/v1/attendance/corrections') {
         const payload = await readBody(request)
-        studentAttendanceCorrection = { id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: payload.record_id, student_id: 'a2000000-0000-4000-8000-000000000001', requested_by_user_id: null, requested_by_role: requestRole, reason: payload.reason, status: 'pending', resolved_by_user_id: null, resolved_by_role: null, resolved_at: null, resolution_note: null }
+        studentAttendanceCorrection = { id: 'a8000000-0000-4000-8000-000000000001', sheet_id: 'a4000000-0000-4000-8000-000000000001', record_id: payload.record_id, student_id: 'a2000000-0000-4000-8000-000000000001', student_name: 'Anaya Sharma', student_code: 'STD-1001', attendance_date: '2026-08-19', standard: '10', division: 'A', current_status: 'absent', requested_by_user_id: null, requested_by_role: requestRole, reason: payload.reason, status: 'pending', resolved_by_user_id: null, resolved_by_role: null, resolved_at: null, resolution_note: null }
         json(response, 200, studentAttendanceCorrection)
         return
     }

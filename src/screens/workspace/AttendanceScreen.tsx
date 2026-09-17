@@ -359,10 +359,13 @@ function CorrectionsList({
                 <Ionicons name="chatbox-ellipses" size={18} color={colors.accent} />
               </View>
               <View style={styles.recordCopy}>
-                <Text style={styles.recordTitle}>{item.reason}</Text>
-                <Text style={styles.recordMeta}>{item.requested_by_role || 'User'} / {item.status}</Text>
+                <Text style={styles.recordTitle}>{item.student_name || 'Student'}{item.student_code ? ` · ${item.student_code}` : ''}</Text>
+                <Text style={styles.recordMeta}>
+                  {item.attendance_date ? `${formatDate(item.attendance_date)} · ` : ''}{item.standard || 'Class'} {item.division ?? ''}{item.current_status ? ` · Currently ${statusLabels[item.current_status]}` : ''}
+                </Text>
               </View>
             </View>
+            <Text style={styles.noteText}>{item.reason}</Text>
             {item.resolution_note ? <Text style={styles.noteText}>{item.resolution_note}</Text> : null}
             {canResolve && item.status === 'pending' ? (
               <View style={styles.correctionActions}>
@@ -1019,7 +1022,11 @@ function TeacherAttendance() {
     <View style={styles.root}>
     <AppScreen
       protectedChrome
-      contentStyle={{ ...styles.screen, ...styles.teacherScreen }}
+      contentStyle={{
+        ...styles.screen,
+        ...styles.teacherScreen,
+        paddingBottom: layout.bottomTabHeight + insets.bottom + 190,
+      }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAttendance} tintColor={colors.accent} colors={[colors.accent]} />}
     >
       <AttendanceHero
@@ -1273,12 +1280,10 @@ function AttendanceHero({ title, subtitle, signal }: { title: string; subtitle: 
   return (
     <View style={styles.attendanceHero}>
       <View style={styles.heroTopline}>
-        <View style={styles.heroCopy}>
-          <Text style={styles.heroEyebrow}>ATTENDANCE</Text>
-          <Text style={styles.heroTitle}>{title}</Text>
-        </View>
+        <Text style={styles.heroEyebrow}>ATTENDANCE</Text>
         <View style={styles.heroSignal}><View style={styles.heroSignalDot} /><Text style={styles.heroSignalText}>{signal}</Text></View>
       </View>
+      <Text style={styles.heroTitle}>{title}</Text>
       <Text style={styles.heroSubtitle}>{subtitle}</Text>
     </View>
   )
@@ -2090,10 +2095,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing[3],
-  },
-  heroCopy: {
-    flex: 1,
-    gap: spacing[1],
   },
   heroEyebrow: {
     color: colors.accentStrong,

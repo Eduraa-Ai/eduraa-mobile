@@ -174,6 +174,12 @@ export interface AttendanceCorrectionRequest {
   resolved_by_role?: string | null
   resolved_at?: string | null
   resolution_note?: string | null
+  student_name?: string | null
+  student_code?: string | null
+  attendance_date?: string | null
+  standard?: string | null
+  division?: string | null
+  current_status?: AttendanceStatus | null
 }
 
 export interface AttendanceRecordUpdate {
