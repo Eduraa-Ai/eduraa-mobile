@@ -1064,7 +1064,7 @@ function TeacherAttendance() {
               />
             </View>
           </View>
-          <DateField label="Attendance date" value={attendanceDate} onChange={changeAttendanceDate} disabled={Boolean(busyKey)} />
+          <DateField label="Attendance date" value={attendanceDate} maxDate={todaySchoolDate()} onChange={changeAttendanceDate} disabled={Boolean(busyKey)} />
           {classesQuery.isError ? <Text style={styles.controlHint}>Showing the current assigned class. Pull to refresh to load other assigned classes.</Text> : null}
         </View>
       </View>

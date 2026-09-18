@@ -11,13 +11,14 @@ interface DateFieldProps {
   value?: string
   placeholder?: string
   disabled?: boolean
+  maxDate?: string
   error?: string
   onChange: (value: string) => void
 }
 
 const weekdayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
-export function DateField({ label, value, placeholder = 'Select date', disabled = false, error, onChange }: DateFieldProps) {
+export function DateField({ label, value, placeholder = 'Select date', disabled = false, maxDate, error, onChange }: DateFieldProps) {
   const [open, setOpen] = useState(false)
   const selectedDate = useMemo(() => {
     if (!value) return null
@@ -35,6 +36,7 @@ export function DateField({ label, value, placeholder = 'Select date', disabled 
     return eachDayOfInterval({ start: startOfMonth(visibleMonth), end: endOfMonth(visibleMonth) })
   }, [visibleMonth])
   const leadingBlanks = getDay(startOfMonth(visibleMonth))
+  const canGoForward = !maxDate || format(addMonths(visibleMonth, 1), 'yyyy-MM') <= maxDate.slice(0, 7)
 
   return (
     <View style={styles.root}>
@@ -68,7 +70,7 @@ export function DateField({ label, value, placeholder = 'Select date', disabled 
               <Ionicons name="chevron-back" size={18} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.monthLabel}>{format(visibleMonth, 'MMMM yyyy')}</Text>
-            <TouchableOpacity style={styles.monthNavButton} onPress={() => setVisibleMonth((current) => addMonths(current, 1))}>
+            <TouchableOpacity disabled={!canGoForward} style={[styles.monthNavButton, !canGoForward && styles.triggerDisabled]} onPress={() => setVisibleMonth((current) => addMonths(current, 1))}>
               <Ionicons name="chevron-forward" size={18} color={colors.text} />
             </TouchableOpacity>
           </View>
@@ -85,10 +87,12 @@ export function DateField({ label, value, placeholder = 'Select date', disabled 
             ))}
             {days.map((day) => {
               const active = selectedDate ? isSameDay(day, selectedDate) : false
+              const dayDisabled = Boolean(maxDate && format(day, 'yyyy-MM-dd') > maxDate)
               return (
                 <TouchableOpacity
                   key={day.toISOString()}
-                  style={styles.dayCell}
+                  disabled={dayDisabled}
+                  style={[styles.dayCell, dayDisabled && styles.triggerDisabled]}
                   onPress={() => {
                     onChange(format(day, 'yyyy-MM-dd'))
                     setOpen(false)
