@@ -1,5 +1,11 @@
 import type { Announcement, AnnouncementDraftPayload, TeacherAnnouncementClass } from '../../api/announcements'
 
+const CLASS_ONLY_ANNOUNCEMENT_TYPES = new Set<Announcement['announcement_type']>([
+  'home_work',
+  'class_work',
+  'exam_time_table',
+])
+
 export interface AnnouncementDraftErrors {
   audience?: string
   title?: string
@@ -12,16 +18,20 @@ export function validateAnnouncementDraft(
   classes: readonly TeacherAnnouncementClass[],
 ): AnnouncementDraftErrors {
   const errors: AnnouncementDraftErrors = {}
-  if (draft.target_scope === 'class') {
+  if (announcementRequiresClass(draft.announcement_type) && draft.target_scope !== 'class') {
+    errors.audience = 'Choose one class for home work, class work, or an exam timetable.'
+  } else if (draft.target_scope === 'class') {
     if (!draft.class_section_id) errors.audience = 'Choose the class that should receive this.'
     else if (!classes.some((item) => item.id === draft.class_section_id)) errors.audience = 'Choose a class you currently teach.'
   } else if (!classes.length) {
     errors.audience = 'No authorized class audience is available.'
   }
-  if (!draft.title.trim()) errors.title = 'Add a clear title students can scan quickly.'
-  else if (draft.title.trim().length > 255) errors.title = 'Keep the title within 255 characters.'
-  if (!draft.body.trim()) errors.body = 'Add the complete message students need.'
-  else if (draft.body.trim().length > 5000) errors.body = 'Keep the message within 5,000 characters.'
+  if (draft.announcement_type !== 'exam_time_table') {
+    if (!draft.title.trim()) errors.title = 'Add a clear title students can scan quickly.'
+    else if (draft.title.trim().length > 255) errors.title = 'Keep the title within 255 characters.'
+    if (!draft.body.trim()) errors.body = 'Add the complete message students need.'
+    else if (draft.body.trim().length > 5000) errors.body = 'Keep the message within 5,000 characters.'
+  }
   if (draft.attachments.length > 5) errors.attachments = 'Attach no more than five files.'
   if (draft.announcement_type === 'exam_time_table' && !draft.attachments.length) {
     errors.attachments = 'Add an image or PDF timetable before publishing.'
@@ -32,6 +42,10 @@ export function validateAnnouncementDraft(
     errors.attachments = 'Exam timetables can include images or PDFs only.'
   }
   return errors
+}
+
+export function announcementRequiresClass(type: Announcement['announcement_type']) {
+  return CLASS_ONLY_ANNOUNCEMENT_TYPES.has(type)
 }
 
 export function announcementHasErrors(errors: AnnouncementDraftErrors) {
@@ -79,4 +93,29 @@ export function announcementErrorKind(status?: number) {
   if (status === 403) return 'permission' as const
   if (status === 404) return 'missing' as const
   return 'network' as const
+}
+
+type AnnouncementNavigationLike = {
+  canGoBack?: () => boolean
+  goBack?: () => void
+  navigate?: (routeName: string) => void
+  replace?: (routeName: string) => void
+  reset?: (state: { index: number; routes: Array<{ name: string }> }) => void
+  setParams?: (params: { announcementId?: undefined }) => void
+}
+
+export function clearAnnouncementDetail(navigation: AnnouncementNavigationLike) {
+  if (navigation.replace) navigation.replace('Announcements')
+  else navigation.setParams?.({ announcementId: undefined })
+}
+
+export function returnFromAnnouncements(navigation: AnnouncementNavigationLike, isTeacher: boolean) {
+  if (navigation.canGoBack?.() && navigation.goBack) {
+    navigation.goBack()
+    return 'back' as const
+  }
+  const destination = isTeacher ? 'StaffWorkspace' : 'HomeMain'
+  if (navigation.reset) navigation.reset({ index: 0, routes: [{ name: destination }] })
+  else navigation.navigate?.(destination)
+  return destination
 }
