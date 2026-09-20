@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const {
+  canUseDoubts,
   createClientRequestId,
   emptyDoubtDraft,
   filterDoubts,
@@ -12,6 +13,14 @@ const {
   selectTeacher,
   validateDoubtDraft,
 } = require(process.env.DOUBT_WORKSPACE_MODEL_PATH)
+
+test('only students and teachers can access the doubts workspace', () => {
+  assert.equal(canUseDoubts('student'), true)
+  assert.equal(canUseDoubts('teacher'), true)
+  for (const role of ['principal', 'school_admin', 'parent', '', null, undefined]) {
+    assert.equal(canUseDoubts(role), false)
+  }
+})
 
 test('valid academic input is accepted and keeps the retry id', () => {
   const requestId = createClientRequestId(() => 0.42)
