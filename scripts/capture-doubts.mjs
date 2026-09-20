@@ -201,6 +201,9 @@ try {
     await scrollToTop(session)
     await scrollToTop(session)
     await capture(session, `student-after-${studentState}-390x844.png`)
+    await clickLabel(session, 'Preview velocity-graph-reference-from-class-notes-final.png')
+    await waitForText(session, 'DOUBT ATTACHMENT')
+    await capture(session, `student-${studentState}-attachment-preview-390x844.png`)
     console.log(`Student ${studentState} state captured.`)
   } else {
   await waitForText(session, 'Ask your teacher')

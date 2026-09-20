@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Linking,
+  Modal,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -14,17 +17,19 @@ import { Ionicons } from '@expo/vector-icons'
 import * as DocumentPicker from 'expo-document-picker'
 import { File as ExpoFile } from 'expo-file-system'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   announcementsApi,
   type Announcement,
+  type AnnouncementAttachment,
   type AnnouncementAttachmentInput,
   type AnnouncementDraftPayload,
   type AnnouncementState,
   type AnnouncementType,
 } from '../../api/announcements'
 import { getHttpStatus } from '../../api/queryReliability'
-import { AppScreen, SkeletonCard, TextInputField } from '../../components/ui'
+import { AppScreen, AuthenticatedImage, SkeletonCard, TextInputField } from '../../components/ui'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { openProtectedDocument } from '../../utils/openProtectedDocument'
@@ -32,7 +37,9 @@ import {
   announcementBodySegments,
   announcementErrorKind,
   announcementHasErrors,
+  announcementRequiresClass,
   announcementsForState,
+  clearAnnouncementDetail,
   reconcileAnnouncements,
   validateAnnouncementDraft,
   type AnnouncementDraftErrors,
@@ -74,6 +81,32 @@ function typeLabel(type: AnnouncementType) {
 
 function extractDetail(error: unknown, fallback: string) {
   return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || fallback
+}
+
+function browserFileBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the selected file.'))
+    reader.onload = () => {
+      const value = typeof reader.result === 'string' ? reader.result : ''
+      const comma = value.indexOf(',')
+      if (comma < 0) reject(new Error('Could not encode the selected file.'))
+      else resolve(value.slice(comma + 1))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+async function announcementAttachmentFromAsset(asset: DocumentPicker.DocumentPickerAsset): Promise<AnnouncementAttachmentInput> {
+  const dataBase64 = Platform.OS === 'web'
+    ? asset.base64 || (asset.file ? await browserFileBase64(asset.file) : '')
+    : await new ExpoFile(asset.uri).base64()
+  if (!dataBase64) throw new Error('The selected file was empty.')
+  return {
+    file_name: asset.name || 'attachment',
+    content_type: asset.mimeType || asset.file?.type || 'application/octet-stream',
+    data_base64: dataBase64,
+  }
 }
 
 function IconButton({ label, icon, onPress }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
@@ -215,9 +248,18 @@ function BodyWithLinks({ body }: { body: string }) {
   )
 }
 
+function formatAttachmentSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
 function AnnouncementDetail({ item, onBack, onEdit, onArchive }: { item: Announcement; onBack: () => void; onEdit?: () => void; onArchive?: () => void }) {
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
+  const [previewAttachment, setPreviewAttachment] = useState<AnnouncementAttachment | null>(null)
+  const [previewAspect, setPreviewAspect] = useState(4 / 3)
+  const insets = useSafeAreaInsets()
+  const viewport = useWindowDimensions()
   return (
     <AppScreen contentStyle={styles.detailScreen}>
       <View style={styles.detailHeader}>
@@ -251,30 +293,66 @@ function AnnouncementDetail({ item, onBack, onEdit, onArchive }: { item: Announc
       {item.attachments.length ? (
         <View style={styles.attachmentSection}>
           <Text style={styles.sectionEyebrow}>ATTACHMENTS · {item.attachments.length}</Text>
-          {item.attachments.map((attachment) => (
-            <Pressable
-              key={attachment.id}
-              onPress={async () => {
-                setAttachmentError(null)
-                try {
-                  await openProtectedDocument(attachment.url, attachment.file_name)
-                } catch (error) {
-                  setAttachmentError(error instanceof Error ? error.message : 'This attachment could not open.')
-                }
-              }}
-              style={({ pressed }) => [styles.attachmentRow, pressed && styles.pressed]}
-            >
-              <View style={styles.attachmentIcon}><Ionicons name={attachment.content_type.includes('pdf') ? 'document-text-outline' : 'image-outline'} size={20} color={colors.accent} /></View>
-              <View style={styles.flexCopy}>
-                <Text style={styles.attachmentName}>{attachment.file_name}</Text>
-                <Text style={styles.attachmentMeta}>{Math.max(1, Math.round(attachment.file_size / 1024))} KB · Tap to open securely</Text>
-              </View>
-              <Ionicons name="open-outline" size={17} color={colors.textMuted} />
-            </Pressable>
-          ))}
+          {item.attachments.map((attachment) => {
+            const isImage = attachment.content_type.startsWith('image/')
+            const openAttachment = async () => {
+              setAttachmentError(null)
+              if (isImage) {
+                setPreviewAspect(4 / 3)
+                setPreviewAttachment(attachment)
+                return
+              }
+              try {
+                await openProtectedDocument(attachment.url, attachment.file_name, attachment.content_type)
+              } catch (error) {
+                setAttachmentError(error instanceof Error ? error.message : 'This attachment could not open.')
+              }
+            }
+            return (
+              <Pressable
+                key={attachment.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${isImage ? 'Preview image' : 'Open attachment'} ${attachment.file_name}`}
+                onPress={() => void openAttachment()}
+                style={({ pressed }) => [styles.attachmentRow, isImage && styles.attachmentImageRow, pressed && styles.pressed]}
+              >
+                {isImage ? (
+                  <AuthenticatedImage uri={attachment.url} accessibilityLabel={attachment.file_name} containerStyle={styles.announcementThumbnail} imageStyle={styles.announcementThumbnailImage} />
+                ) : (
+                  <View style={styles.attachmentIcon}><Ionicons name="document-text-outline" size={22} color={colors.accent} /></View>
+                )}
+                <View style={styles.flexCopy}>
+                  <Text style={styles.attachmentName} numberOfLines={2}>{attachment.file_name}</Text>
+                  <Text style={styles.attachmentMeta} numberOfLines={1}>{isImage ? 'Image preview' : 'PDF document'} · {formatAttachmentSize(attachment.file_size)}</Text>
+                  <View style={styles.attachmentHint}><Ionicons name={isImage ? 'expand-outline' : 'shield-checkmark-outline'} size={13} color={colors.accentStrong} /><Text style={styles.attachmentHintText}>{isImage ? 'Tap for full size' : 'Open securely'}</Text></View>
+                </View>
+                <View style={styles.attachmentOpen}><Ionicons name={isImage ? 'expand-outline' : 'open-outline'} size={18} color={colors.accentStrong} /></View>
+              </Pressable>
+            )
+          })}
           {attachmentError ? <Text accessibilityRole="alert" style={styles.inlineError}>{attachmentError}</Text> : null}
         </View>
       ) : null}
+
+      <Modal transparent visible={Boolean(previewAttachment)} animationType="fade" statusBarTranslucent onRequestClose={() => setPreviewAttachment(null)}>
+        <View style={styles.attachmentPreviewBackdrop}>
+          <View style={[styles.attachmentPreviewHeader, { paddingTop: insets.top + spacing[3] }]}>
+            <View style={styles.attachmentPreviewHeading}>
+              <Text style={styles.attachmentPreviewEyebrow}>ANNOUNCEMENT IMAGE</Text>
+              <Text style={styles.attachmentPreviewTitle} numberOfLines={2}>{previewAttachment?.file_name}</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close image preview" onPress={() => setPreviewAttachment(null)} style={styles.attachmentPreviewClose}><Ionicons name="close" size={23} color={colors.white} /></Pressable>
+          </View>
+          <View style={styles.attachmentPreviewBody}>
+          <View style={[styles.attachmentPreviewCanvas, { height: Math.min(viewport.height - insets.top - 190, Math.max(160, (viewport.width - spacing[6]) / previewAspect)) }]}>
+            {previewAttachment ? <AuthenticatedImage uri={previewAttachment.url} accessibilityLabel={previewAttachment.file_name} containerStyle={styles.attachmentPreviewImage} imageStyle={styles.attachmentPreviewImage} onAspectRatio={(aspect) => setPreviewAspect(Math.min(3.5, Math.max(0.45, aspect)))} /> : null}
+          </View>
+          </View>
+          <View style={[styles.attachmentPreviewFooter, { paddingBottom: insets.bottom + spacing[4] }]}>
+            <View style={styles.attachmentPreviewTrust}><Ionicons name="shield-checkmark-outline" size={17} color="#6EE7B7" /><Text style={styles.attachmentPreviewTrustText}>Opened securely from Eduraa</Text></View>
+          </View>
+        </View>
+      </Modal>
 
       {onArchive ? (
         confirmingArchive ? (
@@ -342,8 +420,8 @@ function StudentAnnouncements({ announcementId }: { announcementId?: string }) {
 
   if (announcementId) {
     if (detailQuery.isLoading) return <AppScreen><LoadingAnnouncements /></AppScreen>
-    if (detailQuery.isError || !detailQuery.data) return <AppScreen><ErrorPane error={detailQuery.error} detail onBack={() => navigation.setParams({ announcementId: undefined })} onRetry={() => void detailQuery.refetch()} /></AppScreen>
-    return <AnnouncementDetail item={detailQuery.data} onBack={() => navigation.setParams({ announcementId: undefined })} />
+    if (detailQuery.isError || !detailQuery.data) return <AppScreen><ErrorPane error={detailQuery.error} detail onBack={() => clearAnnouncementDetail(navigation)} onRetry={() => void detailQuery.refetch()} /></AppScreen>
+    return <AnnouncementDetail item={detailQuery.data} onBack={() => clearAnnouncementDetail(navigation)} />
   }
 
   if (listQuery.isLoading) return <AppScreen><LoadingAnnouncements /></AppScreen>
@@ -494,11 +572,7 @@ function TeacherComposer({
       return
     }
     try {
-      const attachments: AnnouncementAttachmentInput[] = await Promise.all(result.assets.map(async (asset) => ({
-        file_name: asset.name || 'attachment',
-        content_type: asset.mimeType || 'application/pdf',
-        data_base64: await new ExpoFile(asset.uri).base64(),
-      })))
+      const attachments = await Promise.all(result.assets.map(announcementAttachmentFromAsset))
       setReplaceAttachments(true)
       update('attachments', [...draft.attachments, ...attachments])
       setErrors((current) => ({ ...current, attachments: undefined }))
@@ -516,6 +590,17 @@ function TeacherComposer({
       ? `Std ${classesQuery.data?.find((entry) => entry.id === draft.class_section_id)?.standard} · Division ${classesQuery.data?.find((entry) => entry.id === draft.class_section_id)?.division}`
       : 'Class not selected'
   const isPublishedEdit = item?.publish_state === 'published'
+  const classRequired = announcementRequiresClass(draft.announcement_type)
+
+  const selectType = (type: AnnouncementType) => {
+    setDraft((current) => ({
+      ...current,
+      announcement_type: type,
+      ...(announcementRequiresClass(type) ? { target_scope: 'class', class_section_id: current.class_section_id } : {}),
+    }))
+    setErrors((current) => ({ ...current, audience: undefined }))
+    setNotice(null)
+  }
 
   return (
     <AppScreen
@@ -539,7 +624,7 @@ function TeacherComposer({
         <View style={styles.typeGrid}>
           {TYPE_OPTIONS.map((option) => {
             const selected = draft.announcement_type === option.id
-            return <Pressable key={option.id} disabled={isPublishedEdit} onPress={() => update('announcement_type', option.id)} style={({ pressed }) => [styles.typeOption, selected && styles.typeOptionSelected, pressed && styles.pressed]}><Ionicons name={option.icon} size={18} color={selected ? colors.accent : colors.textMuted} /><Text style={[styles.typeOptionText, selected && styles.typeOptionTextSelected]}>{option.label}</Text></Pressable>
+            return <Pressable accessibilityRole="button" accessibilityState={{ selected, disabled: isPublishedEdit }} accessibilityLabel={option.label} key={option.id} disabled={isPublishedEdit} onPress={() => selectType(option.id)} style={({ pressed }) => [styles.typeOption, selected && styles.typeOptionSelected, pressed && styles.pressed]}><Ionicons name={option.icon} size={18} color={selected ? colors.accent : colors.textMuted} /><Text style={[styles.typeOptionText, selected && styles.typeOptionTextSelected]}>{option.label}</Text></Pressable>
           })}
         </View>
       </View>
@@ -547,15 +632,15 @@ function TeacherComposer({
       <View style={styles.formSection}>
         <Text style={styles.formStep}>02 · AUDIENCE</Text>
         {classesQuery.isLoading ? <ActivityIndicator color={colors.accent} /> : null}
-        <Pressable disabled={isPublishedEdit} onPress={() => { update('target_scope', 'all_classes'); update('class_section_id', null) }} style={({ pressed }) => [styles.audienceOption, draft.target_scope === 'all_classes' && styles.audienceOptionSelected, pressed && styles.pressed]}>
+        {!classRequired ? <Pressable accessibilityRole="radio" accessibilityState={{ checked: draft.target_scope === 'all_classes', disabled: isPublishedEdit }} disabled={isPublishedEdit} onPress={() => { update('target_scope', 'all_classes'); update('class_section_id', null) }} style={({ pressed }) => [styles.audienceOption, draft.target_scope === 'all_classes' && styles.audienceOptionSelected, pressed && styles.pressed]}>
           <View style={styles.audienceIcon}><Ionicons name="school-outline" size={19} color={colors.accent} /></View>
           <View style={styles.flexCopy}><Text style={styles.audienceTitle}>{audienceTitle}</Text><Text style={styles.audienceBody}>{audienceBody}</Text></View>
           <Ionicons name={draft.target_scope === 'all_classes' ? 'radio-button-on' : 'radio-button-off'} size={21} color={draft.target_scope === 'all_classes' ? colors.accent : colors.textSoft} />
-        </Pressable>
+        </Pressable> : <Text style={styles.audienceBody}>Choose the single class that should receive this {typeLabel(draft.announcement_type).toLowerCase()}.</Text>}
         <View style={styles.classChips}>
           {(classesQuery.data ?? []).map((entry) => {
             const selected = draft.target_scope === 'class' && draft.class_section_id === entry.id
-            return <Pressable key={entry.id} disabled={isPublishedEdit} onPress={() => { update('target_scope', 'class'); update('class_section_id', entry.id) }} style={({ pressed }) => [styles.classChip, selected && styles.classChipSelected, pressed && styles.pressed]}><Text style={[styles.classChipTitle, selected && styles.classChipTitleSelected]}>Std {entry.standard} · {entry.division}</Text><Text style={styles.classChipCount}>{entry.student_count} students</Text></Pressable>
+            return <Pressable accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: isPublishedEdit }} accessibilityLabel={`Standard ${entry.standard}, division ${entry.division}, ${entry.student_count} students`} key={entry.id} disabled={isPublishedEdit} onPress={() => { update('target_scope', 'class'); update('class_section_id', entry.id) }} style={({ pressed }) => [styles.classChip, selected && styles.classChipSelected, pressed && styles.pressed]}><Text style={[styles.classChipTitle, selected && styles.classChipTitleSelected]}>Std {entry.standard} · {entry.division}</Text><Text style={styles.classChipCount}>{entry.student_count} students</Text></Pressable>
           })}
         </View>
         {errors.audience ? <Text accessibilityRole="alert" style={styles.inlineError}>{errors.audience}</Text> : null}
@@ -571,8 +656,8 @@ function TeacherComposer({
       <View style={styles.formSection}>
         <Text style={styles.formStep}>04 · ATTACHMENTS</Text>
         {item?.attachments.length && !replaceAttachments ? <Text style={styles.existingFiles}>{item.attachments.length} existing file{item.attachments.length === 1 ? '' : 's'} will stay attached.</Text> : null}
-        {draft.attachments.map((attachment, index) => <View key={`${attachment.file_name}-${index}`} style={styles.stagedFile}><Ionicons name="attach" size={17} color={colors.accent} /><Text style={styles.stagedFileName}>{attachment.file_name}</Text><Pressable accessibilityLabel={`Remove ${attachment.file_name}`} onPress={() => update('attachments', draft.attachments.filter((_, fileIndex) => fileIndex !== index))}><Ionicons name="close-circle" size={20} color={colors.textMuted} /></Pressable></View>)}
-        <Pressable onPress={() => void pickAttachments()} style={({ pressed }) => [styles.addFileAction, pressed && styles.pressed]}><Ionicons name="add" size={19} color={colors.accent} /><Text style={styles.addFileText}>{item?.attachments.length && !replaceAttachments ? 'Replace attached files' : 'Add files'}</Text><Text style={styles.addFileMeta}>PDF, image, Word, Excel · 10 MB each</Text></Pressable>
+        {draft.attachments.map((attachment, index) => <View key={`${attachment.file_name}-${index}`} style={styles.stagedFile}><Ionicons name="attach" size={17} color={colors.accent} /><Text style={styles.stagedFileName}>{attachment.file_name}</Text><Pressable accessibilityRole="button" accessibilityLabel={`Remove ${attachment.file_name}`} onPress={() => update('attachments', draft.attachments.filter((_, fileIndex) => fileIndex !== index))}><Ionicons name="close-circle" size={20} color={colors.textMuted} /></Pressable></View>)}
+        <Pressable accessibilityRole="button" accessibilityLabel={item?.attachments.length && !replaceAttachments ? 'Replace attached files' : 'Add files'} onPress={() => void pickAttachments()} style={({ pressed }) => [styles.addFileAction, pressed && styles.pressed]}><Ionicons name="add" size={19} color={colors.accent} /><Text style={styles.addFileText}>{item?.attachments.length && !replaceAttachments ? 'Replace attached files' : 'Add files'}</Text><Text style={styles.addFileMeta}>PDF, image, Word, Excel · 10 MB each</Text></Pressable>
         {errors.attachments ? <Text accessibilityRole="alert" style={styles.inlineError}>{errors.attachments}</Text> : null}
       </View>
 
@@ -585,8 +670,8 @@ function TeacherComposer({
       </View>
 
       <View style={styles.composeActions}>
-        {!isPublishedEdit ? <Pressable disabled={saveMutation.isPending} onPress={() => submit(false)} style={({ pressed }) => [styles.saveDraftAction, pressed && styles.pressed]}><Text style={styles.saveDraftText}>{saveMutation.isPending ? 'Saving…' : 'Save draft'}</Text></Pressable> : null}
-        <Pressable disabled={saveMutation.isPending} onPress={() => submit(true)} style={({ pressed }) => [styles.publishAction, saveMutation.isPending && styles.disabled, pressed && styles.pressed]}>{saveMutation.isPending ? <ActivityIndicator color={colors.white} /> : <Ionicons name={isPublishedEdit ? 'checkmark' : 'send'} size={18} color={colors.white} />}<Text style={styles.publishActionText}>{isPublishedEdit ? 'Save changes' : 'Publish now'}</Text></Pressable>
+        {!isPublishedEdit ? <Pressable accessibilityRole="button" accessibilityState={{ disabled: saveMutation.isPending }} disabled={saveMutation.isPending} onPress={() => submit(false)} style={({ pressed }) => [styles.saveDraftAction, pressed && styles.pressed]}><Text style={styles.saveDraftText}>{saveMutation.isPending ? 'Saving…' : 'Save draft'}</Text></Pressable> : null}
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: saveMutation.isPending }} disabled={saveMutation.isPending} onPress={() => submit(true)} style={({ pressed }) => [styles.publishAction, saveMutation.isPending && styles.disabled, pressed && styles.pressed]}>{saveMutation.isPending ? <ActivityIndicator color={colors.white} /> : <Ionicons name={isPublishedEdit ? 'checkmark' : 'send'} size={18} color={colors.white} />}<Text style={styles.publishActionText}>{isPublishedEdit ? 'Save changes' : 'Publish now'}</Text></Pressable>
       </View>
     </AppScreen>
   )
@@ -621,11 +706,11 @@ function TeacherAnnouncements() {
         <View style={styles.teacherHeroTop}><Text style={styles.teacherHeroEyebrow}>COMMUNICATION DESK</Text><View style={styles.teacherHeroMark}><Ionicons name="megaphone" size={18} color={colors.accent} /></View></View>
         <Text style={styles.teacherHeroTitle}>Announcements</Text>
         <Text style={styles.teacherHeroBody}>Draft privately, verify the audience, then publish.</Text>
-        <Pressable onPress={() => { setSelected(undefined); setMode('compose') }} style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}><Ionicons name="create-outline" size={18} color={colors.nav} /><Text style={styles.heroActionText}>Write announcement</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Write announcement" onPress={() => { setSelected(undefined); setMode('compose') }} style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}><Ionicons name="create-outline" size={18} color={colors.nav} /><Text style={styles.heroActionText}>Write announcement</Text></Pressable>
       </View>
       {netInfo.isConnected === false || (listQuery.isError && allItems.length) ? <ConnectionNotice stale={Boolean(allItems.length)} /> : null}
       <View style={styles.stateTabs}>
-        {STATE_OPTIONS.map((option) => { const count = announcementsForState(allItems, option.id).length; const selectedState = state === option.id; return <Pressable key={option.id} onPress={() => setState(option.id)} style={[styles.stateTab, selectedState && styles.stateTabSelected]}><Text style={[styles.stateTabText, selectedState && styles.stateTabTextSelected]}>{option.label}</Text><Text style={[styles.stateTabCount, selectedState && styles.stateTabCountSelected]}>{count}</Text></Pressable> })}
+        {STATE_OPTIONS.map((option) => { const count = announcementsForState(allItems, option.id).length; const selectedState = state === option.id; return <Pressable accessibilityRole="tab" accessibilityState={{ selected: selectedState }} key={option.id} onPress={() => setState(option.id)} style={[styles.stateTab, selectedState && styles.stateTabSelected]}><Text style={[styles.stateTabText, selectedState && styles.stateTabTextSelected]}>{option.label}</Text><Text style={[styles.stateTabCount, selectedState && styles.stateTabCountSelected]}>{count}</Text></Pressable> })}
       </View>
       {items.length ? <View style={styles.teacherList}>{items.map((item) => <AnnouncementRow teacher key={item.id} item={item} onPress={() => { setSelected(item); setMode(item.publish_state === 'draft' ? 'compose' : 'detail') }} />)}</View> : <EmptyInbox teacher onCompose={() => setMode('compose')} />}
     </AppScreen>
@@ -708,10 +793,28 @@ const styles = StyleSheet.create({
   detailLink: { color: colors.info, textDecorationLine: 'underline' },
   attachmentSection: { paddingVertical: spacing[6], gap: spacing[3] },
   sectionEyebrow: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1.2 },
-  attachmentRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+  attachmentRow: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing[2], padding: spacing[3], borderWidth: 1, borderColor: colors.borderSubtle, borderRadius: radius.lg, backgroundColor: colors.backgroundElevated },
+  attachmentImageRow: { minHeight: 92 },
   attachmentIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
   attachmentName: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   attachmentMeta: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
+  attachmentHint: { marginTop: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  attachmentHintText: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 10 },
+  attachmentOpen: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.accentSurface },
+  announcementThumbnail: { width: 68, height: 68, overflow: 'hidden', borderRadius: radius.md, backgroundColor: colors.backgroundMuted },
+  announcementThumbnailImage: { width: '100%', height: '100%' },
+  attachmentPreviewBackdrop: { flex: 1, backgroundColor: '#07152D' },
+  attachmentPreviewHeader: { minHeight: 84, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], paddingBottom: spacing[3] },
+  attachmentPreviewHeading: { flex: 1, minWidth: 0, gap: 3 },
+  attachmentPreviewEyebrow: { color: '#FDBA74', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.2 },
+  attachmentPreviewTitle: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  attachmentPreviewClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)' },
+  attachmentPreviewBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[3] },
+  attachmentPreviewCanvas: { width: '100%', overflow: 'hidden', borderRadius: radius.lg, backgroundColor: '#020817', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
+  attachmentPreviewImage: { width: '100%', height: '100%' },
+  attachmentPreviewFooter: { minHeight: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[4], paddingTop: spacing[3] },
+  attachmentPreviewTrust: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  attachmentPreviewTrustText: { color: '#AAB5C6', fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   inlineError: { color: colors.danger, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
   archiveAction: { minHeight: 52, marginTop: spacing[6], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.full, backgroundColor: colors.dangerSurface },
   archiveActionText: { color: colors.danger, fontFamily: typography.fonts.bodyBold, fontSize: 13 },

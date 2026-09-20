@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Image, ImageStyle, Platform, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native'
+import { Image, ImageProps, ImageStyle, Platform, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { File, Paths } from 'expo-file-system'
 import apiClient, { API_BASE_URL, getAccessToken } from '../../api/client'
@@ -11,6 +11,8 @@ type AuthenticatedImageProps = {
   accessibilityLabel: string
   imageStyle?: StyleProp<ImageStyle>
   containerStyle?: StyleProp<ViewStyle>
+  onLoad?: ImageProps['onLoad']
+  onAspectRatio?: (aspectRatio: number) => void
 }
 
 function resolveAssetUrl(uri: string) {
@@ -48,6 +50,8 @@ export function AuthenticatedImage({
   accessibilityLabel,
   imageStyle,
   containerStyle,
+  onLoad,
+  onAspectRatio,
 }: AuthenticatedImageProps) {
   const normalizedUri = useMemo(() => resolveAssetUrl(uri), [uri])
   const authorizedAsset = useMemo(
@@ -101,6 +105,20 @@ export function AuthenticatedImage({
 
   // For unauthorized (external) assets, render directly with no auth needed.
   const externalSource = !authorizedAsset ? { uri: normalizedUri } : null
+  const renderedUri = externalSource?.uri ?? localUri
+
+  useEffect(() => {
+    if (!renderedUri || !onAspectRatio) return
+    let active = true
+    Image.getSize(
+      renderedUri,
+      (width, height) => {
+        if (active && width > 0 && height > 0) onAspectRatio(width / height)
+      },
+      () => undefined,
+    )
+    return () => { active = false }
+  }, [onAspectRatio, renderedUri])
 
   if (failed) {
     return (
@@ -133,6 +151,7 @@ export function AuthenticatedImage({
         accessibilityLabel={accessibilityLabel}
         resizeMode="contain"
         style={imageStyle}
+        onLoad={onLoad}
         onError={() => setFailed(true)}
       />
     </View>

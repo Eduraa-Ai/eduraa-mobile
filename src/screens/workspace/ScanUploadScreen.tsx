@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
 import * as Sharing from 'expo-sharing'
@@ -131,30 +131,37 @@ function FileCard({ file, index, count, busy, onPreview, onMove, onReplace, onRo
   const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf')
   return (
     <View style={styles.fileCard}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Preview ${file.name}`} disabled={busy} onPress={onPreview} style={({ pressed }) => [styles.thumbnailButton, pressed && styles.pressed]}>
-        {isPdf ? <Ionicons name="document-text-outline" size={30} color={colors.accentStrong} /> : <Image source={{ uri: file.uri }} style={styles.fileThumbnail} resizeMode="cover" />}
-        <View style={styles.pageBadge}><Text style={styles.pageBadgeText}>{index + 1}</Text></View>
-      </Pressable>
-      <View style={styles.fileBody}>
-        <View style={styles.pageHeadingRow}>
-          <View style={styles.pageHeadingCopy}>
-            <Text style={styles.fileTitle}>Page {index + 1}</Text>
-            <Text style={styles.pagePosition}>{index + 1} of {count} in reading order</Text>
+      <View style={styles.fileCardMain}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Preview ${file.name}`} disabled={busy} onPress={onPreview} style={({ pressed }) => [styles.thumbnailButton, pressed && styles.pressed]}>
+          {isPdf ? <View style={styles.pdfThumbnail}><Ionicons name="document-text-outline" size={30} color={colors.accentStrong} /><Text style={styles.pdfLabel}>PDF</Text></View> : <Image source={{ uri: file.uri }} style={styles.fileThumbnail} resizeMode="cover" />}
+          <View style={styles.pageBadge}><Text style={styles.pageBadgeText}>{index + 1}</Text></View>
+          <View style={styles.previewCue}><Ionicons name="expand-outline" size={14} color={colors.textOnBrand} /></View>
+        </Pressable>
+        <View style={styles.fileBody}>
+          <View style={styles.pageHeadingRow}>
+            <View style={styles.pageHeadingCopy}>
+              <Text style={styles.fileTitle}>Page {index + 1}</Text>
+              <Text style={styles.pagePosition}>{index + 1} of {count} · reading order</Text>
+            </View>
           </View>
-          <View style={styles.orderControls}>
-            <IconAction icon="arrow-up" text="Earlier" label={`Move page ${index + 1} earlier`} disabled={busy || index === 0} onPress={() => onMove(-1)} />
-            <IconAction icon="arrow-down" text="Later" label={`Move page ${index + 1} later`} disabled={busy || index === count - 1} onPress={() => onMove(1)} />
+          <Text style={styles.fileMeta} numberOfLines={2}>{file.name}{'\n'}{isPdf ? 'PDF document' : 'Image'} · {formatBytes(file.size)}</Text>
+          <View style={styles.orderSection}>
+            <Text style={styles.orderLabel}>ORDER</Text>
+            <View style={styles.orderControls}>
+              <IconAction icon="arrow-up" text="Earlier" label={`Move page ${index + 1} earlier`} disabled={busy || index === 0} onPress={() => onMove(-1)} />
+              <View style={styles.orderDivider} />
+              <IconAction icon="arrow-down" text="Later" label={`Move page ${index + 1} later`} disabled={busy || index === count - 1} onPress={() => onMove(1)} />
+            </View>
           </View>
-        </View>
-        <Text style={styles.fileMeta} numberOfLines={1}>{file.name} · {isPdf ? 'PDF' : 'Image'} · {formatBytes(file.size)}</Text>
-        <View style={styles.fileActions}>
-          <IconAction icon="eye-outline" text="Preview" label={`Preview ${file.name}`} disabled={busy} onPress={onPreview} />
-          {!isPdf ? <IconAction icon="refresh-outline" text="Rotate" label={`Rotate ${file.name}`} disabled={busy} onPress={onRotate} /> : null}
-          <IconAction icon="swap-horizontal-outline" text="Replace" label={`Replace ${file.name}`} disabled={busy} onPress={onReplace} />
-          <IconAction icon="trash-outline" text="Remove" label={`Remove ${file.name}`} danger disabled={busy} onPress={onRemove} />
         </View>
       </View>
-      {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+      <View style={styles.fileActions}>
+        <IconAction icon="eye-outline" text="Preview" label={`Preview ${file.name}`} disabled={busy} onPress={onPreview} />
+        {!isPdf ? <IconAction icon="refresh-outline" text="Rotate" label={`Rotate ${file.name}`} disabled={busy} onPress={onRotate} /> : null}
+        <IconAction icon="swap-horizontal-outline" text="Replace" label={`Replace ${file.name}`} disabled={busy} onPress={onReplace} />
+        <IconAction icon="trash-outline" text="Remove" label={`Remove ${file.name}`} danger disabled={busy} onPress={onRemove} />
+      </View>
+      {busy ? <View style={styles.fileBusy}><ActivityIndicator size="small" color={colors.accent} /></View> : null}
     </View>
   )
 }
@@ -169,6 +176,7 @@ export default function ScanUploadScreen() {
   const userId = user?.id ?? ''
   const staff = !isStudentRole(role)
   const insets = useSafeAreaInsets()
+  const viewport = useWindowDimensions()
   const uploadControllerRef = useRef<AbortController | null>(null)
   const uploadMutationGuardRef = useRef(false)
   const uploadStartedAtRef = useRef<number | null>(null)
@@ -183,6 +191,7 @@ export default function ScanUploadScreen() {
   const [selectedStudentId, setSelectedStudentId] = useState(initial?.initialStudentId ?? '')
   const [files, setFiles] = useState<ScanUploadFile[]>([])
   const [previewFile, setPreviewFile] = useState<ScanUploadFile | null>(null)
+  const [previewAspect, setPreviewAspect] = useState(3 / 4)
   const [fileIssue, setFileIssue] = useState<string | null>(null)
   const [draftHydrated, setDraftHydrated] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
@@ -193,6 +202,15 @@ export default function ScanUploadScreen() {
   const [recoveredPaper, setRecoveredPaper] = useState<CheckedPaper | null>(null)
   const [pendingUpload, setPendingUpload] = useState<ScanUploadReceipt | null>(null)
   const [clientUploadId, setClientUploadId] = useState(createScanUploadIdempotencyKey)
+
+  const previewIndex = previewFile ? files.findIndex((file) => file.uri === previewFile.uri) : -1
+  const showPreviewAt = (index: number) => {
+    const next = files[index]
+    if (next && !next.type.includes('pdf') && !next.name.toLowerCase().endsWith('.pdf')) {
+      setPreviewAspect(3 / 4)
+      setPreviewFile(next)
+    }
+  }
 
   const optionsQuery = useQuery({ queryKey: SCAN_UPLOAD_OPTIONS_QUERY_KEY, queryFn: scanUploadApi.getOptions })
   const options = optionsQuery.data
@@ -276,6 +294,13 @@ export default function ScanUploadScreen() {
   }, [clientUploadId, draftHydrated, files, pendingUpload, selectedExamId, selectedPaperId, selectedStudentId, selectedSubjectId, staffUploadMode, userId])
 
   useEffect(() => () => uploadControllerRef.current?.abort(), [])
+
+  useEffect(() => {
+    if (!previewFile) return
+    Image.getSize(previewFile.uri, (width, height) => {
+      if (width > 0 && height > 0) setPreviewAspect(Math.min(3.5, Math.max(0.45, width / height)))
+    }, () => undefined)
+  }, [previewFile])
 
   useEffect(() => {
     if (staff && selectedStudentId && !studentOptions.some((option) => option.value === selectedStudentId)) setSelectedStudentId('')
@@ -490,7 +515,10 @@ export default function ScanUploadScreen() {
 
   const previewFileItem = async (file: ScanUploadFile) => {
     const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf')
-    if (!isPdf) return setPreviewFile(file)
+    if (!isPdf) {
+      setPreviewAspect(3 / 4)
+      return setPreviewFile(file)
+    }
     if (Platform.OS === 'web') {
       const blobUrl = file.file ? URL.createObjectURL(file.file) : file.uri
       if (!window.open(blobUrl, '_blank')) setFileIssue('Allow pop-ups to preview this PDF, or open it from your device files.')
@@ -657,7 +685,31 @@ export default function ScanUploadScreen() {
         </Pressable>
       </Modal>
 
-      <Modal visible={Boolean(previewFile)} transparent animationType="fade" onRequestClose={() => setPreviewFile(null)}><Pressable style={styles.previewBackdrop} onPress={() => setPreviewFile(null)} accessibilityLabel="Dismiss preview"><View style={[styles.previewHeader, { paddingTop: insets.top + spacing[3] }]}><Text style={styles.previewTitle} numberOfLines={1}>{previewFile?.name}</Text><View style={styles.previewClose}><Ionicons name="close" size={20} color={colors.textOnBrand} /></View></View>{previewFile ? <Image source={{ uri: previewFile.uri }} style={styles.previewImage} resizeMode="contain" /> : null}</Pressable></Modal>
+      <Modal visible={Boolean(previewFile)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setPreviewFile(null)}>
+        <View style={styles.previewBackdrop}>
+          <View style={[styles.previewHeader, { paddingTop: insets.top + spacing[3] }]}>
+            <View style={styles.previewHeadingCopy}>
+              <Text style={styles.previewEyebrow}>{previewIndex >= 0 ? `PAGE ${previewIndex + 1} OF ${files.length}` : 'IMAGE PREVIEW'}</Text>
+              <Text style={styles.previewTitle} numberOfLines={2}>{previewFile?.name}</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close image preview" onPress={() => setPreviewFile(null)} style={({ pressed }) => [styles.previewClose, pressed && styles.previewControlPressed]}>
+              <Ionicons name="close" size={22} color={colors.textOnBrand} />
+            </Pressable>
+          </View>
+          <View style={styles.previewBody}>
+            <View style={[styles.previewCanvas, { height: Math.min(viewport.height - insets.top - 200, Math.max(180, (viewport.width - spacing[6]) / previewAspect)) }]}>{previewFile ? <Image source={{ uri: previewFile.uri }} style={styles.previewImage} resizeMode="contain" /> : null}</View>
+          </View>
+          <View style={[styles.previewFooter, { paddingBottom: insets.bottom + spacing[4] }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Preview previous image" accessibilityState={{ disabled: previewIndex <= 0 }} disabled={previewIndex <= 0} onPress={() => showPreviewAt(previewIndex - 1)} style={({ pressed }) => [styles.previewNavButton, previewIndex <= 0 && styles.previewNavDisabled, pressed && styles.previewControlPressed]}>
+              <Ionicons name="chevron-back" size={20} color={colors.textOnBrand} /><Text style={styles.previewNavText}>Previous</Text>
+            </Pressable>
+            <View style={styles.previewCounter}><Text style={styles.previewCounterText}>{previewIndex >= 0 ? `${previewIndex + 1} / ${files.length}` : 'Preview'}</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Preview next image" accessibilityState={{ disabled: previewIndex < 0 || previewIndex >= files.length - 1 || files[previewIndex + 1]?.type.includes('pdf') }} disabled={previewIndex < 0 || previewIndex >= files.length - 1 || files[previewIndex + 1]?.type.includes('pdf')} onPress={() => showPreviewAt(previewIndex + 1)} style={({ pressed }) => [styles.previewNavButton, (previewIndex < 0 || previewIndex >= files.length - 1 || files[previewIndex + 1]?.type.includes('pdf')) && styles.previewNavDisabled, pressed && styles.previewControlPressed]}>
+              <Text style={styles.previewNavText}>Next</Text><Ionicons name="chevron-forward" size={20} color={colors.textOnBrand} />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -682,9 +734,9 @@ const styles = StyleSheet.create({
   pageHelp: { color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 }, pickGrid: { flexDirection: 'row', gap: spacing[1], borderRadius: radius.md, backgroundColor: colors.backgroundMuted, padding: spacing[1] }, pickTile: { flex: 1, minHeight: 68, alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.sm, backgroundColor: 'transparent' }, pickTitle: { color: colors.text, fontFamily: typography.fonts.bodySemibold, fontSize: 12 }, limitCopy: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17 },
   issueBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], borderWidth: 1, borderColor: colors.dangerBorder, borderRadius: radius.md, backgroundColor: colors.dangerSurface, padding: spacing[3] }, issueText: { flex: 1, color: colors.danger, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
   emptyPages: { alignItems: 'center', gap: spacing[1], paddingVertical: spacing[6] }, emptyTitle: { color: colors.text, fontFamily: typography.fonts.bodySemibold, fontSize: 14 }, emptyText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
-  fileList: { gap: spacing[5], borderLeftWidth: 3, borderLeftColor: colors.accent, marginLeft: 48, paddingLeft: spacing[4] }, fileCard: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3], paddingTop: spacing[2], marginLeft: -67 }, thumbnailButton: { width: 104, height: 134, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.backgroundElevated, borderRadius: radius.md, backgroundColor: colors.backgroundMuted, shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 9, elevation: 3 }, fileThumbnail: { width: '100%', height: '100%' }, pageBadge: { position: 'absolute', top: spacing[2], left: spacing[2], minWidth: 28, height: 28, paddingHorizontal: spacing[1], borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentStrong }, pageBadgeText: { color: colors.textOnBrand, fontFamily: typography.fonts.bodyBold, fontSize: 12 }, fileBody: { flex: 1, gap: spacing[1], paddingTop: spacing[1] }, pageHeadingRow: { gap: spacing[2] }, pageHeadingCopy: { gap: 1 }, pagePosition: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 10 }, fileTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18 }, fileMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10 }, orderControls: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 1 }, fileActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[1], marginTop: spacing[1] }, iconAction: { minWidth: 72, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: spacing[1], paddingHorizontal: spacing[1], backgroundColor: 'transparent' }, iconActionDanger: { backgroundColor: 'transparent' }, iconActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 11 }, iconActionTextDanger: { color: colors.danger }, iconActionDisabled: { opacity: 0.5 },
+  fileList: { gap: spacing[3] }, fileCard: { position: 'relative', overflow: 'hidden', borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.backgroundElevated, shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 }, fileCardMain: { flexDirection: 'row', alignItems: 'stretch', gap: spacing[3], padding: spacing[3] }, thumbnailButton: { width: 92, minHeight: 120, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.backgroundMuted }, fileThumbnail: { width: '100%', height: '100%' }, pdfThumbnail: { alignItems: 'center', gap: spacing[1] }, pdfLabel: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1 }, pageBadge: { position: 'absolute', top: spacing[2], left: spacing[2], minWidth: 28, height: 28, paddingHorizontal: spacing[1], borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentStrong }, pageBadgeText: { color: colors.textOnBrand, fontFamily: typography.fonts.bodyBold, fontSize: 12 }, previewCue: { position: 'absolute', right: spacing[2], bottom: spacing[2], width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(7,21,45,0.78)' }, fileBody: { flex: 1, minWidth: 0, justifyContent: 'space-between', gap: spacing[2] }, pageHeadingRow: { gap: spacing[2] }, pageHeadingCopy: { gap: 2 }, pagePosition: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 10 }, fileTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18 }, fileMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15 }, orderSection: { gap: spacing[1] }, orderLabel: { color: colors.textSoft, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1 }, orderControls: { minHeight: 44, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, backgroundColor: colors.background }, orderDivider: { width: 1, height: 24, backgroundColor: colors.border }, fileActions: { minHeight: 54, flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingHorizontal: spacing[2] }, iconAction: { flex: 1, minWidth: 0, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1], paddingHorizontal: 2, backgroundColor: 'transparent' }, iconActionDanger: { backgroundColor: 'transparent' }, iconActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 10 }, iconActionTextDanger: { color: colors.danger }, iconActionDisabled: { opacity: 0.36 }, fileBusy: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.72)' },
   submitDock: { marginTop: spacing[4] }, submitSurface: { gap: spacing[3], borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.backgroundElevated, padding: spacing[4] }, submitSurfaceActive: { borderColor: colors.borderBrand, backgroundColor: colors.accentSurface }, submitSurfaceError: { borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface }, submitStatusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] }, submitStatusIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundMuted }, submitStatusIconReady: { backgroundColor: colors.successSurface }, submitStatusIconError: { backgroundColor: colors.palette.rose[100] }, submitCopy: { flex: 1, gap: spacing[1] }, submitTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 15, lineHeight: 20 }, submitMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 }, submitErrorText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
   submitActions: { gap: spacing[2] },
   removalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(7,21,45,0.58)' }, removalSheet: { gap: spacing[3], borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.backgroundElevated, paddingHorizontal: spacing[5], paddingTop: spacing[3] }, removalHandle: { width: 42, height: 4, alignSelf: 'center', borderRadius: 2, backgroundColor: colors.borderStrong }, removalIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.dangerSurface }, removalTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 20 }, removalText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 }, removalActions: { flexDirection: 'row', gap: spacing[2], marginTop: spacing[1] }, removalAction: { flex: 1 }, removeButton: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: colors.danger }, removeButtonText: { color: colors.textOnBrand, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
-  previewBackdrop: { flex: 1, backgroundColor: '#07152DEE' }, previewHeader: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], paddingBottom: spacing[3] }, previewTitle: { flex: 1, color: colors.textOnBrand, fontFamily: typography.fonts.bodySemibold, fontSize: 14 }, previewClose: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' }, previewImage: { flex: 1, width: '100%' as const }, pressed: { opacity: 0.72 },
+  previewBackdrop: { flex: 1, backgroundColor: '#07152D' }, previewHeader: { minHeight: 84, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], paddingBottom: spacing[3] }, previewHeadingCopy: { flex: 1, minWidth: 0, gap: 3 }, previewEyebrow: { color: '#FDBA74', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.2 }, previewTitle: { color: colors.textOnBrand, fontFamily: typography.fonts.bodySemibold, fontSize: 14 }, previewClose: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' }, previewBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[3] }, previewCanvas: { width: '100%', overflow: 'hidden', borderRadius: radius.lg, backgroundColor: '#020817', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' }, previewImage: { width: '100%' as const, height: '100%' as const }, previewFooter: { minHeight: 86, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2], paddingHorizontal: spacing[4], paddingTop: spacing[3] }, previewNavButton: { minWidth: 96, height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1], borderRadius: 23, backgroundColor: 'rgba(255,255,255,0.12)' }, previewNavDisabled: { opacity: 0.28 }, previewNavText: { color: colors.textOnBrand, fontFamily: typography.fonts.bodySemibold, fontSize: 12 }, previewCounter: { minWidth: 54, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.accentStrong }, previewCounterText: { color: colors.textOnBrand, fontFamily: typography.fonts.bodyBold, fontSize: 11 }, previewControlPressed: { transform: [{ scale: 0.97 }], opacity: 0.82 }, pressed: { opacity: 0.72 },
 })

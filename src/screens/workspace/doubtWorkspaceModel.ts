@@ -11,6 +11,10 @@ export interface DoubtDraft {
 
 export type DoubtDraftErrors = Partial<Record<'teacher' | 'title' | 'details' | 'guardrail', string>>
 
+export function canUseDoubts(role?: string | null) {
+  return role === 'student' || role === 'teacher'
+}
+
 const unsafePattern = /\b(?:kill\s+(?:myself|yourself|someone)|self[- ]?harm|suicide|send\s+nudes?|porn|sext|date\s+me|betting\s+tips?|casino|you(?:'re|\s+are)\s+(?:an?\s+)?(?:idiot|stupid|useless))\b/i
 
 export const emptyDoubtDraft = (clientRequestId: string): DoubtDraft => ({
