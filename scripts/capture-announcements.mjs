@@ -211,8 +211,13 @@ try {
   await capture(session, 'student-inbox-320x700.png')
   await setViewport(session, 390, 844)
   await clickText(session, 'Library hours during project week')
-  await waitForText(session, 'Tap to open securely')
+  await waitForText(session, 'Open securely')
   await capture(session, 'student-detail-390x844.png')
+  await clickAriaLabel(session, 'Preview image Project-week-library-reference-final.png')
+  await waitForText(session, 'ANNOUNCEMENT IMAGE')
+  await sleep(900)
+  await capture(session, 'student-image-preview-390x844.png')
+  await clickAriaLabel(session, 'Close image preview')
   await setViewport(session, 320, 700)
   await capture(session, 'student-detail-top-320x700.png')
   await scrollContent(session, 99999)
@@ -228,7 +233,7 @@ try {
   await waitForText(session, 'School updates, clearly')
   await capture(session, 'student-read-reconciled-390x844.png')
   await clickText(session, 'Library hours during project week')
-  await waitForText(session, 'Tap to open securely')
+  await waitForText(session, 'Open securely')
 
   await setMode('forbidden')
   await session.call('Page.reload', { ignoreCache: true })
@@ -260,6 +265,16 @@ try {
   await signOutLocal(session)
   await login(session, 'school-teacher-announcements@example.test')
   await waitForText(session, 'Workspace')
+  await waitForText(session, 'TODAY’S DESK')
+  // The announcements card sits below the initial mobile viewport. Scroll the
+  // React Native Web container before asking the headless browser to click it.
+  await evaluate(session, `(() => {
+    for (const item of document.querySelectorAll('*')) {
+      if (item.scrollHeight > item.clientHeight) item.scrollTop = item.scrollHeight;
+    }
+    window.scrollTo(0, document.body.scrollHeight);
+  })()`)
+  await sleep(350)
   await clickText(session, 'Announcements')
   await waitForText(session, 'COMMUNICATION DESK')
   await capture(session, 'teacher-desk-390x844.png')

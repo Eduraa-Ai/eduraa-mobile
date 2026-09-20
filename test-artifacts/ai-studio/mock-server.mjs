@@ -1,7 +1,9 @@
 import http from 'node:http'
+import { readFile } from 'node:fs/promises'
 import { authenticateFixture, createFixtureSessions } from './auth-fixtures.mjs'
 
 const PORT = Number(process.env.MOCK_PORT || 8000)
+const attachmentPreview = await readFile(new URL('../../assets/papers-header-bg.png', import.meta.url))
 const SEED = 'studio-row-20260718'
 const PAPER_SEED = 'paper-studio-row-20260718'
 const PREVIOUS_PAPERS_SEED = 'pr6-pyq-20260725'
@@ -89,7 +91,10 @@ let announcements = [
         class_label: 'Std 10 - A', title: 'Library hours during project week',
         body: 'The library will remain open until 5:30 PM from Wednesday to Friday. Bring your school ID and review the project research guide at https://school.example.test/library-guide before arriving.\n\nStudents using the media room should check in with the librarian first.',
         recipient_count: 28,
-        attachments: [{ id: 'b4000000-0000-4000-8000-000000000001', file_name: 'Project-week-library-guide.pdf', content_type: 'application/pdf', file_size: 184320, url: '/api/v1/communication/attachments/b4000000-0000-4000-8000-000000000001' }],
+        attachments: [
+            { id: 'b4000000-0000-4000-8000-000000000001', file_name: 'Project-week-library-guide.pdf', content_type: 'application/pdf', file_size: 184320, url: '/api/v1/communication/attachments/b4000000-0000-4000-8000-000000000001' },
+            { id: 'b4000000-0000-4000-8000-000000000002', file_name: 'Project-week-library-reference-final.png', content_type: 'image/png', file_size: attachmentPreview.byteLength, url: '/api/v1/communication/attachments/b4000000-0000-4000-8000-000000000002' },
+        ],
         publish_state: 'published', published_at: '2026-08-19T16:40:00.000Z', archived_at: null,
         updated_at: '2026-08-19T16:40:00.000Z', created_at: '2026-08-19T16:30:00.000Z', is_read: false,
     },
@@ -862,6 +867,12 @@ const server = http.createServer(async (request, response) => {
         return
     }
 
+    if (request.method === 'GET' && path === '/api/v1/class-teacher/classes/me') {
+        if (requestRole !== 'teacher') return json(response, 403, { detail: 'Teacher access required.' })
+        json(response, 200, [{ id: 'a7000000-0000-4000-8000-000000000001', standard: '10', division: 'A' }])
+        return
+    }
+
     if (request.method === 'GET' && path === '/api/v1/communication/announcements') {
         if (announcementsMode === 'error') return json(response, 503, { detail: 'Announcements are temporarily unavailable.' })
         if (announcementsMode === 'loading') await new Promise(resolve => setTimeout(resolve, 2200))
@@ -928,6 +939,13 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && path.startsWith('/api/v1/communication/attachments/')) {
+        if (path.endsWith('b4000000-0000-4000-8000-000000000002')) {
+            response.writeHead(200, {
+                'Content-Type': 'image/png', 'Content-Length': attachmentPreview.byteLength,
+            })
+            response.end(attachmentPreview)
+            return
+        }
         const bytes = Buffer.from('%PDF-1.4\n% Synthetic announcement attachment\n%%EOF\n')
         response.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': bytes.length })
         response.end(bytes)

@@ -1,5 +1,6 @@
 import http from 'node:http'
 import { randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 
 const port = Number(process.env.PORT || 8002)
 const student = {
@@ -13,6 +14,7 @@ const teacher = {
   school_id: student.school_id, standard: '10', division: 'A', is_active: true, is_approved: true,
 }
 const now = new Date().toISOString()
+const attachmentPreview = await readFile(new URL('../../assets/papers-header-bg.png', import.meta.url))
 const makeSummary = (id, status, title, subject, last, offset = 0) => ({
   id, student_id: student.id, student_name: student.display_name, teacher_id: teacherId,
   teacher_name: 'Ms Meera Shah', subject_id: `40000000-0000-4000-8000-00000000000${offset + 1}`,
@@ -28,7 +30,15 @@ let doubts = [
 let listMode = 'populated'
 
 const messages = new Map([
-  [doubts[0].id, [{ id: randomUUID(), sender_id: student.id, sender_role: 'student', sender_name: student.display_name, body: doubts[0].last_message, created_at: doubts[0].created_at }]],
+  [doubts[0].id, [{
+    id: randomUUID(), sender_id: student.id, sender_role: 'student', sender_name: student.display_name,
+    body: doubts[0].last_message,
+    attachments: [{
+      id: 'doubt-attachment-preview', file_name: 'velocity-graph-reference-from-class-notes-final.png', content_type: 'image/png',
+      file_size: attachmentPreview.byteLength, url: '/api/v1/communication/doubt-attachments/preview.png',
+    }],
+    created_at: doubts[0].created_at,
+  }]],
   [doubts[1].id, [
     { id: randomUUID(), sender_id: student.id, sender_role: 'student', sender_name: student.display_name, body: 'I can find the roots with the formula, but how do I factor x² + 5x + 6?', created_at: doubts[1].created_at },
     { id: randomUUID(), sender_id: teacherId, sender_role: 'teacher', sender_name: 'Ms Meera Shah', body: doubts[1].last_message, created_at: doubts[1].latest_message_at },
@@ -94,6 +104,14 @@ http.createServer(async (req, res) => {
   if (url.pathname === '/__mock/primary') {
     setPrimaryStatus(url.searchParams.get('status') || 'pending')
     return send(res, 200, { status: doubts[0]?.status })
+  }
+  if (url.pathname === '/api/v1/communication/doubt-attachments/preview.png') {
+    res.writeHead(200, {
+      'Content-Type': 'image/png', 'Content-Length': attachmentPreview.byteLength,
+      'Access-Control-Allow-Origin': 'http://127.0.0.1:8083', 'Access-Control-Allow-Credentials': 'true',
+    })
+    res.end(attachmentPreview)
+    return
   }
   if (url.pathname.endsWith('/auth/login') && req.method === 'POST') {
     const body = await readBody(req)

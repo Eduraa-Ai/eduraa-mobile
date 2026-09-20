@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -19,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as DocumentPicker from 'expo-document-picker'
 import { File as ExpoFile } from 'expo-file-system'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppScreen, AuthenticatedImage, EmptyState, ErrorState, SkeletonCard } from '../../components/ui'
 import {
@@ -36,6 +38,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { downloadProtectedDocument, openProtectedDocument } from '../../utils/openProtectedDocument'
 import {
+  canUseDoubts,
   createClientRequestId,
   doubtDraftStorageKey,
   emptyDoubtDraft,
@@ -285,9 +288,18 @@ function AttachmentList({
   onError?: (message: string) => void
 }) {
   const [previewing, setPreviewing] = useState<DoubtAttachmentInput | DoubtAttachment | null>(null)
-  if (!attachments.length) return null
+  const [previewAspect, setPreviewAspect] = useState(4 / 3)
+  const insets = useSafeAreaInsets()
+  const viewport = useWindowDimensions()
   const previewUri = previewing && ('url' in previewing ? previewing.url : previewing.preview_uri)
   const previewIsRemote = Boolean(previewing && 'url' in previewing)
+  useEffect(() => {
+    if (!previewUri || previewIsRemote) return
+    Image.getSize(previewUri, (width, height) => {
+      if (width > 0 && height > 0) setPreviewAspect(Math.min(3.5, Math.max(0.45, width / height)))
+    }, () => undefined)
+  }, [previewIsRemote, previewUri])
+  if (!attachments.length) return null
   return (
     <>
       <View style={styles.attachmentList}>
@@ -299,6 +311,7 @@ function AttachmentList({
         const canPreview = isImage ? Boolean(remoteUrl || previewUri) : Boolean(remoteUrl)
         const preview = () => {
           if (isImage && (remoteUrl || previewUri)) {
+            setPreviewAspect(4 / 3)
             setPreviewing(attachment)
             return
           }
@@ -308,7 +321,7 @@ function AttachmentList({
           }
         }
         return (
-          <View key={`${attachment.file_name}-${index}`} style={[styles.attachmentItem, mine && styles.attachmentItemMine]}>
+          <View key={`${attachment.file_name}-${index}`} style={[styles.attachmentItem, isImage && styles.attachmentItemImage, mine && styles.attachmentItemMine]}>
             {remoteUrl && isImage ? (
               <Pressable accessibilityRole="button" accessibilityLabel={`Preview ${attachment.file_name}`} onPress={preview}>
                 <AuthenticatedImage
@@ -334,9 +347,9 @@ function AttachmentList({
               accessibilityLabel={canPreview ? `Preview ${attachment.file_name}` : attachment.file_name}
               style={styles.attachmentCopy}
             >
-              <Text style={[styles.attachmentName, mine && styles.attachmentNameMine]} numberOfLines={1}>{attachment.file_name}</Text>
+              <Text style={[styles.attachmentName, mine && styles.attachmentNameMine]} numberOfLines={2}>{attachment.file_name}</Text>
               <Text style={[styles.attachmentMeta, mine && styles.attachmentMetaMine]} numberOfLines={1}>
-                {readableSize || attachment.content_type}
+                {isImage ? 'Image preview' : attachment.content_type.includes('pdf') ? 'PDF document' : 'File'}{readableSize ? ` · ${readableSize}` : ''}
               </Text>
             </Pressable>
             {remoteUrl ? (
@@ -352,7 +365,7 @@ function AttachmentList({
               </Pressable>
             ) : null}
             {onRemove ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${attachment.file_name}`} onPress={() => onRemove(index)} hitSlop={8}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${attachment.file_name}`} onPress={() => onRemove(index)} hitSlop={8} style={styles.attachmentAction}>
                 <Ionicons name="close-circle" size={20} color={mine ? '#aab5c6' : colors.textMuted} />
               </Pressable>
             ) : null}
@@ -369,27 +382,38 @@ function AttachmentList({
         <View style={styles.mediaPreviewBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Close attachment preview" onPress={() => setPreviewing(null)} />
           <View style={styles.mediaPreviewSheet}>
-            <View style={styles.mediaPreviewHeader}>
-              <Text style={styles.mediaPreviewTitle} numberOfLines={1}>{previewing?.file_name}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close attachment preview" onPress={() => setPreviewing(null)} hitSlop={8}>
+            <View style={[styles.mediaPreviewHeader, { paddingTop: insets.top + spacing[3] }]}>
+              <View style={styles.mediaPreviewHeadingCopy}>
+                <Text style={styles.mediaPreviewEyebrow}>DOUBT ATTACHMENT</Text>
+                <Text style={styles.mediaPreviewTitle} numberOfLines={2}>{previewing?.file_name}</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close attachment preview" onPress={() => setPreviewing(null)} style={styles.mediaPreviewClose}>
                 <Ionicons name="close" size={24} color={colors.white} />
               </Pressable>
             </View>
-            {previewIsRemote ? (
-              <AuthenticatedImage
-                uri={previewUri as string}
-                accessibilityLabel={previewing?.file_name ?? 'Attachment preview'}
-                containerStyle={styles.mediaPreviewImage}
-                imageStyle={styles.mediaPreviewImage}
-              />
-            ) : (
-              <Image
-                source={{ uri: previewUri as string }}
-                accessibilityLabel={previewing?.file_name ?? 'Attachment preview'}
-                resizeMode="contain"
-                style={styles.mediaPreviewImage}
-              />
-            )}
+            <View style={styles.mediaPreviewBody}>
+            <View style={[styles.mediaPreviewCanvas, { height: Math.min(viewport.height - insets.top - 190, Math.max(160, (viewport.width - spacing[6]) / previewAspect)) }]}>
+              {previewIsRemote ? (
+                <AuthenticatedImage
+                  uri={previewUri as string}
+                  accessibilityLabel={previewing?.file_name ?? 'Attachment preview'}
+                  containerStyle={styles.mediaPreviewImage}
+                  imageStyle={styles.mediaPreviewImage}
+                  onAspectRatio={(aspect) => setPreviewAspect(Math.min(3.5, Math.max(0.45, aspect)))}
+                />
+              ) : (
+                <Image
+                  source={{ uri: previewUri as string }}
+                  accessibilityLabel={previewing?.file_name ?? 'Attachment preview'}
+                  resizeMode="contain"
+                  style={styles.mediaPreviewImage}
+                />
+              )}
+            </View>
+            </View>
+            <View style={[styles.mediaPreviewFooter, { paddingBottom: insets.bottom + spacing[4] }]}>
+              <View style={styles.mediaPreviewFooterCopy}><Ionicons name="shield-checkmark-outline" size={17} color="#6EE7B7" /><Text style={styles.mediaPreviewFooterText}>Secure full-size preview</Text></View>
+            </View>
           </View>
         </View>
       </Modal>
@@ -839,7 +863,7 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
         {detail.messages.map((message) => {
           const mine = message.sender_id === user?.id
           return (
-            <View key={message.id} style={[styles.message, mine ? styles.messageMine : styles.messageOther]} accessible accessibilityLabel={`${message.sender_name}, ${relativeDate(message.created_at)}: ${message.body}`}>
+            <View key={message.id} style={[styles.message, message.attachments.length > 0 && styles.messageWithAttachment, mine ? styles.messageMine : styles.messageOther]} accessible accessibilityLabel={`${message.sender_name}, ${relativeDate(message.created_at)}: ${message.body}`}>
               <Text style={[styles.messageAuthor, mine && styles.messageAuthorMine]}>{mine ? 'You' : message.sender_name}</Text>
               {message.body ? <Text style={[styles.messageBody, mine && styles.messageBodyMine]} selectable>{message.body}</Text> : null}
               <AttachmentList attachments={message.attachments} mine={mine} onError={setReplyError} />
@@ -931,6 +955,7 @@ export default function DoubtsScreen() {
   const route = useRoute<any>()
   const user = useAuthStore((state) => state.user)
   const isTeacher = user?.role === 'teacher'
+  const hasDoubtAccess = canUseDoubts(user?.role)
   const netInfo = useNetInfo()
   const [filter, setFilter] = useState<DoubtStatus | 'all'>('all')
   const [personFilter, setPersonFilter] = useState<string | null>(null)
@@ -943,6 +968,7 @@ export default function DoubtsScreen() {
   const listQuery = useQuery({
     queryKey: ['doubts', user?.id],
     queryFn: doubtsApi.list,
+    enabled: hasDoubtAccess,
     refetchOnWindowFocus: 'always',
     // Keep the teacher queue and student inbox in sync while this screen is open.
     refetchInterval: netInfo.isConnected === false ? false : 2_000,
@@ -989,6 +1015,18 @@ export default function DoubtsScreen() {
   const closeThread = () => {
     setActiveId(null)
     if (route.params?.doubtId) navigation.replace?.('Doubts')
+  }
+
+  if (!hasDoubtAccess) {
+    return (
+      <AppScreen tone="auth" ambient={false} protectedChrome contentStyle={styles.screen}>
+        <ErrorState
+          kind="error"
+          title="Doubts are for students and teachers"
+          message="Use a student or teacher account to open private academic doubt threads."
+        />
+      </AppScreen>
+    )
   }
 
   if (composing && !isTeacher) {
@@ -1214,23 +1252,32 @@ const styles = StyleSheet.create({
   addFileText: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   addFileMeta: { marginLeft: 'auto', color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
   attachmentList: { gap: spacing[2] },
-  attachmentItem: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[2], padding: spacing[2], borderRadius: radius.sm, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
+  attachmentItem: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing[2], padding: spacing[2], borderRadius: radius.md, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
+  attachmentItemImage: { minHeight: 72 },
   attachmentItemMine: { borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.08)' },
-  attachmentIcon: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  attachmentIcon: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
   attachmentIconMine: { backgroundColor: 'rgba(255,255,255,0.14)' },
   attachmentCopy: { flex: 1, minWidth: 0 },
-  attachmentName: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  attachmentName: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   attachmentNameMine: { color: colors.white },
-  attachmentMeta: { marginTop: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9 },
+  attachmentMeta: { marginTop: 3, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9 },
   attachmentMetaMine: { color: '#aab5c6' },
-  attachmentAction: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-  attachmentPreview: { width: 52, height: 52, overflow: 'hidden', borderRadius: radius.xs, backgroundColor: colors.backgroundMuted },
+  attachmentAction: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: 'rgba(243,108,33,0.10)' },
+  attachmentPreview: { width: 58, height: 58, overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.backgroundMuted },
   attachmentImage: { width: '100%', height: '100%' },
-  mediaPreviewBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing[5], backgroundColor: 'rgba(7, 21, 45, 0.92)' },
-  mediaPreviewSheet: { width: '100%', maxWidth: 720, maxHeight: '88%', overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.nav },
-  mediaPreviewHeader: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], paddingHorizontal: spacing[4] },
-  mediaPreviewTitle: { flex: 1, color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
-  mediaPreviewImage: { width: '100%', height: 420, maxHeight: '78%' },
+  mediaPreviewBackdrop: { flex: 1, backgroundColor: 'rgba(7, 21, 45, 0.98)' },
+  mediaPreviewSheet: { flex: 1, width: '100%', overflow: 'hidden', backgroundColor: colors.nav },
+  mediaPreviewHeader: { minHeight: 82, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], paddingHorizontal: spacing[4], paddingBottom: spacing[3] },
+  mediaPreviewHeadingCopy: { flex: 1, minWidth: 0, gap: 3 },
+  mediaPreviewEyebrow: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.2 },
+  mediaPreviewTitle: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  mediaPreviewClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)' },
+  mediaPreviewBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[3] },
+  mediaPreviewCanvas: { width: '100%', overflow: 'hidden', borderRadius: radius.lg, backgroundColor: '#020817', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
+  mediaPreviewImage: { width: '100%', height: '100%' },
+  mediaPreviewFooter: { minHeight: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[4], paddingTop: spacing[3] },
+  mediaPreviewFooterCopy: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  mediaPreviewFooterText: { color: '#aab5c6', fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   primaryButton: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, backgroundColor: colors.nav, ...shadows.sm },
   primaryButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   buttonDisabled: { opacity: 0.46 },
@@ -1248,6 +1295,7 @@ const styles = StyleSheet.create({
   conversationMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
   messageStack: { gap: spacing[3] },
   message: { maxWidth: '91%', padding: spacing[4], borderRadius: radius.lg },
+  messageWithAttachment: { width: '91%' },
   messageMine: { alignSelf: 'flex-end', borderBottomRightRadius: radius.xs, backgroundColor: colors.nav },
   messageOther: { alignSelf: 'flex-start', borderBottomLeftRadius: radius.xs, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
   messageAuthor: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
