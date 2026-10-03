@@ -129,6 +129,7 @@ export const mobileControls: MobileControl[] = [
     description: 'Publish class updates or read the announcements intended for your school enrollment.',
     icon: 'megaphone',
     section: 'operations',
+    requiresClassTeacher: true,
     nativeStatus: 'native',
     target: { kind: 'detail' },
   },
