@@ -12,6 +12,8 @@ export type SelectOption = {
 
 interface SelectFieldProps {
   label: string
+  /** compact: in-app forms (default). large: sign-in and registration. */
+  size?: 'compact' | 'large'
   value?: string
   placeholder?: string
   options: SelectOption[]
@@ -22,7 +24,7 @@ interface SelectFieldProps {
   onChange: (value: string) => void
 }
 
-export function SelectField({
+export function SelectField({ size = 'compact',
   label,
   value,
   placeholder = 'Select',
@@ -60,7 +62,7 @@ export function SelectField({
         activeOpacity={0.88}
         disabled={!canOpen}
         onPress={() => setOpen(true)}
-        style={[styles.trigger, error && styles.triggerError, !canOpen && styles.triggerDisabled]}
+        style={[styles.trigger, size === 'large' && styles.triggerLarge, error && styles.triggerError, !canOpen && styles.triggerDisabled]}
       >
         <Text style={[styles.value, !selected && styles.placeholder]} numberOfLines={1}>
           {loading ? 'Loading...' : selected?.label ?? placeholder}
@@ -138,17 +140,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.3,
   },
+  triggerLarge: { minHeight: 56, borderRadius: radius.lg, borderWidth: 1.5, paddingHorizontal: spacing[4] },
   trigger: {
-    minHeight: 56,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
+    minHeight: 46,
+    borderRadius: radius.control,
+    borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing[3],
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: spacing[3],
   },
   triggerError: {
     borderColor: colors.danger,

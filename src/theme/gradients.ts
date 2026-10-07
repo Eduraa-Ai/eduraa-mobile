@@ -1,5 +1,6 @@
 export const gradients = {
-  appShell: ['#f8fafc', '#fff7ed', '#ffffff'] as const,
+  // Flat warm cream: one page colour, no wash, so white cards read cleanly.
+  appShell: ['#fff8f0', '#fff8f0', '#fff8f0'] as const,
   appShellDeep: ['#f8fafc', '#fff7ed', '#fffaf2'] as const,
   authShell: ['#f8fafc', '#fff7ed', '#ffffff'] as const,
   hero: ['#9a3412', '#f97316', '#7c3aed'] as const,

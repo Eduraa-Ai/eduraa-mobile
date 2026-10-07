@@ -1,9 +1,7 @@
 import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { colors } from '../../theme/colors'
-import { fonts } from '../../theme/fonts'
-import { radius, spacing } from '../../theme/spacing'
+import { colors, radius, spacing, typography } from '../../theme'
 
 interface EmptyStateProps {
   icon: keyof typeof Ionicons.glyphMap
@@ -15,7 +13,7 @@ export function EmptyState({ icon, title, body }: EmptyStateProps) {
   return (
     <View style={styles.root}>
       <View style={styles.iconWrap}>
-        <Ionicons name={icon} size={28} color={colors.accentStrong} />
+        <Ionicons name={icon} size={19} color={colors.iconInk} />
       </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.body}>{body}</Text>
@@ -26,31 +24,29 @@ export function EmptyState({ icon, title, body }: EmptyStateProps) {
 const styles = StyleSheet.create({
   root: {
     alignItems: 'center',
-    paddingVertical: spacing[10],
-    paddingHorizontal: spacing[5],
-    gap: spacing[3],
+    paddingVertical: spacing[5],
+    paddingHorizontal: spacing[4],
+    gap: spacing[1],
   },
   iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: radius['2xl'],
-    backgroundColor: colors.accentSurface,
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: colors.iconSurface,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
+    marginBottom: spacing[2],
   },
   title: {
-    color: colors.text,
-    fontFamily: fonts.displaySemibold,
-    fontSize: 18,
+    ...typography.roles.section,
+    color: colors.nav,
     textAlign: 'center',
   },
   body: {
+    ...typography.roles.caption,
+    fontSize: 13,
+    lineHeight: 19,
     color: colors.textMuted,
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    lineHeight: 21,
     textAlign: 'center',
     maxWidth: 280,
   },

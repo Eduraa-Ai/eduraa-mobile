@@ -1,7 +1,9 @@
-import React, { ReactNode, forwardRef } from 'react'
+import React, { ReactNode, forwardRef, useContext } from 'react'
 import { ScrollView, ScrollViewProps, StyleSheet, View, ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { HeaderShownContext } from '@react-navigation/elements'
+import { useAppHeaderScroll } from '../../navigation/headerScroll'
 import { colors, gradients, layout, spacing } from '../../theme'
 
 interface AppScreenProps extends ScrollViewProps {
@@ -16,14 +18,21 @@ interface AppScreenProps extends ScrollViewProps {
 }
 
 export const AppScreen = forwardRef<ScrollView, AppScreenProps>(function AppScreen(
-  { children, scroll = true, contentStyle, padded = true, tone = 'default', ambient = true, protectedChrome = false, scrollRef, style, ...props },
+  { children, scroll = true, contentStyle, padded = true, tone = 'default', ambient = true, protectedChrome = false, scrollRef, style, onScroll, ...props },
   ref,
 ) {
   const insets = useSafeAreaInsets()
+  // The app header already clears the status bar, so the screen only needs breathing room.
+  const headerShown = useContext(HeaderShownContext)
+  const topInset = headerShown || protectedChrome ? 0 : insets.top
+  const handleScroll = useAppHeaderScroll(onScroll)
+  // Only real sign-in screens (tone auth with the ambient glow) get the auth wash;
+  // in-app screens that borrowed tone="auth" share the app canvas.
+  const authCanvas = tone === 'auth' && ambient
 
   const content = (
     <LinearGradient
-      colors={tone === 'auth' ? ['#fffaf2', '#fbf6ec', '#fff7ed'] : [...gradients.appShell]}
+      colors={authCanvas ? ['#fffaf2', '#fbf6ec', '#fff7ed'] : [...gradients.appShell]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.gradient}
@@ -40,7 +49,7 @@ export const AppScreen = forwardRef<ScrollView, AppScreenProps>(function AppScre
           styles.inner,
           padded && styles.padded,
           {
-            paddingTop: protectedChrome ? spacing[4] : insets.top + spacing[4],
+            paddingTop: topInset + spacing[headerShown ? 2 : 4],
             paddingBottom: protectedChrome ? spacing[6] : insets.bottom + spacing[6],
           },
           contentStyle,
@@ -60,13 +69,15 @@ export const AppScreen = forwardRef<ScrollView, AppScreenProps>(function AppScre
       ref={ref ?? scrollRef}
       style={[
         styles.root,
-        tone === 'auth' && styles.authRoot,
-        protectedChrome && { marginTop: insets.top, marginBottom: layout.bottomTabHeight + insets.bottom },
+        authCanvas && styles.authRoot,
+        protectedChrome && { marginTop: headerShown ? 0 : insets.top, marginBottom: layout.bottomTabHeight + insets.bottom },
         style,
       ]}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.scrollContent}
+      scrollEventThrottle={16}
       {...props}
+      onScroll={handleScroll}
     >
       {content}
     </ScrollView>
@@ -120,7 +131,7 @@ const styles = StyleSheet.create({
   },
   inner: {
     flexGrow: 1,
-    gap: spacing[5],
+    gap: spacing[4],
   },
   padded: {
     paddingHorizontal: spacing[5],

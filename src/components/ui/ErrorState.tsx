@@ -25,54 +25,66 @@ export function ErrorState({
 }: ErrorStateProps) {
   const isOffline = kind === 'offline'
   return (
-    <View style={[styles.root, isOffline && styles.offlineRoot, style]} accessibilityRole="alert">
-      <View style={styles.icon}>
-        <Ionicons name={isOffline ? 'cloud-offline-outline' : 'alert-circle'} size={24} color={isOffline ? colors.warning : colors.danger} />
+    <View style={[styles.root, style]} accessibilityRole="alert">
+      <View style={[styles.icon, isOffline && styles.offlineIcon]}>
+        <Ionicons name={isOffline ? 'cloud-offline-outline' : 'alert-circle-outline'} size={22} color={isOffline ? colors.warning : colors.danger} />
       </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
-      {onAction ? <AnimatedButton label={loading ? 'Reconnecting…' : actionLabel} loading={loading} variant="secondary" onPress={onAction} style={styles.action} /> : null}
+      {onAction ? (
+        <AnimatedButton
+          label={loading ? 'Reconnecting…' : actionLabel}
+          loading={loading}
+          variant="secondary"
+          size="compact"
+          onPress={onAction}
+          style={styles.action}
+        />
+      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   root: {
+    alignSelf: 'stretch',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing[6],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[6],
     borderRadius: radius.card,
-    backgroundColor: colors.dangerSurface,
+    backgroundColor: colors.backgroundElevated,
     borderWidth: 1,
-    borderColor: colors.dangerBorder,
-  },
-  offlineRoot: {
-    backgroundColor: colors.warningSurface,
-    borderColor: colors.warningBorder,
+    borderColor: colors.border,
   },
   icon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
-    marginBottom: spacing[4],
+    backgroundColor: colors.dangerSurface,
+    marginBottom: spacing[3],
+  },
+  offlineIcon: {
+    backgroundColor: colors.warningSurface,
   },
   title: {
-    ...typography.roles.title,
-    color: colors.text,
+    ...typography.roles.section,
+    color: colors.nav,
     textAlign: 'center',
   },
   message: {
-    ...typography.roles.body,
+    ...typography.roles.caption,
+    fontSize: 13,
+    lineHeight: 19,
     color: colors.textMuted,
     textAlign: 'center',
-    marginTop: spacing[2],
+    marginTop: spacing[1],
+    maxWidth: 300,
   },
   action: {
-    marginTop: spacing[5],
-    alignSelf: 'stretch',
+    marginTop: spacing[4],
+    minWidth: 140,
   },
 })
 

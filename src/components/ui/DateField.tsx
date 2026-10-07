@@ -8,6 +8,8 @@ import { radius, shadows, spacing } from '../../theme/spacing'
 
 interface DateFieldProps {
   label: string
+  /** compact: in-app forms (default). large: sign-in and registration. */
+  size?: 'compact' | 'large'
   value?: string
   placeholder?: string
   disabled?: boolean
@@ -18,7 +20,7 @@ interface DateFieldProps {
 
 const weekdayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
-export function DateField({ label, value, placeholder = 'Select date', disabled = false, maxDate, error, onChange }: DateFieldProps) {
+export function DateField({ size = 'compact', label, value, placeholder = 'Select date', disabled = false, maxDate, error, onChange }: DateFieldProps) {
   const [open, setOpen] = useState(false)
   const selectedDate = useMemo(() => {
     if (!value) return null
@@ -45,7 +47,7 @@ export function DateField({ label, value, placeholder = 'Select date', disabled 
         activeOpacity={0.88}
         disabled={disabled}
         onPress={openPicker}
-        style={[styles.trigger, error && styles.triggerError, disabled && styles.triggerDisabled]}
+        style={[styles.trigger, size === 'large' && styles.triggerLarge, error && styles.triggerError, disabled && styles.triggerDisabled]}
       >
         <Ionicons name="calendar" size={17} color={colors.textMuted} />
         <Text style={[styles.value, !selectedDate && styles.placeholder]} numberOfLines={1}>
@@ -123,16 +125,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.3,
   },
+  triggerLarge: { minHeight: 56, borderRadius: radius.lg, borderWidth: 1.5, paddingHorizontal: spacing[4] },
   trigger: {
-    minHeight: 56,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
+    minHeight: 46,
+    borderRadius: radius.control,
+    borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: spacing[3],
   },
   triggerError: {
     borderColor: colors.danger,

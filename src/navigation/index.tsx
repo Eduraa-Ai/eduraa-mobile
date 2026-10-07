@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { NavigationContainer, type LinkingOptions, type NavigatorScreenParams } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { AnimatedButton, AnimatedCard, AppScreen, AuthLogoMark, BottomTabBar, GradientHeroCard } from '../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, AuthLogoMark, BottomTabBar, renderAppHeader } from '../components/ui'
 import { useAuthStore } from '../stores/authStore'
 import { colors } from '../theme/colors'
 import { fonts } from '../theme/fonts'
@@ -249,6 +249,7 @@ const linking: LinkingOptions<any> = {
 }
 
 const stackScreenOptions = {
+  header: renderAppHeader,
   headerStyle: {
     backgroundColor: colors.backgroundElevated,
   },
@@ -264,23 +265,6 @@ const stackScreenOptions = {
   },
 };
 
-function CustomPaperHeaderBackButton({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Back to generate paper"
-      hitSlop={8}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.customPaperBack,
-        pressed && styles.customPaperBackPressed,
-      ]}
-    >
-      <Ionicons name="chevron-back" size={20} color={colors.text} />
-      <Text style={styles.customPaperBackText}>Back</Text>
-    </Pressable>
-  )
-}
 
 function AuthNavigator() {
   return (
@@ -318,18 +302,7 @@ function PapersNavigator() {
       <PapersStack.Screen
         name="CustomPaper"
         component={CustomPaperScreen}
-        options={({ navigation }) => ({
-          title: "Custom paper",
-          headerBackVisible: false,
-          headerLeft: () => (
-            <CustomPaperHeaderBackButton
-              onPress={() => {
-                if (navigation.canGoBack()) navigation.goBack()
-                else navigation.navigate('GeneratePaper')
-              }}
-            />
-          ),
-        })}
+        options={{ title: "Custom paper" }}
       />
       <PapersStack.Screen
         name="PaperDetail"
@@ -356,12 +329,10 @@ function ResultsNavigator() {
       <ResultsStack.Screen
         name="ResultsList"
         component={ResultsScreen}
-        options={{ headerShown: false }}
       />
       <ResultsStack.Screen
         name="ResultDetail"
         component={ResultDetailScreen}
-        options={{ headerShown: false }}
       />
       <ResultsStack.Screen
         name="CheckedPaperStatus"
@@ -371,12 +342,10 @@ function ResultsNavigator() {
       <ResultsStack.Screen
         name="QuestionEvidence"
         component={QuestionEvidenceScreen}
-        options={{ headerShown: false }}
       />
       <ResultsStack.Screen
         name="CheckedPaperWorkspace"
         component={CheckedPaperWorkspaceScreen}
-        options={{ headerShown: false }}
       />
     </ResultsStack.Navigator>
   );
@@ -390,16 +359,16 @@ function HomeNavigator() {
       <HomeStack.Screen name="CompetitiveExam" component={CompetitiveExamScreen} options={{ title: 'JEE resources' }} />
       <HomeStack.Screen name="CompetitiveSubject" component={CompetitiveSubjectScreen} options={{ title: 'Competitive subject' }} />
       <HomeStack.Screen name="CompetitiveChapter" component={CompetitiveChapterScreen} options={{ title: 'Chapter workspace' }} />
-      <HomeStack.Screen name="AgenticLearning" component={AgenticLearningScreen} options={{ headerShown: false }} />
-      <HomeStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} options={{ headerShown: false }} />
-      <HomeStack.Screen name="AgenticTopic" component={AgenticTopicScreen} options={{ headerShown: false }} />
+      <HomeStack.Screen name="AgenticLearning" component={AgenticLearningScreen} />
+      <HomeStack.Screen name="AgenticSubject" component={AgenticSubjectScreen} />
+      <HomeStack.Screen name="AgenticTopic" component={AgenticTopicScreen} />
       <HomeStack.Screen name="Feature" component={FeatureScreen} options={{ title: 'Feature' }} />
       <HomeStack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'Approvals' }} />
       <HomeStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       <HomeStack.Screen name="ScanUpload" component={ScanUploadScreen} options={{ title: 'Scan upload' }} />
       <HomeStack.Screen name="Exams" component={ExamsScreen} options={{ title: 'Exams' }} />
-      <HomeStack.Screen name="Announcements" component={AnnouncementsScreen} options={{ headerShown: false }} />
-      <HomeStack.Screen name="Doubts" component={DoubtsScreen} options={{ headerShown: false }} />
+      <HomeStack.Screen name="Announcements" component={AnnouncementsScreen} />
+      <HomeStack.Screen name="Doubts" component={DoubtsScreen} />
       <HomeStack.Screen name="AIStudio" component={AIStudioScreen} options={{ headerShown: false }} />
     </HomeStack.Navigator>
   );
@@ -411,7 +380,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen
         name="ProfileMain"
         component={ProfileScreen}
-        options={{ title: "Profile", headerShown: false }}
+        options={{ title: "Profile" }}
       />
     </ProfileStack.Navigator>
   );
@@ -433,13 +402,13 @@ function StudentTabs({
       initialRouteName="Home"
       tabBar={(props) => <BottomTabBar {...props} />}
       screenOptions={{
-        headerShown: false,
+        header: renderAppHeader,
       }}
     >
-      <Tab.Screen name="Home" component={HomeNavigator} options={{ title: 'Home' }} />
-      <Tab.Screen name="Papers" component={PapersNavigator} options={{ title: 'Papers' }} />
-      <Tab.Screen name="Results" component={ResultsNavigator} options={{ title: 'Results' }} />
-      <Tab.Screen name="Profile" component={ProfileNavigator} options={{ title: 'Profile' }} />
+      <Tab.Screen name="Home" component={HomeNavigator} options={{ title: 'Home', headerShown: false }} />
+      <Tab.Screen name="Papers" component={PapersNavigator} options={{ title: 'Papers', headerShown: false }} />
+      <Tab.Screen name="Results" component={ResultsNavigator} options={{ title: 'Results', headerShown: false }} />
+      <Tab.Screen name="Profile" component={ProfileNavigator} options={{ title: 'Profile', headerShown: false }} />
       {attendanceEligible ? (
         <Tab.Screen name="Attendance" component={AttendanceScreen} options={{ title: 'Attendance' }} />
       ) : null}
@@ -467,7 +436,7 @@ function StaffWorkspaceNavigator() {
       <StaffWorkspaceStack.Screen
         name="StaffWorkspace"
         component={WorkspaceScreen}
-        options={{ title: "Workspace" }}
+        options={{ title: "Workspace", headerShown: false }}
       />
       <StaffWorkspaceStack.Screen
         name="Dashboard"
@@ -547,12 +516,10 @@ function StaffWorkspaceNavigator() {
       <StaffWorkspaceStack.Screen
         name="Doubts"
         component={DoubtsScreen}
-        options={{ headerShown: false }}
       />
       <StaffWorkspaceStack.Screen
         name="Announcements"
         component={AnnouncementsScreen}
-        options={{ headerShown: false }}
       />
       <StaffWorkspaceStack.Screen
         name="StaffAIStudio"
@@ -567,18 +534,7 @@ function StaffWorkspaceNavigator() {
       <StaffWorkspaceStack.Screen
         name="StaffCustomPaper"
         component={CustomPaperScreen}
-        options={({ navigation }) => ({
-          title: "Custom paper",
-          headerBackVisible: false,
-          headerLeft: () => (
-            <CustomPaperHeaderBackButton
-              onPress={() => {
-                if (navigation.canGoBack()) navigation.goBack()
-                else navigation.navigate('StaffGeneratePaper')
-              }}
-            />
-          ),
-        })}
+        options={{ title: "Custom paper" }}
       />
       <StaffWorkspaceStack.Screen
         name="StaffPapers"
@@ -593,17 +549,14 @@ function StaffWorkspaceNavigator() {
       <StaffWorkspaceStack.Screen
         name="ResultDetail"
         component={ResultDetailScreen}
-        options={{ headerShown: false }}
       />
       <StaffWorkspaceStack.Screen
         name="QuestionEvidence"
         component={QuestionEvidenceScreen}
-        options={{ headerShown: false }}
       />
       <StaffWorkspaceStack.Screen
         name="CheckedPaperWorkspace"
         component={CheckedPaperWorkspaceScreen}
-        options={{ headerShown: false }}
       />
     </StaffWorkspaceStack.Navigator>
   );
@@ -614,13 +567,13 @@ function StaffTabs({ user }: { user: AccountMinimal }) {
     <StaffTab.Navigator
       tabBar={(props) => <BottomTabBar {...props} />}
       screenOptions={{
-        headerShown: false,
+        header: renderAppHeader,
       }}
     >
       <StaffTab.Screen
         name="StaffHome"
         component={StaffWorkspaceNavigator}
-        options={{ title: "Workspace" }}
+        options={{ title: "Workspace", headerShown: false }}
       />
       {canAccessApprovalActions(user.role) ? (
         <StaffTab.Screen
@@ -649,7 +602,7 @@ function StaffTabs({ user }: { user: AccountMinimal }) {
       <StaffTab.Screen
         name="StaffPapers"
         component={PapersNavigator}
-        options={{ title: "Papers" }}
+        options={{ title: "Papers", headerShown: false }}
       />
       {user.role === 'teacher' ? (
         <StaffTab.Screen
@@ -661,18 +614,18 @@ function StaffTabs({ user }: { user: AccountMinimal }) {
       <StaffTab.Screen
         name="StaffResults"
         component={ResultsNavigator}
-        options={{ title: "Results" }}
+        options={{ title: "Results", headerShown: false }}
       />
       <StaffTab.Screen
         name="StaffAIStudio"
         component={AIStudioScreen}
-        options={{ title: "AI Studio" }}
+        options={{ title: "AI Studio", headerShown: false }}
       />
       {user.role === 'teacher' || user.role === 'principal' ? (
         <StaffTab.Screen
           name="StaffProfile"
           component={ProfileNavigator}
-          options={{ title: "Profile" }}
+          options={{ title: "Profile", headerShown: false }}
         />
       ) : null}
     </StaffTab.Navigator>
@@ -811,24 +764,6 @@ export default function RootNavigator({
 }
 
 const styles = StyleSheet.create({
-  customPaperBack: {
-    minWidth: 64,
-    minHeight: 44,
-    marginLeft: -spacing[2],
-    paddingHorizontal: spacing[2],
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    borderRadius: 14,
-  },
-  customPaperBackPressed: {
-    backgroundColor: colors.backgroundTint,
-  },
-  customPaperBackText: {
-    color: colors.text,
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-  },
   loadingRoot: {
     flex: 1,
     alignItems: "center",

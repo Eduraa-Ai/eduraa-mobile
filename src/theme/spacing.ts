@@ -40,8 +40,9 @@ export const radius = {
   '2xl': 28,
   '3xl': 36,
   authInput: 20,
-  card: 24,
-  dashboardCard: 24,
+  card: 16,
+  control: 14,
+  dashboardCard: 16,
   sheet: 28,
   full: 999,
 } as const

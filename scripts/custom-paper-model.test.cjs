@@ -190,18 +190,34 @@ test('custom paper routes expose one explicit accessible back button', () => {
     'utf8',
   )
 
+  const screenHeaders = fs.readFileSync(
+    path.join(root, 'src/navigation/screenHeaders.ts'),
+    'utf8',
+  )
+  const appHeader = fs.readFileSync(
+    path.join(root, 'src/components/ui/AppHeader.tsx'),
+    'utf8',
+  )
+
+  // The shared app header renders the only back button: no route may add its own.
   for (const routeName of ['CustomPaper', 'StaffCustomPaper']) {
     const routeStart = navigation.indexOf(`name="${routeName}"`)
     assert.ok(routeStart >= 0, `${routeName} must remain registered`)
 
-    const routeConfig = navigation.slice(routeStart, routeStart + 700)
-    assert.match(routeConfig, /headerBackVisible: false/)
-    assert.match(routeConfig, /CustomPaperHeaderBackButton/)
-    assert.match(routeConfig, /navigation\.canGoBack\(\)/)
+    const routeConfig = navigation.slice(routeStart, navigation.indexOf('/>', routeStart))
+    assert.doesNotMatch(routeConfig, /headerLeft/)
   }
+  assert.match(navigation, /header: renderAppHeader/)
 
-  assert.match(navigation, /accessibilityLabel="Back to generate paper"/)
-  assert.match(navigation, /customPaperBack:[\s\S]*minHeight: 44/)
+  // Without history (e.g. a deep link) Back still returns to the generator.
+  assert.match(screenHeaders, /\n  CustomPaper: \{[^}]*backFallback: 'GeneratePaper'/)
+  assert.match(screenHeaders, /\n  StaffCustomPaper: \{[^}]*backFallback: 'StaffGeneratePaper'/)
+  assert.match(appHeader, /navigation\.canGoBack\(\)\) navigation\.goBack\(\)\s*else if \(meta\.backFallback\)/)
+
+  // The back control is announced to assistive tech and keeps a 44pt+ touch area.
+  assert.match(appHeader, /accessibilityLabel="Go back"/)
+  assert.match(appHeader, /hitSlop=\{8\}/)
+  assert.match(appHeader, /iconButton: \{\s*width: 38,\s*height: 38,/)
 })
 
 test('custom paper creation selects and persists the complete class scope', () => {
