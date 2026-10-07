@@ -393,21 +393,21 @@ export default function RegisterSchoolScreen() {
           <Text style={styles.sectionEyebrow}>Personal information</Text>
           <View style={styles.nameGrid}>
             <View style={styles.nameField}>
-              <TextInputField label="First name" value={activeForm.first_name} onChangeText={(value) => {
+              <TextInputField size="large" label="First name" value={activeForm.first_name} onChangeText={(value) => {
                 if (role === 'teacher') setTeacherForm((prev) => ({ ...prev, first_name: value }))
                 else if (role === 'student') setStudentForm((prev) => ({ ...prev, first_name: value }))
                 else setPrincipalForm((prev) => ({ ...prev, first_name: value }))
               }} placeholder="First" />
             </View>
             <View style={styles.nameField}>
-              <TextInputField label="Last name" value={activeForm.last_name} onChangeText={(value) => {
+              <TextInputField size="large" label="Last name" value={activeForm.last_name} onChangeText={(value) => {
                 if (role === 'teacher') setTeacherForm((prev) => ({ ...prev, last_name: value }))
                 else if (role === 'student') setStudentForm((prev) => ({ ...prev, last_name: value }))
                 else setPrincipalForm((prev) => ({ ...prev, last_name: value }))
               }} placeholder="Last" />
             </View>
           </View>
-          <TextInputField
+          <TextInputField size="large"
             label="Email"
             value={activeForm.email}
             onChangeText={(value) => {
@@ -424,10 +424,10 @@ export default function RegisterSchoolScreen() {
             placeholder="you@example.com"
           />
           {role === 'student' ? (
-            <TextInputField label="Student ID" value={studentForm.student_id} onChangeText={(value) => setStudentForm((prev) => ({ ...prev, student_id: value }))} placeholder="Student ID" />
+            <TextInputField size="large" label="Student ID" value={studentForm.student_id} onChangeText={(value) => setStudentForm((prev) => ({ ...prev, student_id: value }))} placeholder="Student ID" />
           ) : null}
           {role === 'teacher' ? (
-            <TextInputField label="Teacher ID" value={teacherForm.teacher_id} onChangeText={(value) => setTeacherForm((prev) => ({ ...prev, teacher_id: value }))} placeholder="Teacher ID" />
+            <TextInputField size="large" label="Teacher ID" value={teacherForm.teacher_id} onChangeText={(value) => setTeacherForm((prev) => ({ ...prev, teacher_id: value }))} placeholder="Teacher ID" />
           ) : null}
         </View>
 
@@ -443,7 +443,7 @@ export default function RegisterSchoolScreen() {
               </TouchableOpacity>
             </View>
           ) : null}
-          <SelectField label="School / Institute" value={activeSchoolId} options={schoolOptions} loading={loadingSchools} placeholder="Select school" onChange={setSchoolForRole} />
+          <SelectField size="large" label="School / Institute" value={activeSchoolId} options={schoolOptions} loading={loadingSchools} placeholder="Select school" onChange={setSchoolForRole} />
           {branchesError ? (
             <View style={styles.dataError} accessibilityRole="alert">
               <Ionicons name="alert-circle-outline" size={19} color="#c2410c" />
@@ -453,7 +453,7 @@ export default function RegisterSchoolScreen() {
               </TouchableOpacity>
             </View>
           ) : null}
-          <SelectField label="Branch" value={activeBranchId} options={branchOptions} loading={loadingBranches} disabled={!activeSchoolId} placeholder="Select branch" onChange={setBranchForRole} />
+          <SelectField size="large" label="Branch" value={activeBranchId} options={branchOptions} loading={loadingBranches} disabled={!activeSchoolId} placeholder="Select branch" onChange={setBranchForRole} />
           {offeringsError && role === 'student' ? (
             <View style={styles.dataError} accessibilityRole="alert">
               <Ionicons name="alert-circle-outline" size={19} color="#c2410c" />
@@ -464,7 +464,7 @@ export default function RegisterSchoolScreen() {
             </View>
           ) : null}
           {role !== 'principal' ? (
-            <SelectField
+            <SelectField size="large"
               label="Board"
               value={role === 'teacher' ? teacherForm.board : studentForm.board}
               options={toSelectOptions(availableBoards)}
@@ -478,7 +478,7 @@ export default function RegisterSchoolScreen() {
           ) : null}
           {role === 'student' ? (
             <>
-              <SelectField
+              <SelectField size="large"
                 label="Standard"
                 value={studentForm.standard}
                 options={toSelectOptions(availableStandards)}
@@ -487,7 +487,7 @@ export default function RegisterSchoolScreen() {
                 placeholder={availableStandards.length ? 'Select standard' : 'No standards available'}
                 onChange={(value) => setStudentForm((prev) => ({ ...prev, standard: value, division: '' }))}
               />
-              <SelectField
+              <SelectField size="large"
                 label="Division"
                 value={studentForm.division}
                 options={toSelectOptions(availableDivisions)}
@@ -508,7 +508,7 @@ export default function RegisterSchoolScreen() {
         <View style={styles.formCard}>
           <View style={styles.sectionMarker}><Text style={styles.sectionMarkerText}>3</Text></View>
           <Text style={styles.sectionEyebrow}>Account information</Text>
-          <TextInputField
+          <TextInputField size="large"
             label="Password"
             value={activeForm.password}
             onChangeText={(value) => {
@@ -527,7 +527,7 @@ export default function RegisterSchoolScreen() {
             autoComplete="new-password"
             textContentType="newPassword"
           />
-          <TextInputField
+          <TextInputField size="large"
             label="Confirm password"
             value={activeForm.confirm_password}
             onChangeText={(value) => {

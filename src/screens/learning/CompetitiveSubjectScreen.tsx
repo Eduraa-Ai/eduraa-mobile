@@ -6,7 +6,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import type { HomeStackParamList } from '../../navigation'
-import { AppScreen } from '../../components/ui'
+import { AppHeaderConfig, AppScreen, SegmentedTabs } from '../../components/ui'
 import { competitiveExamApi, CompetitiveChapterOption, CompetitiveStandard } from '../../api/competitiveExam'
 import { getCompetitiveSyllabus } from '../../data/competitiveSyllabus'
 import { useAuthStore } from '../../stores/authStore'
@@ -162,42 +162,19 @@ export default function CompetitiveSubjectScreen() {
 
   return (
     <AppScreen tone="auth" ambient={false} contentStyle={styles.screen}>
-      {/* Compact header: back + icon + subject + toggle — all in one row */}
-      <View style={styles.topRow}>
-        <TouchableOpacity activeOpacity={0.82} onPress={() => navigation.navigate('CompetitiveExam')} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={18} color="#101828" />
-        </TouchableOpacity>
-        <LinearGradient
-          colors={[gradient.start, gradient.end]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.subjectMark}
-        >
-          <Text style={styles.subjectMarkText}>{subjectSymbol(activeSubjectName)}</Text>
-        </LinearGradient>
-        <View style={styles.topCopy}>
-          <Text style={styles.topTitle}>{activeSubjectName}</Text>
-          <Text style={styles.topSubtitle}>{trackLabel}</Text>
-        </View>
-      </View>
+      <AppHeaderConfig title={activeSubjectName} onBack={() => navigation.navigate('CompetitiveExam')} />
+      <Text style={styles.topSubtitle}>{trackLabel}</Text>
 
       {/* Standard toggle — compact, outside the hero bloat */}
-      <View style={styles.standardRow}>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => setSelectedStandard('11th')}
-          style={[styles.toggleChip, selectedStandard === '11th' && styles.toggleChipActive]}
-        >
-          <Text style={[styles.toggleChipText, selectedStandard === '11th' && styles.toggleChipTextActive]}>11th</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => setSelectedStandard('12th')}
-          style={[styles.toggleChip, selectedStandard === '12th' && styles.toggleChipActive]}
-        >
-          <Text style={[styles.toggleChipText, selectedStandard === '12th' && styles.toggleChipTextActive]}>12th</Text>
-        </TouchableOpacity>
-      </View>
+      <SegmentedTabs
+        accessibilityLabel="Standard"
+        tabs={[
+          { id: '11th', label: 'Class 11' },
+          { id: '12th', label: 'Class 12' },
+        ]}
+        value={selectedStandard}
+        onChange={setSelectedStandard}
+      />
 
       {chaptersQuery.isLoading ? (
         <View style={styles.inlineLoading}>
@@ -263,7 +240,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fbf6ec',
   },
   centerTitle: {
-    fontFamily: 'Georgia',
+    fontFamily: typography.fonts.bodyBold,
     fontWeight: '700',
     color: '#101828',
     fontSize: 18,
@@ -290,51 +267,6 @@ const styles = StyleSheet.create({
   },
 
   // Compact header
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    paddingHorizontal: spacing[1],
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e0d6c8',
-    shadowColor: 'rgba(0,0,0,0.04)',
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  subjectMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  subjectMarkText: {
-    fontFamily: 'Georgia',
-    fontWeight: '700',
-    color: '#ffffff',
-    fontSize: 18,
-  },
-  topCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  topTitle: {
-    fontFamily: 'Georgia',
-    fontWeight: '700',
-    color: '#101828',
-    fontSize: 22,
-    lineHeight: 26,
-    letterSpacing: -0.3,
-  },
   topSubtitle: {
     fontFamily: typography.fonts.bodyMedium,
     color: '#5c6a82',
@@ -343,36 +275,6 @@ const styles = StyleSheet.create({
   },
 
   // Standard toggle — compact segmented
-  standardRow: {
-    flexDirection: 'row',
-    alignSelf: 'flex-start',
-    gap: 2,
-    backgroundColor: '#ffffff',
-    borderRadius: radius.full,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: '#e0d6c8',
-    shadowColor: 'rgba(0,0,0,0.03)',
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  toggleChip: {
-    paddingHorizontal: spacing[4],
-    paddingVertical: 8,
-    borderRadius: radius.full,
-  },
-  toggleChipActive: {
-    backgroundColor: '#f36c21',
-  },
-  toggleChipText: {
-    fontFamily: typography.fonts.bodyBold,
-    color: '#94a3b8',
-    fontSize: 13,
-  },
-  toggleChipTextActive: {
-    color: '#ffffff',
-  },
 
   // Notice
   noticeCard: {
@@ -407,7 +309,7 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   chapterCard: {
-    borderRadius: 18,
+    borderRadius: radius.card,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#e0d6c8',
@@ -432,7 +334,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   chapterIndexText: {
-    fontFamily: 'Georgia',
+    fontFamily: typography.fonts.bodyBold,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -441,7 +343,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   chapterTitle: {
-    fontFamily: 'Georgia',
+    fontFamily: typography.fonts.bodyBold,
     fontWeight: '700',
     color: '#101828',
     fontSize: 15,
@@ -459,7 +361,7 @@ const styles = StyleSheet.create({
     padding: spacing[6],
   },
   emptyTitle: {
-    fontFamily: 'Georgia',
+    fontFamily: typography.fonts.bodyBold,
     fontWeight: '700',
     color: '#101828',
     fontSize: 16,

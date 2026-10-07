@@ -2,7 +2,7 @@ import React from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { AnimatedButton, AppScreen } from '../../components/ui'
-import { colors, layout, spacing, typography } from '../../theme'
+import { colors, layout, radius, spacing, typography } from '../../theme'
 
 export type AssemblyStage = 'preparing' | 'requesting' | 'opening' | 'error'
 
@@ -151,12 +151,12 @@ const styles = StyleSheet.create({
   eyebrow: {
     color: colors.accentStrong,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 1.2,
   },
   title: {
     color: colors.nav,
-    fontFamily: typography.fonts.heading,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 26,
     lineHeight: 31,
     textAlign: 'center',
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 380,
     padding: spacing[4],
-    borderRadius: 20,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
@@ -180,14 +180,14 @@ const styles = StyleSheet.create({
   selectionLabel: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   selectionTitle: {
     marginTop: spacing[1],
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 16,
     lineHeight: 21,
   },
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
   },
   actions: {
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
     textAlign: 'center',
   },

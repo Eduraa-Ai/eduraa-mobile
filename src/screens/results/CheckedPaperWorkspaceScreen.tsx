@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,13 +14,14 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
+import { HeaderShownContext } from '@react-navigation/elements'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import axios from 'axios'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { isLearnerRole } from '../../auth/roles'
-import { AuthLogoMark, MathText, ProtectedContentImage } from '../../components/ui'
+import { AppHeaderConfig, AppHeaderIconAction, MathText, ProtectedContentImage } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
 import { returnToCheckedPapers } from '../../navigation/paperResultsNavigation'
 import { useAuthStore } from '../../stores/authStore'
@@ -71,6 +72,7 @@ export default function CheckedPaperWorkspaceScreen() {
   const navigation = useNavigation<Nav>()
   const queryClient = useQueryClient()
   const insets = useSafeAreaInsets()
+  const topPad = useContext(HeaderShownContext) ? 0 : insets.top
   const { width } = useWindowDimensions()
   const user = useAuthStore((state) => state.user)
   const isStaff = Boolean(user && !isLearnerRole(user.role))
@@ -226,7 +228,7 @@ export default function CheckedPaperWorkspaceScreen() {
 
   if (paperQuery.isLoading || !paperQuery.data) {
     return (
-      <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
+      <View style={[styles.root, styles.center, { paddingTop: topPad }]}>
         {paperQuery.isError ? (
           <>
             <View style={styles.stateIcon}><Ionicons name="alert-circle-outline" size={24} color={colors.danger} /></View>
@@ -245,7 +247,7 @@ export default function CheckedPaperWorkspaceScreen() {
   const paper = paperQuery.data
   if (!questions.length || !item || !review) {
     return (
-      <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
+      <View style={[styles.root, styles.center, { paddingTop: topPad }]}>
         <View style={styles.stateIcon}><Ionicons name="document-text-outline" size={24} color={colors.accentStrong} /></View>
         <Text style={styles.stateTitle}>Detailed grading is not ready</Text>
         <Text style={styles.stateBody}>This workspace opens when question-by-question grading is available. Your uploaded paper remains safe.</Text>
@@ -266,21 +268,15 @@ export default function CheckedPaperWorkspaceScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.root, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.root, { paddingTop: topPad }]}>
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back to checked papers" onPress={goBack} style={styles.iconButton}>
-            <Ionicons name="arrow-back" size={19} color={colors.text} />
-          </Pressable>
-          <AuthLogoMark size={30} />
-          <View style={styles.headerIdentity}>
-            <Text style={styles.brand} numberOfLines={1}>{paper.student_name || 'Student'} · {item.score ?? '-'} / {item.max_score ?? '-'}</Text>
-            <Text style={styles.brandMeta} numberOfLines={1}>{paper.exam_name || paper.subject_name || 'Checked paper'}</Text>
-          </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Refresh paper workspace" onPress={() => void refreshPaper()} style={styles.iconButton}>
-            {paperQuery.isFetching ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="refresh-outline" size={19} color={colors.text} />}
-          </Pressable>
-        </View>
+        <AppHeaderConfig
+          title={paper.student_name || 'Student'}
+          onBack={goBack}
+          rightKey={paperQuery.isFetching ? 'busy' : 'idle'}
+          right={() => <AppHeaderIconAction icon="refresh-outline" accessibilityLabel="Refresh paper workspace" busy={paperQuery.isFetching} onPress={() => void refreshPaper()} />}
+        />
+        <Text style={styles.brandMeta} numberOfLines={1}>{paper.exam_name || paper.subject_name || 'Checked paper'} · {item.score ?? '-'} / {item.max_score ?? '-'}</Text>
         <View style={styles.paperProgress}>
             <Text style={styles.progressText}>{confirmationCount > 0 ? `${confirmationCount} check${confirmationCount === 1 ? ' needs' : 's need'} confirmation` : `Question ${questionIndex + 1} of ${questions.length}`}</Text>
           <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${((questionIndex + 1) / questions.length) * 100}%` }]} /></View>
@@ -464,39 +460,35 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f6f3ee' },
   center: { alignItems: 'center', justifyContent: 'center', padding: spacing[6], gap: spacing[3] },
   stateIcon: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white },
-  stateTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18, textAlign: 'center' },
+  stateTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 18, textAlign: 'center' },
   stateBody: { maxWidth: 360, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   stateButton: { minHeight: 48, minWidth: 180, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav, marginTop: spacing[2] },
   stateButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   backLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing[5] },
   backLinkText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   header: { backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.border, paddingHorizontal: spacing[3], paddingVertical: spacing[1] },
-  headerTop: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  iconButton: { width: 44, height: 44, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white },
-  headerIdentity: { flex: 1 },
-  brand: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 13 },
-  brandMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, marginTop: 1 },
+  brandMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, paddingTop: spacing[1] },
   paperProgress: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingBottom: spacing[1] },
-  progressText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  progressText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   progressTrack: { flex: 1, height: 4, borderRadius: radius.full, overflow: 'hidden', backgroundColor: colors.backgroundMuted },
   progressFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.accent },
-  releaseText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, textTransform: 'uppercase' },
+  releaseText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, textTransform: 'uppercase' },
   timingPanel: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#f8fafc' },
   timingSummary: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], paddingHorizontal: spacing[4] },
   timingTitleRow: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   timingTitle: { flexShrink: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   timingAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
-  timingActionText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, textTransform: 'uppercase' },
+  timingActionText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, textTransform: 'uppercase' },
   timingDetails: { borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: spacing[3], gap: spacing[3] },
   timingStages: { gap: spacing[2], paddingHorizontal: spacing[4] },
   timingStageCard: { width: 148, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
   timingStageHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
-  timingStageLabel: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  timingStageTotal: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 11 },
-  timingStageMeta: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 8, marginTop: spacing[1] },
-  timingStageProgress: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8, marginTop: spacing[1] },
+  timingStageLabel: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  timingStageTotal: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  timingStageMeta: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11, marginTop: spacing[1] },
+  timingStageProgress: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11, marginTop: spacing[1] },
   learningSupportNote: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[4] },
-  learningSupportText: { flex: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 14 },
+  learningSupportText: { flex: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 14 },
   questionBar: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#fffdf9', paddingHorizontal: spacing[1] },
   navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.32 },
@@ -504,12 +496,12 @@ const styles = StyleSheet.create({
   questionChip: { minWidth: 46, minHeight: 36, borderRadius: radius.full, paddingHorizontal: spacing[2], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1], backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border },
   questionChipActive: { backgroundColor: colors.nav, borderColor: colors.nav },
   questionDot: { width: 6, height: 6, borderRadius: 3 },
-  questionChipText: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  questionChipText: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   questionChipTextActive: { color: colors.white },
   quickGuide: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], paddingHorizontal: spacing[3], backgroundColor: colors.accentSurface, borderBottomWidth: 1, borderBottomColor: colors.borderBrand },
   quickGuideStep: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
-  quickGuideNumber: { width: 20, height: 20, borderRadius: 10, textAlign: 'center', lineHeight: 20, color: colors.white, backgroundColor: colors.accent, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  quickGuideText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  quickGuideNumber: { width: 20, height: 20, borderRadius: 10, textAlign: 'center', lineHeight: 20, color: colors.white, backgroundColor: colors.accent, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  quickGuideText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   tabs: { flexDirection: 'row', gap: spacing[2], paddingHorizontal: spacing[2], paddingVertical: spacing[1], backgroundColor: '#fffdf9', borderBottomWidth: 1, borderBottomColor: colors.border },
   tab: { flex: 1, minHeight: 40, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   tabActive: { backgroundColor: colors.nav },
@@ -522,25 +514,25 @@ const styles = StyleSheet.create({
   pane: { flex: 1 },
   scanToolbar: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2], paddingHorizontal: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#f8fafc' },
   focusPill: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
-  focusText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  focusText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   zoomTools: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
   toolButton: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
-  zoomText: { minWidth: 38, color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, textAlign: 'center' },
+  zoomText: { minWidth: 38, color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, textAlign: 'center' },
   scanScroll: { flex: 1, backgroundColor: '#dce2e7' },
   scanScrollContent: { minHeight: '100%', paddingVertical: spacing[4] },
   scanHorizontal: { minWidth: '100%', paddingHorizontal: spacing[3], justifyContent: 'center' },
   pageFrame: { position: 'relative', backgroundColor: colors.white, borderRadius: radius.sm, overflow: 'hidden', ...shadows.md },
   highlight: { position: 'absolute', borderWidth: 2, borderColor: colors.accent, backgroundColor: 'rgba(249,115,22,0.13)', borderRadius: 5 },
   highlightUncertain: { borderColor: colors.danger, borderStyle: 'dashed', backgroundColor: 'rgba(225,29,72,0.10)' },
-  scanError: { margin: spacing[4], padding: spacing[4], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  scanError: { margin: spacing[4], padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   scanErrorCopy: { flex: 1 },
-  scanErrorTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 12 },
-  scanErrorText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15, marginTop: 2 },
+  scanErrorTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
+  scanErrorText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 15, marginTop: 2 },
   retrySmall: { minHeight: 40, borderRadius: radius.full, justifyContent: 'center', paddingHorizontal: spacing[3], backgroundColor: colors.accentSurface },
-  retrySmallText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  retrySmallText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   scanPrimaryAction: { minHeight: 58, marginHorizontal: spacing[3], marginTop: spacing[2], paddingHorizontal: spacing[4], borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.nav, ...shadows.sm },
-  scanPrimaryEyebrow: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 9, textTransform: 'uppercase' },
-  scanPrimaryText: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 14, marginTop: 2 },
+  scanPrimaryEyebrow: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 11, textTransform: 'uppercase' },
+  scanPrimaryText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14, marginTop: 2 },
   pageFooter: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[4], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.white },
   pageButton: { width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
   pageText: { minWidth: 92, textAlign: 'center', color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
@@ -548,28 +540,28 @@ const styles = StyleSheet.create({
   evaluationContent: { padding: spacing[4], gap: spacing[3] },
   questionCard: { padding: spacing[4], borderRadius: radius.lg, backgroundColor: colors.nav, ...shadows.sm },
   cardHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing[3] },
-  cardKicker: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 10, textTransform: 'uppercase' },
-  statusText: { fontFamily: typography.fonts.bodyBold, fontSize: 10, textTransform: 'uppercase' },
-  questionText: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 15, lineHeight: 22 },
-  evaluationNarrative: { paddingHorizontal: spacing[4], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
+  cardKicker: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 11, textTransform: 'uppercase' },
+  statusText: { fontFamily: typography.fonts.bodyBold, fontSize: 11, textTransform: 'uppercase' },
+  questionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 15, lineHeight: 22 },
+  evaluationNarrative: { paddingHorizontal: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
   answerCard: { paddingVertical: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.border },
   answerCardLast: { borderBottomWidth: 0 },
-  sectionLabel: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 12 },
+  sectionLabel: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   answerText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 19, marginTop: spacing[2] },
-  teacherCard: { padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.borderBrand, backgroundColor: '#fffaf4', gap: spacing[3] },
+  teacherCard: { padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.borderBrand, backgroundColor: '#fffaf4', gap: spacing[3] },
   teacherHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
-  teacherHint: { flexShrink: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15, marginTop: 3 },
+  teacherHint: { flexShrink: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 15, marginTop: 3 },
   maxPill: { borderRadius: radius.full, paddingHorizontal: spacing[3], paddingVertical: spacing[2], backgroundColor: colors.accentSurface },
-  maxPillText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  maxPillText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   scoreEditor: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[3] },
   scoreStep: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
-  scoreInput: { width: 92, height: 52, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.borderBrand, backgroundColor: colors.white, color: colors.text, fontFamily: typography.fonts.heading, fontSize: 20, textAlign: 'center' },
+  scoreInput: { width: 92, height: 52, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.borderBrand, backgroundColor: colors.white, color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 20, textAlign: 'center' },
   feedbackInput: { minHeight: 88, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, padding: spacing[3], color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 12, textAlignVertical: 'top' },
-  readOnlyText: { color: colors.warning, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  readOnlyText: { color: colors.warning, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   saveButton: { minHeight: 50, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], backgroundColor: colors.nav },
   saveButtonDisabled: { opacity: 0.42 },
   saveButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  releaseCard: { padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, gap: spacing[3] },
+  releaseCard: { padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, gap: spacing[3] },
   secondaryButton: { minHeight: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.white },
   secondaryButtonText: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   publishButton: { minHeight: 50, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },

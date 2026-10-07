@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useContext, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,6 +12,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { HeaderShownContext } from '@react-navigation/elements'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../../api/auth'
 import { b2cApi } from '../../api/b2c'
@@ -24,9 +25,10 @@ import {
 } from '../../data/authOptions'
 import { useAuthStore } from '../../stores/authStore'
 import type { AccountMinimal, B2CProfileRead, EducationLevel } from '../../types'
+import { AppHeaderAction, AppHeaderConfig } from '../../components/ui/AppHeader'
 import { SelectField } from '../../components/ui/SelectField'
 import { ProfileDisclosure } from '../../components/ui/ProfileDisclosure'
-import { typography } from '../../theme'
+import { colors, radius, typography } from '../../theme'
 import B2BProfileScreen from './B2BProfileScreen'
 
 // ── Canonical row palette (main-html-whole-workflow.html · Competitive Profile) ──
@@ -45,7 +47,8 @@ const SUCCESS_BG = '#eefaf2'
 const SUCCESS_BORDER = '#bfe5ce'
 const VERIFIED_DOT = '#57c284'
 
-const serif = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' })
+// Headings share the app's Manrope face (no separate serif).
+const serif = typography.fonts.bodyBold
 
 type EditableEducationLevel = Extract<EducationLevel, 'school' | 'competitive_exams'>
 type SheetState = 'view' | 'edit' | 'security' | 'security-sent' | 'logout-confirm'
@@ -132,6 +135,8 @@ export default function ProfileScreen(props: ProfileScreenProps) {
 function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
   const isOnboarding = mode === 'onboarding'
   const insets = useSafeAreaInsets()
+  // Under the app header the hero no longer needs to clear the status bar itself.
+  const topInset = useContext(HeaderShownContext) ? 0 : insets.top
   const queryClient = useQueryClient()
   const { logout, user } = useAuthStore()
   const accountKey = user ? `${user.role}:${user.id}` : 'signed-out'
@@ -370,14 +375,13 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
 
   if (profileQuery.isError || !profile) {
     return (
-      <View style={[styles.root, styles.loadState, { paddingTop: insets.top + 24 }]}>
+      <View style={[styles.root, styles.loadState, { paddingTop: topInset + 24 }]}>
         <View style={styles.loadStateIcon}>
-          <Ionicons name="cloud-offline-outline" size={28} color={RUST} />
+          <Ionicons name="cloud-offline-outline" size={20} color={colors.warning} />
         </View>
-        <Text style={styles.loadStateKicker}>PROFILE CONNECTION</Text>
-        <Text style={styles.loadStateTitle}>Your profile paused here.</Text>
+        <Text style={styles.loadStateTitle}>Profile could not load</Text>
         <Text style={styles.loadStateBody}>
-          We couldn&apos;t load your saved learning profile. Nothing has been changed—check your connection and try again.
+          Nothing has been changed. Check your connection and try again.
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -405,7 +409,7 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
   }
 
   const isSecurity = sheet === 'security' || sheet === 'security-sent'
-  const heroTop = insets.top + 18
+  const heroTop = topInset + 18
 
   return (
     <KeyboardAvoidingView
@@ -420,36 +424,21 @@ function B2CProfileScreen({ mode = 'profile' }: ProfileScreenProps) {
       >
         {/* ── Hero ── */}
         <View style={[styles.hero, { paddingTop: heroTop }]}>
-          <View style={styles.heroTop}>
-            <View style={styles.heroTitleBlock}>
-              <Text style={styles.heroKicker}>
-                {isOnboarding ? 'Welcome to Eduraa' : isSecurity ? 'Account recovery' : accountType}
-              </Text>
-              <Text style={styles.heroTitle}>
-                {isOnboarding
-                  ? 'Set up profile'
-                  : isSecurity
-                    ? 'Security'
-                    : sheet === 'edit'
-                      ? 'Make it yours.'
-                      : sheet === 'logout-confirm'
-                        ? 'Sign out'
-                      : 'Profile'}
-              </Text>
+          {isOnboarding ? (
+            <View style={styles.heroTop}>
+              <View style={styles.heroTitleBlock}>
+                <Text style={styles.heroKicker}>Welcome to Eduraa</Text>
+                <Text style={styles.heroTitle}>Set up profile</Text>
+              </View>
             </View>
-
-            {!isOnboarding ? (
-              <Pressable
-                onPress={sheet === 'view' ? openEdit : backToView}
-                accessibilityRole="button"
-                accessibilityLabel={sheet === 'view' ? 'Edit profile' : 'Close'}
-                hitSlop={8}
-                style={({ pressed }) => [styles.heroIconButton, pressed && styles.pressedSoft]}
-              >
-                <Ionicons name={sheet === 'view' ? 'create-outline' : 'close'} size={19} color="#ffffff" />
-              </Pressable>
-            ) : null}
-          </View>
+          ) : (
+            <AppHeaderConfig
+              title={isSecurity ? 'Security' : sheet === 'edit' ? 'Edit profile' : sheet === 'logout-confirm' ? 'Sign out' : 'Profile'}
+              onBack={sheet === 'view' ? undefined : backToView}
+              rightKey={sheet}
+              right={sheet === 'view' ? () => <AppHeaderAction label="Edit" icon="create-outline" accessibilityLabel="Edit profile" onPress={openEdit} /> : undefined}
+            />
+          )}
 
           {isSecurity ? (
             <View style={styles.securityCopy}>
@@ -1060,74 +1049,13 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: NAVY },
   center: { alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: HERO_SUB, fontFamily: typography.fonts.bodyMedium, fontSize: 13 },
-  loadState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 30,
-    paddingBottom: 72,
-    backgroundColor: CREAM,
-  },
-  loadStateIcon: {
-    width: 62,
-    height: 62,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#F4BE9E',
-    backgroundColor: '#FFE4D4',
-  },
-  loadStateKicker: {
-    color: RUST,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 9.5,
-    letterSpacing: 1.5,
-  },
-  loadStateTitle: {
-    marginTop: 8,
-    color: NAVY,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 26,
-    lineHeight: 32,
-    textAlign: 'center',
-  },
-  loadStateBody: {
-    maxWidth: 330,
-    marginTop: 9,
-    color: MUTED,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 19,
-    textAlign: 'center',
-  },
-  retryButton: {
-    minHeight: 54,
-    minWidth: 164,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 9,
-    marginTop: 24,
-    paddingHorizontal: 22,
-    borderRadius: 17,
-    backgroundColor: NAVY,
-  },
-  retryButtonText: { color: '#ffffff', fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  loadStateSignOut: {
-    minHeight: 48,
-    minWidth: 164,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 10,
-    paddingHorizontal: 20,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: LINE,
-    backgroundColor: '#ffffff',
-  },
+  loadState: { alignItems: 'center', paddingHorizontal: 24, gap: 8 },
+  loadStateIcon: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.warningSurface, marginBottom: 4 },
+  loadStateTitle: { ...typography.roles.section, color: colors.nav, textAlign: 'center' },
+  loadStateBody: { ...typography.roles.caption, fontSize: 13, lineHeight: 19, maxWidth: 300, color: colors.textMuted, textAlign: 'center' },
+  retryButton: { minWidth: 180, minHeight: 46, marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 20, borderRadius: radius.control, backgroundColor: colors.accent },
+  retryButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
+  loadStateSignOut: { minWidth: 180, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 20, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   loadStateSignOutText: { color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1, backgroundColor: CREAM },
@@ -1150,7 +1078,7 @@ const styles = StyleSheet.create({
   heroKicker: {
     color: HERO_KICKER,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
@@ -1161,22 +1089,12 @@ const styles = StyleSheet.create({
     fontSize: 29,
     lineHeight: 34,
   },
-  heroIconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-  },
 
   identity: { alignItems: 'center', zIndex: 2 },
   avatar: {
     width: 76,
     height: 76,
-    borderRadius: 38,
+    borderRadius: radius.card,
     marginTop: 22,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1202,7 +1120,7 @@ const styles = StyleSheet.create({
   securitySymbol: {
     width: 62,
     height: 62,
-    borderRadius: 31,
+    borderRadius: radius.card,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1235,7 +1153,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     color: RUST,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
@@ -1283,7 +1201,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff0e5',
   },
   actionCopy: { flex: 1, minWidth: 0 },
-  actionSmall: { color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 8, letterSpacing: 0.5, textTransform: 'uppercase' },
+  actionSmall: { color: MUTED, fontFamily: typography.fonts.bodyMedium, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
   actionTitle: { marginTop: 4, color: INK, fontFamily: typography.fonts.bodySemibold, fontSize: 12 },
   actionTitleMuted: { color: '#475467', fontFamily: typography.fonts.bodyMedium },
 
@@ -1328,8 +1246,8 @@ const styles = StyleSheet.create({
   // Fields
   field: { marginTop: 13 },
   fieldLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 2, marginBottom: 6 },
-  fieldLabel: { color: '#475467', fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  lockTag: { color: '#98a2b3', fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 0.6 },
+  fieldLabel: { color: '#475467', fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  lockTag: { color: '#98a2b3', fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 0.6 },
   fieldInput: {
     minHeight: 50,
     paddingHorizontal: 13,
@@ -1430,7 +1348,7 @@ const styles = StyleSheet.create({
 
   securitySheetTitle: { marginTop: 7, color: INK, fontFamily: serif, fontSize: 22, fontWeight: '600' },
   securitySheetBody: { marginTop: 4, color: MUTED, fontFamily: typography.fonts.body, fontSize: 11, lineHeight: 16 },
-  helper: { marginTop: 10, marginHorizontal: 2, color: MUTED, fontFamily: typography.fonts.body, fontSize: 10, lineHeight: 15 },
+  helper: { marginTop: 10, marginHorizontal: 2, color: MUTED, fontFamily: typography.fonts.body, fontSize: 11, lineHeight: 15 },
 
   resetButton: {
     minHeight: 54,

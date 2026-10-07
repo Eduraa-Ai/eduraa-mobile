@@ -37,6 +37,7 @@ import * as ImagePicker from "expo-image-picker";
 import { colors } from "../../theme/colors";
 import { spacing, radius, shadows } from "../../theme/spacing";
 import { fonts } from "../../theme/fonts";
+import { typography } from "../../theme";
 import { aiApi } from "../../api/ai";
 import { papersApi } from "../../api/papers";
 import type {
@@ -217,7 +218,7 @@ const td = StyleSheet.create({
     gap: 5,
     alignItems: "center",
     backgroundColor: colors.card,
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     borderBottomLeftRadius: 4,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
@@ -451,7 +452,7 @@ const mb = StyleSheet.create({
   },
   aiName: {
     color: colors.accentStrong,
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: fonts.bold,
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -474,7 +475,7 @@ const mb = StyleSheet.create({
     alignItems: "flex-start",
     gap: spacing[2],
     backgroundColor: colors.accentLight,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing[3],
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.accentMid,
@@ -495,7 +496,7 @@ const mb = StyleSheet.create({
   },
   calloutTextWarning: { color: colors.warningText },
   calloutContent: { flex: 1, width: "auto" },
-  time: { fontSize: 10 },
+  time: { fontSize: 11 },
   userTime: { color: "rgba(255,255,255,0.55)", textAlign: "right" },
   aiTime: { color: colors.subtle },
   streamingCursor: {
@@ -607,7 +608,7 @@ const calm = StyleSheet.create({
   identityCopy: { flex: 1 },
   eyebrow: {
     color: colors.accentStrong,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: fonts.extrabold,
     letterSpacing: 1.2,
   },
@@ -621,7 +622,7 @@ const calm = StyleSheet.create({
     color: "#07152D",
     fontSize: 28,
     lineHeight: 32,
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     marginTop: spacing[4],
   },
   body: {
@@ -660,7 +661,7 @@ const calm = StyleSheet.create({
   promptCopy: { flex: 1 },
   promptIntent: {
     color: colors.accentStrong,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: fonts.bold,
     textTransform: "uppercase",
     letterSpacing: 0.7,
@@ -681,7 +682,7 @@ const calm = StyleSheet.create({
   trustText: {
     flex: 1,
     color: colors.textSecondary,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 15,
     fontFamily: fonts.medium,
   },
@@ -1069,7 +1070,7 @@ const hp = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: "800",
-    fontFamily: fonts.displayBold,
+    fontFamily: fonts.bold,
     color: colors.ink,
     letterSpacing: -0.2,
   },
@@ -1090,7 +1091,7 @@ const hp = StyleSheet.create({
     marginVertical: spacing[3],
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1.5,
     borderColor: colors.accentMid,
     backgroundColor: colors.accentLight,
@@ -1128,7 +1129,7 @@ const hp = StyleSheet.create({
     paddingHorizontal: spacing[3],
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.surface2,
     flexDirection: "row",
     alignItems: "center",
@@ -1187,8 +1188,8 @@ const hp = StyleSheet.create({
   retryText: { color: colors.white, fontSize: 12, fontFamily: fonts.bold },
 
   groupLabel: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 11,
+    fontFamily: typography.fonts.bodyBold,
     color: colors.subtle,
     textTransform: "uppercase",
     letterSpacing: 0.7,
@@ -1212,7 +1213,7 @@ const hp = StyleSheet.create({
     fontFamily: fonts.medium,
     color: colors.ink,
   },
-  convTitleActive: { fontWeight: "700", color: colors.accentStrong },
+  convTitleActive: { fontFamily: typography.fonts.bodyBold, color: colors.accentStrong },
   convTime: { fontSize: 11, color: colors.subtle, marginTop: 2 },
   deleteBtn: {
     width: 34,
@@ -1812,7 +1813,7 @@ const sheet = StyleSheet.create({
   },
   eyebrow: {
     color: colors.accentStrong,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: fonts.extrabold,
     letterSpacing: 1.1,
   },
@@ -1820,7 +1821,7 @@ const sheet = StyleSheet.create({
     color: "#07152D",
     fontSize: 23,
     lineHeight: 28,
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     marginTop: 2,
   },
   close: {
@@ -1836,7 +1837,7 @@ const sheet = StyleSheet.create({
   scrollContent: { paddingHorizontal: spacing[5], paddingBottom: spacing[5] },
   sectionLabel: {
     color: colors.accentStrong,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: fonts.extrabold,
     letterSpacing: 1,
   },
@@ -1917,7 +1918,7 @@ const sheet = StyleSheet.create({
   paperTitle: { color: "#07152D", fontSize: 12, fontFamily: fonts.bold },
   paperMeta: {
     color: colors.textSecondary,
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: fonts.regular,
     marginTop: 2,
   },
@@ -1976,7 +1977,7 @@ const sheet = StyleSheet.create({
   },
   memoryStatus: {
     color: colors.successText,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: fonts.bold,
     textTransform: "uppercase",
     letterSpacing: 0.6,
@@ -2879,7 +2880,7 @@ const styles = StyleSheet.create({
     maxWidth: "82%",
     fontSize: 15,
     fontWeight: "700",
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     color: "#07152D",
   },
   onlinePill: { flexDirection: "row", alignItems: "center", gap: 4 },
@@ -2892,7 +2893,7 @@ const styles = StyleSheet.create({
   offlineDot: { backgroundColor: colors.danger },
   onlineText: {
     maxWidth: "88%",
-    fontSize: 10,
+    fontSize: 11,
     color: colors.success,
     fontFamily: fonts.semibold,
   },
@@ -2921,7 +2922,7 @@ const styles = StyleSheet.create({
   contextStripText: {
     flex: 1,
     color: colors.textSecondary,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 15,
     fontFamily: fonts.semibold,
   },
@@ -2964,7 +2965,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[4],
     marginHorizontal: spacing[4],
     padding: spacing[4],
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.dangerBorder,
     backgroundColor: colors.dangerBg,
@@ -3034,7 +3035,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.accentMid,
   },
   inputWrap: {
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1.5,
     borderColor: "#DCCFBE",
     backgroundColor: colors.white,
@@ -3107,7 +3108,7 @@ const styles = StyleSheet.create({
   },
   attachmentContextLabel: {
     color: colors.accentStrong,
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: fonts.extrabold,
     letterSpacing: 0.8,
   },
@@ -3125,20 +3126,20 @@ const styles = StyleSheet.create({
   },
   composerError: {
     color: colors.dangerText,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 15,
     fontFamily: fonts.medium,
     marginTop: spacing[2],
   },
   charCount: {
     textAlign: "right",
-    fontSize: 10,
+    fontSize: 11,
     color: colors.subtle,
     marginTop: 3,
   },
   disclaimer: {
     textAlign: "center",
-    fontSize: 10,
+    fontSize: 11,
     color: colors.subtle,
     marginTop: spacing[2],
     marginBottom: spacing[1],

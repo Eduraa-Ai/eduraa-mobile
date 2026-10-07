@@ -408,8 +408,6 @@ export default function CustomPaperScreen() {
         }}
       >
         <View style={styles.header}>
-          <Text style={styles.kicker}>CUSTOM PAPER</Text>
-          <Text style={styles.title}>Upload a school paper for grading</Text>
           <Text style={styles.body}>
             Add the class and subject, then upload the school question paper and
             answer key as separate PDFs.
@@ -873,13 +871,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: spacing[4], gap: spacing[4] },
   header: { gap: spacing[2] },
-  kicker: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    color: colors.accentStrong,
-  },
-  title: { fontFamily: fonts.displaySemibold, fontSize: 22, color: colors.text },
   body: {
     fontFamily: fonts.regular,
     fontSize: 13,
@@ -889,13 +880,13 @@ const styles = StyleSheet.create({
   card: {
     gap: spacing[3],
     padding: spacing[4],
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
   },
   cardTitle: {
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     fontSize: 15,
     color: colors.text,
   },
@@ -906,7 +897,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing[3],
     padding: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundTint,
@@ -940,7 +931,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[3],
     padding: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
@@ -979,7 +970,7 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   statusTitle: {
     flex: 1,
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     fontSize: 15,
     color: colors.text,
   },
@@ -1000,7 +991,7 @@ const styles = StyleSheet.create({
   curriculumSummary: {
     gap: spacing[2],
     padding: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundTint,
@@ -1121,7 +1112,7 @@ const styles = StyleSheet.create({
   },
   error: {
     padding: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.dangerBorder,
     backgroundColor: colors.card,

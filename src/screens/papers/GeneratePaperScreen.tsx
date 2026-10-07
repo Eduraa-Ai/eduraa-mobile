@@ -21,9 +21,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { papersApi } from "../../api/papers";
-import { AuthLogoMark } from "../../components/ui/AuthLogoMark";
+import { AppHeaderAction } from "../../components/ui/AppHeader";
 import { PrimaryButton } from "../../components/ui/PrimaryButton";
 import { Screen } from "../../components/ui/Screen";
 import { SelectField } from "../../components/ui/SelectField";
@@ -575,83 +574,26 @@ function StageCard({
   );
 }
 
-function GenerateStudioHeader({
+// The app header names the screen and the stepper shows the stage, so this only
+// explains what the current stage is for.
+function GenerateStageIntro({
   stage,
-  onBack,
   showsDuration,
-  onCustomPaper,
 }: {
   stage: Stage;
-  onBack: () => void;
   showsDuration?: boolean;
-  onCustomPaper?: () => void;
 }) {
-  const insets = useSafeAreaInsets();
-  const stageCopy = [
-    {
-      pill: "Build",
-      title: "Generate.",
-      body: "Choose the learning scope. Eduraa prepares the paper from there.",
-    },
-    {
-      pill: "Mix",
-      title: "Question mix.",
-      body: "Keep generation fast with clear presets and an honest total.",
-    },
-    {
-      pill: "Ready",
-      title: "Generate draft.",
-      body: showsDuration
-        ? "Duration, difficulty, and the final action."
-        : "Difficulty and the final action.",
-    },
+  const body = [
+    "Choose the learning scope. Eduraa prepares the paper from there.",
+    "Keep generation fast with clear presets and an honest total.",
+    showsDuration
+      ? "Duration, difficulty, and the final action."
+      : "Difficulty and the final action.",
   ][stage];
 
   return (
-    <View
-      style={[styles.studioHeader, { paddingTop: insets.top + spacing[3] }]}
-    >
-      <View style={styles.studioTop}>
-        <TouchableOpacity
-          activeOpacity={0.86}
-          style={styles.studioBackButton}
-          onPress={onBack}
-          accessibilityLabel="Back to papers"
-        >
-          <Ionicons name="arrow-back" size={18} color={colors.nav} />
-        </TouchableOpacity>
-        <AuthLogoMark size={38} style={styles.studioLogo} />
-        <View style={styles.studioBrandCopy}>
-          <Text style={styles.studioBrandTitle}>Eduraa AI</Text>
-          <Text style={styles.studioBrandSubtitle}>Generate paper</Text>
-        </View>
-        <View style={styles.studioStepPill}>
-          <Text style={styles.studioStepPillText}>
-            {String(stage + 1).padStart(2, "0")} · {stageCopy.pill}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.studioHeading}>
-        <Text style={styles.studioKicker}>PAPER STUDIO</Text>
-        <Text style={styles.studioTitle}>{stageCopy.title}</Text>
-        <Text style={styles.studioBody}>{stageCopy.body}</Text>
-        {onCustomPaper ? (
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Upload a custom school paper"
-            activeOpacity={0.88}
-            onPress={onCustomPaper}
-            style={styles.customPaperButton}
-          >
-            <Ionicons
-              name="document-attach-outline"
-              size={15}
-              color={colors.nav}
-            />
-            <Text style={styles.customPaperButtonText}>Custom paper</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+    <View style={styles.stageIntro}>
+      <Text style={styles.studioBody}>{body}</Text>
     </View>
   );
 }
@@ -706,8 +648,19 @@ export default function GeneratePaperScreen() {
   );
 
   useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: false });
-  }, [navigation]);
+    navigation.setOptions({
+      headerRight: isTeacher
+        ? () => (
+            <AppHeaderAction
+              label="Custom paper"
+              icon="document-attach-outline"
+              accessibilityLabel="Upload a custom school paper"
+              onPress={() => navigation.navigate("CustomPaper")}
+            />
+          )
+        : undefined,
+    });
+  }, [isTeacher, navigation]);
 
   const {
     data: options,
@@ -1222,7 +1175,7 @@ export default function GeneratePaperScreen() {
   if (isLoading) {
     return (
       <View style={styles.root}>
-        <GenerateStudioHeader stage={0} onBack={() => navigation.goBack()} />
+        <GenerateStageIntro stage={0} />
         <View style={styles.stateSurface}>
           <View style={styles.stateMark}>
             <ActivityIndicator color={colors.accentStrong} />
@@ -1240,7 +1193,7 @@ export default function GeneratePaperScreen() {
   if (isError) {
     return (
       <View style={styles.root}>
-        <GenerateStudioHeader stage={0} onBack={() => navigation.goBack()} />
+        <GenerateStageIntro stage={0} />
         <View style={styles.stateSurface}>
           <View style={[styles.stateMark, styles.stateMarkError]}>
             <Ionicons
@@ -1270,14 +1223,7 @@ export default function GeneratePaperScreen() {
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <GenerateStudioHeader
-        stage={stage}
-        onBack={() => navigation.goBack()}
-        showsDuration={!isTeacher}
-        onCustomPaper={
-          isTeacher ? () => navigation.navigate("CustomPaper") : undefined
-        }
-      />
+      <GenerateStageIntro stage={stage} showsDuration={!isTeacher} />
       <Screen contentStyle={styles.screenContentAfterHeader}>
         {dashboardPrefill ? (
           <View style={styles.dashboardFocusBanner} accessibilityLiveRegion="polite">
@@ -1525,7 +1471,7 @@ export default function GeneratePaperScreen() {
           <View style={styles.scopeWorkspace}>
             <View style={styles.scopeWorkspaceHeader}>
               <View style={styles.scopeWorkspaceMark}>
-                <Ionicons name="layers-outline" size={17} color={colors.white} />
+                <Ionicons name="layers-outline" size={17} color={colors.iconInk} />
               </View>
               <View style={styles.scopeWorkspaceCopy}>
                 <Text style={styles.scopeWorkspaceTitle}>Build the learning scope</Text>
@@ -2050,7 +1996,7 @@ const styles = StyleSheet.create({
   jobCard: {
     gap: spacing[3],
     padding: spacing[4],
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
@@ -2060,27 +2006,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[3],
     padding: spacing[4],
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
-  },
-  customPaperButton: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[2],
-    marginTop: spacing[3],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.28)",
-  },
-  customPaperButtonText: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    color: colors.nav,
   },
   visualToggleOn: {
     borderColor: colors.accentStrong,
@@ -2093,7 +2022,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   visualToggleTitle: {
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     fontSize: 14,
     color: colors.text,
   },
@@ -2130,7 +2059,7 @@ const styles = StyleSheet.create({
   },
   jobHeadline: {
     flex: 1,
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     fontSize: 15,
     color: colors.text,
   },
@@ -2171,7 +2100,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: spacing[3],
     padding: spacing[4],
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.borderBrand,
     backgroundColor: colors.accentSurface,
@@ -2191,13 +2120,13 @@ const styles = StyleSheet.create({
   dashboardFocusEyebrow: {
     color: colors.accentStrong,
     fontFamily: fonts.extrabold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 1.1,
   },
   dashboardFocusTitle: {
     marginTop: 2,
     color: colors.nav,
-    fontFamily: fonts.displayBold,
+    fontFamily: fonts.bold,
     fontSize: 16,
     lineHeight: 21,
   },
@@ -2238,12 +2167,12 @@ const styles = StyleSheet.create({
   stateEyebrow: {
     color: colors.accentStrong,
     fontFamily: fonts.extrabold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 1.2,
   },
   stateTitle: {
     color: colors.nav,
-    fontFamily: fonts.displayBold,
+    fontFamily: fonts.bold,
     fontSize: 23,
     lineHeight: 28,
     textAlign: "center",
@@ -2274,98 +2203,22 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 13,
   },
-  studioHeader: {
-    minHeight: 184,
+  stageIntro: {
     paddingHorizontal: spacing[5],
-    paddingBottom: spacing[4],
-    backgroundColor: "#FBF6EC",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0D6C8",
-  },
-  studioTop: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[2],
-  },
-  studioBackButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: "#E0D6C8",
-    ...shadows.xs,
-  },
-  studioLogo: {
-    borderWidth: 0,
-    shadowOpacity: 0,
-    elevation: 0,
-    backgroundColor: "transparent",
-  },
-  studioBrandCopy: {
-    flex: 1,
-  },
-  studioBrandTitle: {
-    color: colors.nav,
-    fontFamily: fonts.bold,
-    fontSize: 14,
-  },
-  studioBrandSubtitle: {
-    color: colors.textMuted,
-    fontFamily: fonts.medium,
-    fontSize: 10,
-    marginTop: 2,
-  },
-  studioStepPill: {
-    minHeight: 30,
-    paddingHorizontal: spacing[3],
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF0E5",
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-  },
-  studioStepPillText: {
-    color: "#9A3412",
-    fontFamily: fonts.extrabold,
-    fontSize: 9,
-    letterSpacing: 0.9,
-    textTransform: "uppercase",
-  },
-  studioHeading: {
-    paddingTop: spacing[4],
-  },
-  studioKicker: {
-    color: colors.accentStrong,
-    fontFamily: fonts.extrabold,
-    fontSize: 9,
-    letterSpacing: 1.4,
-  },
-  studioTitle: {
-    color: colors.nav,
-    fontFamily: fonts.displayBold,
-    fontSize: 28,
-    lineHeight: 31,
-    marginTop: 4,
+    paddingTop: spacing[2],
   },
   studioBody: {
     color: colors.textMuted,
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: spacing[1],
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 19,
   },
   hero: {
-    borderRadius: 24,
+    borderRadius: radius.card,
     minHeight: 164,
     borderWidth: 1,
     borderColor: "rgba(194, 65, 12, 0.20)",
     overflow: "hidden",
-    ...shadows.md,
   },
   heroImage: {
     ...StyleSheet.absoluteFill,
@@ -2391,7 +2244,7 @@ const styles = StyleSheet.create({
   heroBackButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.card,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.10)",
@@ -2438,7 +2291,7 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radius.card,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.backgroundElevated,
@@ -2457,14 +2310,14 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.white,
-    fontFamily: fonts.displayBold,
+    fontFamily: fonts.bold,
     fontSize: 25,
     letterSpacing: 0,
   },
   totalPill: {
     minWidth: 74,
     minHeight: 58,
-    borderRadius: 18,
+    borderRadius: radius.card,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.10)",
@@ -2480,7 +2333,7 @@ const styles = StyleSheet.create({
   totalPillSub: {
     color: colors.slate[300],
     fontFamily: fonts.medium,
-    fontSize: 10,
+    fontSize: 11,
   },
   progress: {
     flexDirection: "row",
@@ -2523,12 +2376,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   stageCard: {
-    borderRadius: 22,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
     overflow: "hidden",
-    ...shadows.xs,
   },
   stageCardActive: {
     borderColor: colors.borderBrand,
@@ -2572,7 +2424,7 @@ const styles = StyleSheet.create({
   },
   stageTitle: {
     color: colors.text,
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     fontSize: 17,
     letterSpacing: 0,
   },
@@ -2722,46 +2574,15 @@ const styles = StyleSheet.create({
   placeholder: {
     color: colors.textSubtle,
   },
-  scopeWorkspace: {
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.nav,
-    backgroundColor: colors.white,
-    overflow: "hidden",
-  },
-  scopeWorkspaceHeader: {
-    minHeight: 76,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    backgroundColor: colors.nav,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[3],
-  },
-  scopeWorkspaceMark: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accentStrong,
-  },
+  scopeWorkspace: { borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, overflow: 'hidden' },
+  scopeWorkspaceHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[3], paddingVertical: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+  scopeWorkspaceMark: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface },
   scopeWorkspaceCopy: {
     flex: 1,
     gap: 2,
   },
-  scopeWorkspaceTitle: {
-    color: colors.white,
-    fontFamily: fonts.displaySemibold,
-    fontSize: 15,
-    lineHeight: 19,
-  },
-  scopeWorkspaceBody: {
-    color: colors.slate[200],
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    lineHeight: 16,
-  },
+  scopeWorkspaceTitle: { color: colors.nav, fontFamily: fonts.bold, fontSize: 15, lineHeight: 20 },
+  scopeWorkspaceBody: { color: colors.textMuted, fontFamily: fonts.medium, fontSize: 12, lineHeight: 17 },
   scopeSection: {
     gap: spacing[2],
     padding: spacing[3],
@@ -2923,7 +2744,7 @@ const styles = StyleSheet.create({
   presetSub: {
     color: colors.textMuted,
     fontFamily: fonts.regular,
-    fontSize: 10,
+    fontSize: 11,
     marginTop: 2,
   },
   questionList: {
@@ -2965,7 +2786,7 @@ const styles = StyleSheet.create({
   stepperLabel: {
     color: colors.textMuted,
     fontFamily: fonts.bold,
-    fontSize: 10,
+    fontSize: 11,
     textTransform: "uppercase",
   },
   stepperControls: {
@@ -3119,7 +2940,7 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
   generateSummary: {
-    borderRadius: 18,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.slate[50],
@@ -3128,7 +2949,7 @@ const styles = StyleSheet.create({
   },
   generateTitle: {
     color: colors.text,
-    fontFamily: fonts.displaySemibold,
+    fontFamily: fonts.bold,
     fontSize: 17,
     letterSpacing: 0,
   },

@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useNetInfo } from '@react-native-community/netinfo'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AppScreen, EmptyState, ErrorState, PremiumHeader } from '../../components/ui'
+import { AppScreen, EmptyState, ErrorState, SectionHeading, SegmentedTabs, StatusPill } from '../../components/ui'
 import { b2bProfileApi } from '../../api/b2bProfile'
 import {
   previousPapersApi,
@@ -180,33 +180,12 @@ function SourceSwitch({
     },
   ]
   return (
-    <View accessibilityRole="tablist" style={styles.sourceSwitch}>
-      {items.map((item) => {
-        const selected = value === item.value
-        return (
-          <Pressable
-            key={item.value}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            onPress={() => onChange(item.value)}
-            style={({ pressed }) => [
-              styles.sourceOption,
-              compact && styles.sourceOptionCompact,
-              selected && styles.sourceOptionSelected,
-              pressed && styles.pressed,
-            ]}
-          >
-            <View style={styles.sourceTopline}>
-              <Text style={[styles.sourceLabel, selected && styles.sourceLabelSelected]}>{item.label}</Text>
-              <View style={[styles.sourceCount, selected && styles.sourceCountSelected]}>
-                <Text style={[styles.sourceCountText, selected && styles.sourceCountTextSelected]}>{item.count}</Text>
-              </View>
-            </View>
-            {selected ? <View style={styles.sourceIndicator} /> : null}
-          </Pressable>
-        )
-      })}
-    </View>
+    <SegmentedTabs
+      accessibilityLabel="Paper sources"
+      tabs={items.map((item) => ({ id: item.value, label: item.label, count: item.count }))}
+      value={value}
+      onChange={onChange}
+    />
   )
 }
 
@@ -224,29 +203,19 @@ const ContextHero = React.memo(function ContextHero({ context, teacher, compact 
       ])
 
   return (
-    <View style={[styles.hero, compact && styles.heroCompact]}>
-      <View style={styles.heroTopline}>
-        <View style={styles.heroEyebrowRow}>
-          <View style={styles.heroSignal} />
-          <Text style={styles.heroEyebrow}>
-            {compact ? teacher ? 'TEACHER LIBRARY' : 'SCHOOL LIBRARY' : teacher ? 'AUTHORIZED TEACHER LIBRARY' : 'ENROLLMENT-MATCHED LIBRARY'}
-          </Text>
-        </View>
-        <Text style={styles.verifiedPill}>✓ Verified</Text>
+    <View
+      style={styles.contextRow}
+      accessible
+      accessibilityLabel={`${school}. ${curriculum || 'Curriculum access is managed by your school'}. ${teacher ? 'Only papers owned by your teacher account appear here.' : 'Papers are matched to your school and class.'}`}
+    >
+      <View style={styles.contextIcon}>
+        <Ionicons name="school-outline" size={19} color={colors.iconInk} />
       </View>
-      <View style={styles.contextBand}>
-        <View style={styles.contextIcon}>
-          <Ionicons name="school-outline" size={20} color={colors.white} />
-        </View>
-        <Text style={styles.contextSummary}>
-          {`${school}\n${curriculum || context?.branch || 'Curriculum access is managed by your school'}`}
-        </Text>
+      <View style={styles.contextCopy}>
+        <Text style={styles.contextSchool} numberOfLines={1}>{school}</Text>
+        <Text style={styles.contextMeta} numberOfLines={1}>{curriculum || context?.branch || 'Curriculum access is managed by your school'}</Text>
       </View>
-      {!compact ? (
-        <Text style={styles.heroBoundary}>
-          {teacher ? '✓ Verified access · Only papers owned by your teacher account appear here.' : '✓ Verified access · Published papers are matched to your school and class.'}
-        </Text>
-      ) : null}
+      <StatusPill label="Verified" tone="success" icon="shield-checkmark-outline" />
     </View>
   )
 })
@@ -292,65 +261,32 @@ function PracticePaperCard({
     ? paper.is_submitted_by_me ? 'Retake' : 'Start'
     : 'Details'
 
+  const meta = schoolPaperContextLabel([
+    count ? `${count} questions` : null,
+    paper.total_marks != null ? `${paper.total_marks} marks` : null,
+    paper.duration_minutes ? `${paper.duration_minutes} min` : null,
+  ])
+
   return (
-    <View style={styles.paperCard}>
-      <View style={styles.practiceRail} />
-      <View style={styles.paperHeader}>
-        <View style={styles.paperHeading}>
-          <View style={styles.paperKindRow}>
-            <Ionicons name="flash-outline" size={14} color={colors.accentStrong} />
-            <Text style={styles.practiceKind}>{teacher ? 'OWNED STRUCTURED PAPER' : 'PRACTICE READY'}</Text>
-          </View>
-          <Text style={styles.paperTitle}>{paper.title}</Text>
-          <Text style={styles.paperContext}>{context || 'Published school practice paper'}</Text>
-        </View>
-        {compact ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${actionLabel}: ${paper.title}`}
-            disabled={busy || !action}
-            onPress={onPress}
-            style={({ pressed }) => [styles.compactPaperAction, (busy || !action) && styles.disabled, pressed && styles.pressed]}
-          >
-            {busy ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={styles.compactPaperActionText}>{compactActionLabel}</Text>}
-            {!busy ? <Ionicons name="arrow-forward" size={14} color={colors.white} /> : null}
-          </Pressable>
-        ) : (
-          <View style={styles.yearBadge}>
-            <Text style={styles.yearText}>{year || 'School'}</Text>
-          </View>
-        )}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${compact ? compactActionLabel : actionLabel}: ${paper.title}`}
+      accessibilityState={{ disabled: busy || !action, busy }}
+      disabled={busy || !action}
+      onPress={onPress}
+      style={({ pressed }) => [styles.paperRow, (busy || !action) && styles.disabled, pressed && styles.pressed]}
+    >
+      <View style={styles.paperIcon}>
+        <Ionicons name="flash-outline" size={18} color={colors.iconInk} />
       </View>
-      <View style={styles.metricsRow}>
-        <View style={styles.metric}>
-          <Text style={styles.metricValue}>{count || '—'}</Text>
-          <Text style={styles.metricLabel}>Questions</Text>
-        </View>
-        <View style={styles.metricDivider} />
-        <View style={styles.metric}>
-          <Text style={styles.metricValue}>{paper.total_marks ?? '—'}</Text>
-          <Text style={styles.metricLabel}>Marks</Text>
-        </View>
-        <View style={styles.metricDivider} />
-        <View style={styles.metric}>
-          <Text style={styles.metricValue}>{paper.duration_minutes ? `${paper.duration_minutes}m` : 'Flexible'}</Text>
-          <Text style={styles.metricLabel}>Timing</Text>
-        </View>
+      <View style={styles.paperCopy}>
+        <Text style={styles.paperTitle} numberOfLines={2}>{paper.title}</Text>
+        <Text style={styles.paperContext} numberOfLines={1}>{context || 'Published school practice paper'}</Text>
+        {meta ? <Text style={styles.paperContext} numberOfLines={1}>{meta}</Text> : null}
+        {paper.is_submitted_by_me ? <StatusPill label="Attempted" tone="success" icon="checkmark" style={styles.paperPill} /> : null}
       </View>
-      {!compact ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${actionLabel}: ${paper.title}`}
-          disabled={busy || !action}
-          onPress={onPress}
-          style={({ pressed }) => [styles.primaryAction, (busy || !action) && styles.disabled, pressed && styles.pressed]}
-        >
-          {busy ? <ActivityIndicator size="small" color={colors.white} /> : <Ionicons name={teacher ? 'open-outline' : 'play'} size={17} color={colors.white} />}
-          <Text style={styles.primaryActionText}>{busy ? 'Opening…' : actionLabel}</Text>
-          {!busy ? <Ionicons name="arrow-forward" size={17} color={colors.white} /> : null}
-        </Pressable>
-      ) : null}
-    </View>
+      {busy ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="chevron-forward" size={17} color={colors.textSoft} />}
+    </Pressable>
   )
 }
 
@@ -376,39 +312,28 @@ function SharedPaperCard({
   const archived = paper.status === 'archived'
 
   return (
-    <View style={[styles.paperCard, archived && styles.archivedCard]}>
-      <View style={styles.sharedRail} />
-      <View style={styles.paperHeader}>
-        <View style={styles.paperHeading}>
-          <View style={styles.paperKindRow}>
-            <Ionicons name="document-text-outline" size={14} color={colors.info} />
-            <Text style={styles.sharedKind}>SHARED PDF</Text>
-          </View>
-          <Text style={styles.paperTitle}>{paper.title}</Text>
-          <Text style={styles.paperContext}>{context || 'Shared school question paper'}</Text>
-        </View>
-        <View style={[styles.statusBadge, archived && styles.statusBadgeArchived]}>
-          <Text style={[styles.statusText, archived && styles.statusTextArchived]}>{archived ? 'Archived' : 'Published'}</Text>
-        </View>
-      </View>
-      {paper.description ? <Text style={styles.description}>{paper.description}</Text> : null}
-      <View style={styles.sharedMetaRow}>
-        <View style={styles.teacherLine}>
-          <Ionicons name="person-circle-outline" size={18} color={colors.textSoft} />
-          <Text style={styles.teacherText} numberOfLines={2}>{paper.teacher_name || 'School teacher'}</Text>
-        </View>
-        <Text style={styles.fileMeta}>{formatBytes(paper.file_size_bytes)} · {formatDate(paper.published_at || paper.created_at)}</Text>
-      </View>
+    <View style={[styles.sharedCard, archived && styles.archivedCard]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open PDF: ${paper.title}`}
+        accessibilityState={{ disabled: busy, busy }}
         disabled={busy}
         onPress={onOpen}
-        style={({ pressed }) => [styles.secondaryAction, busy && styles.disabled, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.paperRow, busy && styles.disabled, pressed && styles.pressed]}
       >
-        {busy ? <ActivityIndicator size="small" color={colors.nav} /> : <Ionicons name="document-outline" size={17} color={colors.nav} />}
-        <Text style={styles.secondaryActionText}>{busy ? 'Preparing PDF…' : 'Open PDF'}</Text>
-        {!busy ? <Ionicons name="open-outline" size={17} color={colors.nav} /> : null}
+        <View style={[styles.paperIcon, styles.sharedIcon]}>
+          <Ionicons name="document-text-outline" size={18} color={colors.info} />
+        </View>
+        <View style={styles.paperCopy}>
+          <Text style={styles.paperTitle} numberOfLines={2}>{paper.title}</Text>
+          <Text style={styles.paperContext} numberOfLines={1}>{context || 'Shared school question paper'}</Text>
+          <Text style={styles.paperContext} numberOfLines={1}>
+            {[paper.teacher_name || 'School teacher', formatBytes(paper.file_size_bytes), formatDate(paper.published_at || paper.created_at)].join(' · ')}
+          </Text>
+          {paper.description ? <Text style={styles.description} numberOfLines={2}>{paper.description}</Text> : null}
+          <StatusPill label={archived ? 'Archived' : 'Published'} tone={archived ? 'neutral' : 'success'} style={styles.paperPill} />
+        </View>
+        {busy ? <ActivityIndicator size="small" color={colors.info} /> : <Ionicons name="open-outline" size={16} color={colors.textSoft} />}
       </Pressable>
       {error ? (
         <View accessibilityRole="alert" style={styles.pdfError}>
@@ -588,11 +513,6 @@ export default function SchoolPreviousPapersScreen() {
     }, 800)
   }, [navigation, role])
 
-  const handleBack = () => {
-    if (navigation.canGoBack()) navigation.goBack()
-    else navigation.navigate(teacher ? 'StaffHome' : 'Home')
-  }
-
   if (!allowed) {
     return (
       <AppScreen scroll={false} protectedChrome contentStyle={styles.center}>
@@ -624,13 +544,6 @@ export default function SchoolPreviousPapersScreen() {
       keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={retryAll} tintColor={colors.accent} colors={[colors.accent]} />}
     >
-      <PremiumHeader
-        eyebrow="Previous question papers"
-        title={compact ? teacher ? 'Your papers' : 'School papers' : teacher ? 'Your paper library' : 'School paper library'}
-        subtitle={compact ? teacher ? 'Owned teacher resources' : 'Matched to your enrollment' : teacher ? 'Owned structured papers and original PDF files' : 'Published papers matched to your enrollment'}
-        onBack={handleBack}
-      />
-
       <ContextHero context={contextQuery.data} teacher={teacher} compact={compact} />
 
       {bothFailed ? (
@@ -672,19 +585,12 @@ export default function SchoolPreviousPapersScreen() {
             </View>
           ) : null}
 
-          <View style={styles.sectionHeading}>
-            <View style={styles.sectionHeadingCopy}>
-              <Text style={styles.sectionTitle}>
-                {compact
-                  ? teacher
-                    ? source === 'practice' ? 'Published papers' : 'Shared PDFs'
-                    : source === 'practice' ? 'Practice papers' : 'Shared PDFs'
-                  : teacher
-                  ? source === 'practice' ? 'Your published papers' : 'Original paper files'
-                  : source === 'practice' ? 'Ready when you are' : 'Read in the original format'}
-              </Text>
-            </View>
-            <View style={styles.sectionActions}>
+          <SectionHeading
+            title={teacher
+              ? source === 'practice' ? 'Your published papers' : 'Original paper files'
+              : source === 'practice' ? 'Practice papers' : 'Shared PDFs'}
+            meta={String(source === 'practice' ? visiblePractice.length : visibleShared.length)}
+            action={
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ expanded: filtersExpanded }}
@@ -692,13 +598,11 @@ export default function SchoolPreviousPapersScreen() {
                 onPress={() => setFiltersExpanded((current) => !current)}
                 style={({ pressed }) => [styles.filterToggle, filtersExpanded && styles.filterToggleActive, pressed && styles.pressed]}
               >
-                <Ionicons name="options-outline" size={17} color={filtersExpanded ? colors.white : colors.nav} />
-                <Text style={[styles.filterToggleText, filtersExpanded && styles.filterToggleTextActive]}>Filter</Text>
+                <Ionicons name="options-outline" size={17} color={filtersExpanded ? colors.accentStrong : colors.textSecondary} />
                 {activeFilterCount ? <Text style={styles.filterActiveCount}>{activeFilterCount}</Text> : null}
               </Pressable>
-              <Text style={styles.resultCount}>{source === 'practice' ? visiblePractice.length : visibleShared.length}</Text>
-            </View>
-          </View>
+            }
+          />
 
           {isInitialLoading ? (
             <View style={styles.loadingState} accessibilityLiveRegion="polite">
@@ -757,46 +661,45 @@ export default function SchoolPreviousPapersScreen() {
 }
 
 const styles = StyleSheet.create({
+  contextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    padding: spacing[3],
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+  },
+  contextCopy: { flex: 1, minWidth: 0, gap: 2 },
+  contextSchool: { ...typography.roles.body, fontFamily: typography.fonts.bodyBold, color: colors.nav },
+  contextMeta: { ...typography.roles.caption, color: colors.textMuted },
+  paperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    padding: spacing[4],
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
+  },
+  sharedCard: { gap: spacing[2] },
+  paperIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface },
+  sharedIcon: { backgroundColor: colors.infoSurface },
+  paperCopy: { flex: 1, minWidth: 0, gap: 2 },
+  paperPill: { marginTop: spacing[1] },
   screenContent: { paddingBottom: spacing[8] },
   center: { flex: 1, justifyContent: 'center' },
   pressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.55 },
-  hero: {
-    position: 'relative',
-    minHeight: 150,
-    padding: spacing[4],
-    borderRadius: radius.xl,
-    backgroundColor: colors.nav,
-  },
-  heroCompact: { minHeight: 118, padding: spacing[3] },
-  heroTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
-  heroEyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  heroSignal: { width: 16, height: 3, borderRadius: 2, backgroundColor: colors.accentLight },
-  heroEyebrow: { ...typography.roles.eyebrow, flexShrink: 1, color: colors.accentSoft, fontSize: 8, lineHeight: 11 },
-  verifiedPill: { overflow: 'hidden', paddingHorizontal: spacing[2], paddingVertical: 6, borderRadius: 13, color: colors.slate[200], backgroundColor: 'rgba(255,255,255,0.1)', fontFamily: typography.fonts.bodyBold, fontSize: 9, lineHeight: 13 },
-  contextBand: {
-    marginTop: spacing[3],
-    minHeight: 54,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  contextIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accent,
-  },
-  contextSummary: { flex: 1, color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 17 },
-  heroBoundary: { marginTop: spacing[2], color: colors.slate[400], fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 14 },
+  contextIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface },
   partialNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing[3],
     padding: spacing[4],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.warningBorder,
     backgroundColor: colors.warningSurface,
@@ -804,29 +707,10 @@ const styles = StyleSheet.create({
   partialCopy: { flex: 1 },
   partialTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   partialBody: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
-  sourceSwitch: { flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border, backgroundColor: 'transparent' },
-  sourceOption: {
-    flex: 1,
-    minHeight: 58,
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[3],
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  sourceOptionCompact: { minHeight: 54 },
-  sourceOptionSelected: { backgroundColor: 'transparent' },
-  sourceTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
-  sourceLabel: { flex: 1, color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 17 },
-  sourceLabelSelected: { color: colors.nav },
-  sourceCount: { minWidth: 28, height: 28, paddingHorizontal: spacing[2], borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundMuted },
-  sourceCountSelected: { backgroundColor: colors.accent },
-  sourceCountText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
-  sourceCountTextSelected: { color: colors.white },
-  sourceIndicator: { position: 'absolute', left: spacing[2], right: spacing[2], bottom: -1, height: 3, borderRadius: 2, backgroundColor: colors.accent },
   filterPanel: {
     gap: spacing[3],
     padding: spacing[4],
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.white,
@@ -845,59 +729,23 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, minHeight: 48, paddingVertical: spacing[3], color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 13 },
   clearButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   filterRow: { gap: spacing[2] },
-  filterLabel: { ...typography.roles.eyebrow, color: colors.textMuted, fontSize: 9, lineHeight: 12 },
+  filterLabel: { ...typography.roles.eyebrow, color: colors.textMuted, fontSize: 11, lineHeight: 12 },
   filterContent: { gap: spacing[2], paddingRight: spacing[2] },
-  filterChip: { minHeight: 38, paddingHorizontal: spacing[4], borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+  filterChip: { minHeight: 38, paddingHorizontal: spacing[4], borderRadius: radius.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
   filterChipSelected: { borderColor: colors.nav, backgroundColor: colors.nav },
   filterChipText: { color: colors.textSecondary, fontFamily: typography.fonts.bodySemibold, fontSize: 11 },
   filterChipTextSelected: { color: colors.white },
-  sectionHeading: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing[3] },
-  sectionHeadingCopy: { flex: 1 },
-  sectionTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 21, lineHeight: 27 },
-  resultCount: { minWidth: 36, height: 36, paddingHorizontal: spacing[2], borderRadius: 18, textAlign: 'center', textAlignVertical: 'center', color: colors.nav, backgroundColor: colors.accentSurfaceStrong, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 36 },
-  sectionActions: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  filterToggle: { minHeight: 38, paddingHorizontal: spacing[3], borderRadius: 19, flexDirection: 'row', alignItems: 'center', gap: spacing[1], borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.white },
-  filterToggleActive: { borderColor: colors.nav, backgroundColor: colors.nav },
-  filterToggleText: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  filterToggleTextActive: { color: colors.white },
-  filterActiveCount: { minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, overflow: 'hidden', textAlign: 'center', textAlignVertical: 'center', color: colors.white, backgroundColor: colors.accent, fontFamily: typography.fonts.bodyBold, fontSize: 8, lineHeight: 18 },
-  loadingState: { minHeight: 210, alignItems: 'center', justifyContent: 'center', padding: spacing[6], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
-  loadingTitle: { marginTop: spacing[4], color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
+  filterToggle: { minWidth: 40, height: 40, paddingHorizontal: spacing[2], borderRadius: radius.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1], borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  filterToggleActive: { borderColor: colors.borderBrand, backgroundColor: colors.accentSurface },
+  filterActiveCount: { minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, overflow: 'hidden', textAlign: 'center', textAlignVertical: 'center', color: colors.white, backgroundColor: colors.accent, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 18 },
+  loadingState: { minHeight: 210, alignItems: 'center', justifyContent: 'center', padding: spacing[6], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
+  loadingTitle: { marginTop: spacing[4], color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 17 },
   loadingBody: { marginTop: spacing[2], color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
-  paperList: { overflow: 'hidden', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
-  paperCard: { position: 'relative', overflow: 'hidden', padding: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.white },
+  paperList: { gap: spacing[2] },
   archivedCard: { opacity: 0.78 },
-  practiceRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5, backgroundColor: colors.accent },
-  sharedRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5, backgroundColor: colors.info },
-  paperHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
-  paperHeading: { flex: 1 },
-  paperKindRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  practiceKind: { ...typography.roles.eyebrow, color: colors.accentStrong, fontSize: 9, lineHeight: 12 },
-  sharedKind: { ...typography.roles.eyebrow, color: colors.info, fontSize: 9, lineHeight: 12 },
-  paperTitle: { marginTop: spacing[2], color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18, lineHeight: 24 },
-  paperContext: { marginTop: spacing[1], color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
-  yearBadge: { minWidth: 52, minHeight: 32, paddingHorizontal: spacing[2], borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurfaceStrong },
-  yearText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
-  compactPaperAction: { minWidth: 70, minHeight: 36, paddingHorizontal: spacing[2], borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: colors.nav },
-  compactPaperActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  statusBadge: { minHeight: 30, paddingHorizontal: spacing[3], borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successSurface },
-  statusBadgeArchived: { backgroundColor: colors.backgroundMuted },
-  statusText: { color: colors.successText, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  statusTextArchived: { color: colors.textMuted },
-  metricsRow: { marginTop: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.borderSubtle },
-  metric: { flex: 1, alignItems: 'center' },
-  metricValue: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
-  metricLabel: { marginTop: 2, color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.7 },
-  metricDivider: { width: 1, height: 30, backgroundColor: colors.border },
-  description: { marginTop: spacing[3], color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 19 },
-  sharedMetaRow: { marginTop: spacing[4], gap: spacing[2] },
-  teacherLine: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  teacherText: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodySemibold, fontSize: 12, lineHeight: 17 },
-  fileMeta: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
-  primaryAction: { marginTop: spacing[3], minHeight: 46, paddingHorizontal: spacing[4], borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], backgroundColor: colors.nav },
-  primaryActionText: { flex: 1, color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12, textAlign: 'center' },
-  secondaryAction: { marginTop: spacing[3], minHeight: 46, paddingHorizontal: spacing[4], borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.background },
-  secondaryActionText: { flex: 1, color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12, textAlign: 'center' },
+  paperTitle: { ...typography.roles.rowTitle, color: colors.nav },
+  paperContext: { ...typography.roles.caption, color: colors.textMuted },
+  description: { ...typography.roles.caption, marginTop: spacing[1], color: colors.textSecondary },
   pdfError: { marginTop: spacing[3], gap: spacing[3], padding: spacing[3], borderLeftWidth: 3, borderLeftColor: colors.danger, backgroundColor: colors.dangerSurface },
   pdfErrorCopy: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
   pdfErrorTextGroup: { flex: 1 },
@@ -905,7 +753,7 @@ const styles = StyleSheet.create({
   pdfErrorBody: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
   pdfErrorActions: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   pdfRetry: { minHeight: 36, paddingHorizontal: spacing[4], borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
-  pdfRetryText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  pdfRetryText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   pdfDismiss: { minHeight: 36, paddingHorizontal: spacing[3], alignItems: 'center', justifyContent: 'center' },
-  pdfDismissText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  pdfDismissText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
 })

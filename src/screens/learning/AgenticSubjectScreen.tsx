@@ -90,7 +90,8 @@ export default function AgenticSubjectScreen() {
   return (
     <AppScreen protectedChrome contentStyle={styles.screen}>
       <AgenticHeader
-        meta={`${subjectName} · ${tracked} subtopics`}
+        title={subjectName}
+        meta={`${tracked} subtopics`}
         pill={subject ? `${mastery}% ready` : 'Learning'}
         onBack={() => navigation.goBack()}
       />
@@ -148,7 +149,7 @@ const styles = StyleSheet.create({
   screen: { gap: spacing[3], paddingBottom: spacing[6], backgroundColor: '#FBF6EC' },
   topicList: { gap: spacing[2] },
   topicCard: {
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: '#FFFCF6',
     borderWidth: 1,
     borderColor: '#E6D7C5',
@@ -157,18 +158,18 @@ const styles = StyleSheet.create({
   },
   topicTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
   topicCopy: { flex: 1, minWidth: 0, gap: 2 },
-  topicKicker: { color: '#927C69', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase' },
-  topicTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 17, lineHeight: 21 },
+  topicKicker: { color: '#927C69', fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
+  topicTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 17, lineHeight: 21 },
   statusPill: { minHeight: 28, justifyContent: 'center', borderRadius: radius.full, paddingHorizontal: spacing[3] },
-  statusText: { fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  statusText: { fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   topicSummary: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
   topicFooter: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[1] },
-  topicMetric: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14 },
+  topicMetric: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 14 },
   pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
   loadingState: { gap: spacing[3], alignItems: 'center' },
   loadingText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
-  skeletonCard: { alignSelf: 'stretch', height: 142, borderRadius: radius.xl, backgroundColor: colors.slate[100], borderWidth: 1, borderColor: colors.borderSubtle },
+  skeletonCard: { alignSelf: 'stretch', height: 142, borderRadius: radius.card, backgroundColor: colors.slate[100], borderWidth: 1, borderColor: colors.borderSubtle },
   emptySurface: { alignItems: 'center', gap: spacing[2], paddingVertical: spacing[8] },
-  emptyTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 19, textAlign: 'center' },
+  emptyTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 19, textAlign: 'center' },
   emptyBody: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 })

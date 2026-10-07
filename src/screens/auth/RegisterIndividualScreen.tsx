@@ -183,10 +183,10 @@ export default function RegisterIndividualScreen() {
             </View>
           </View>
           <View style={styles.fieldStack}>
-            <TextInputField label="First name" error={errors.first_name} value={form.first_name} onChangeText={(value) => update('first_name', value)} placeholder="Your first name" autoComplete="given-name" textContentType="givenName" />
-            <TextInputField label="Last name" error={errors.last_name} value={form.last_name} onChangeText={(value) => update('last_name', value)} placeholder="Your last name" autoComplete="family-name" textContentType="familyName" />
+            <TextInputField size="large" label="First name" error={errors.first_name} value={form.first_name} onChangeText={(value) => update('first_name', value)} placeholder="Your first name" autoComplete="given-name" textContentType="givenName" />
+            <TextInputField size="large" label="Last name" error={errors.last_name} value={form.last_name} onChangeText={(value) => update('last_name', value)} placeholder="Your last name" autoComplete="family-name" textContentType="familyName" />
           </View>
-          <TextInputField
+          <TextInputField size="large"
             label="Email address"
             error={errors.email}
             value={form.email}
@@ -208,7 +208,7 @@ export default function RegisterIndividualScreen() {
         <View style={styles.formCard}>
           <View style={styles.sectionMarker}><Text style={styles.sectionMarkerText}>2</Text></View>
           <Text style={styles.sectionEyebrow}>Account information</Text>
-          <TextInputField
+          <TextInputField size="large"
             label="Password"
             error={errors.password}
             value={form.password}
@@ -242,7 +242,7 @@ export default function RegisterIndividualScreen() {
               />
             </View>
           ) : null}
-          <TextInputField
+          <TextInputField size="large"
             label="Confirm password"
             error={errors.confirm_password}
             value={form.confirm_password}
@@ -291,8 +291,8 @@ export default function RegisterIndividualScreen() {
 
           {isSchoolProfile ? (
             <View style={styles.fieldStack}>
-              <SelectField label="Board" error={errors.school_board} value={form.school_board} options={schoolBoardOptions} placeholder="Select board" onChange={(value) => update('school_board', value)} />
-              <SelectField label="Standard" error={errors.school_standard} value={form.school_standard} options={schoolStandardOptions} placeholder="Select standard" onChange={(value) => update('school_standard', value)} searchable={false} />
+              <SelectField size="large" label="Board" error={errors.school_board} value={form.school_board} options={schoolBoardOptions} placeholder="Select board" onChange={(value) => update('school_board', value)} />
+              <SelectField size="large" label="Standard" error={errors.school_standard} value={form.school_standard} options={schoolStandardOptions} placeholder="Select standard" onChange={(value) => update('school_standard', value)} searchable={false} />
             </View>
           ) : (
             <View style={styles.examStack}>

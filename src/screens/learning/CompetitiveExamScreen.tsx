@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react'
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, SelectableChip } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, SelectableChip, SummaryStrip, EmptyState, SectionHeading } from '../../components/ui'
 import { learningResourcesApi, LearningResource, resolveResourceUrl } from '../../api/learningResources'
 import { cheatSheetsApi, CheatSheet } from '../../api/cheatSheets'
 import { useAuthStore } from '../../stores/authStore'
@@ -147,39 +146,47 @@ export default function CompetitiveExamScreen() {
 
   return (
     <AppScreen contentStyle={styles.screen}>
-      <LinearGradient colors={[colors.slate[950], colors.slate[900], '#261610']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <View style={styles.heroTop}>
-          <View style={styles.heroIcon}>
-            <Ionicons name="trophy-outline" size={22} color={colors.accentLight} />
-          </View>
-          <View style={styles.trackPill}>
-            <Text style={styles.trackPillText}>{trackLabel}</Text>
-          </View>
-        </View>
-        <Text style={styles.heroKicker}>Competitive exam</Text>
-        <Text style={styles.heroTitle}>JEE launchpad</Text>
-        <Text style={styles.heroBody}>
-          Open revision PDFs, pick a subject, then move into chapter workspaces with study packs, tutor help, and MCQ drills.
-        </Text>
-        <View style={styles.heroMetrics}>
-          <Metric label="Subjects" value={subjects.length} icon="library-outline" />
-          <Metric label="Scope" value="11/12" icon="layers-outline" />
-          <Metric label="Mode" value="MCQ" icon="radio-button-on-outline" />
-        </View>
-      </LinearGradient>
+      <Text style={styles.trackLine}>{trackLabel} · revision PDFs, chapter workspaces, tutor help and MCQ drills</Text>
+      <SummaryStrip
+        stats={[
+          { label: 'Subjects', value: String(subjects.length) },
+          { label: 'Scope', value: '11/12' },
+          { label: 'Mode', value: 'MCQ' },
+        ]}
+      />
 
-      <View style={styles.sectionHeader}>
-        <View>
-          <Text style={styles.sectionKicker}>Published revision library</Text>
-          <Text style={styles.sectionTitle}>Quick revision resources</Text>
-        </View>
+      <SectionHeading title="Subjects" meta={String(subjects.length)} />
+      <View style={styles.subjectList}>
+        {subjects.map((subject, index) => {
+          const tone = subjectTone(subject)
+          return (
+            <Pressable
+              key={`${subject}-${index}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${subject} chapters`}
+              onPress={() => navigation.navigate('CompetitiveSubject', { subjectName: subject })}
+              style={({ pressed }) => [styles.subjectRow, index > 0 && styles.subjectDivider, pressed && styles.pressed]}
+            >
+              <View style={[styles.subjectIcon, { backgroundColor: `${tone}1A` }]}>
+                <Text style={[styles.subjectIconText, { color: tone }]}>{subjectSymbol(subject)}</Text>
+              </View>
+              <View style={styles.subjectCopy}>
+                <Text style={styles.subjectTitle}>{subject}</Text>
+                <Text style={styles.subjectBody} numberOfLines={1}>{subjectSupportCopy(subject)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={17} color={colors.textSoft} />
+            </Pressable>
+          )
+        })}
       </View>
 
-      <View style={styles.chipRow}>
+      <SectionHeading title="Revision resources" subtitle="Published chapter-wise PDFs" />
+
+      {resourceTypes.length ? <View style={styles.chipRow}>
         {['all', ...resourceTypes].map((type) => (
           <SelectableChip key={type} label={resourceTypeLabel(type)} selected={resourceType === type} onPress={() => setResourceType(type)} />
         ))}
-      </View>
+      </View> : null}
 
       {resourcesQuery.isLoading ? (
         <View style={styles.inlineLoading}>
@@ -193,57 +200,16 @@ export default function CompetitiveExamScreen() {
       ) : null}
 
       {!resourcesQuery.isLoading && filteredResources.length === 0 ? (
-        <AnimatedCard style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No revision PDFs have been published yet</Text>
-          <Text style={styles.emptyBody}>Published chapter-wise resources will appear here automatically.</Text>
-        </AnimatedCard>
+        <View style={styles.emptyCard}>
+          <EmptyState icon="document-text-outline" title="No revision PDFs yet" body="Published chapter-wise resources will appear here automatically." />
+        </View>
       ) : null}
 
       {filteredResources.map((resource) => (
         <ResourceCard key={resource.id} resource={resource} />
       ))}
 
-      <AnimatedCard style={styles.subjectShell}>
-        <View style={styles.subjectHeader}>
-          <View>
-            <Text style={styles.sectionKicker}>Selected subjects</Text>
-            <Text style={styles.sectionTitle}>Open chapter page</Text>
-          </View>
-          <View style={styles.subjectCount}>
-            <Text style={styles.subjectCountText}>{subjects.length}</Text>
-          </View>
-        </View>
-
-        <View style={styles.subjectGrid}>
-          {subjects.map((subject, index) => {
-            const tone = subjectTone(subject)
-            return (
-              <Pressable
-                key={`${subject}-${index}`}
-                onPress={() => navigation.navigate('CompetitiveSubject', { subjectName: subject })}
-                style={({ pressed }) => [styles.subjectCard, pressed && styles.pressed]}
-              >
-                <View style={styles.subjectCardTop}>
-                  <View style={[styles.subjectIcon, { backgroundColor: tone }]}>
-                    <Text style={styles.subjectIconText}>{subjectSymbol(subject)}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textSoft} />
-                </View>
-                <Text style={styles.subjectMeta}>Subject {index + 1}</Text>
-                <Text style={styles.subjectTitle}>{subject}</Text>
-                <Text style={styles.subjectBody}>{subjectSupportCopy(subject)}</Text>
-              </Pressable>
-            )
-          })}
-        </View>
-      </AnimatedCard>
-
-      <View style={styles.sectionHeader}>
-        <View>
-          <Text style={styles.sectionKicker}>Generated sheets</Text>
-          <Text style={styles.sectionTitle}>Cheat sheets</Text>
-        </View>
-      </View>
+      <SectionHeading title="Cheat sheets" subtitle="Generated revision sheets" />
 
       {cheatSheetsQuery.isLoading ? (
         <View style={styles.inlineLoading}>
@@ -257,10 +223,9 @@ export default function CompetitiveExamScreen() {
       ) : null}
 
       {!cheatSheetsQuery.isLoading && (cheatSheetsQuery.data?.items ?? []).length === 0 ? (
-        <AnimatedCard style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No cheat sheets yet</Text>
-          <Text style={styles.emptyBody}>Generated JEE cheat sheets will appear here after they are created or shared.</Text>
-        </AnimatedCard>
+        <View style={styles.emptyCard}>
+          <EmptyState icon="reader-outline" title="No cheat sheets yet" body="Generated JEE cheat sheets will appear here after they are created or shared." />
+        </View>
       ) : null}
 
       {(cheatSheetsQuery.data?.items ?? []).map((sheet) => (
@@ -270,17 +235,12 @@ export default function CompetitiveExamScreen() {
   )
 }
 
-function Metric({ label, value, icon }: { label: string; value: string | number; icon: keyof typeof Ionicons.glyphMap }) {
-  return (
-    <View style={styles.metric}>
-      <Ionicons name={icon} size={16} color={colors.accentLight} />
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
+  subjectList: { borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, paddingHorizontal: spacing[3] },
+  subjectRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[2] },
+  subjectDivider: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
+  subjectCopy: { flex: 1, minWidth: 0, gap: 1 },
+  trackLine: { ...typography.roles.caption, fontSize: 13, color: colors.textSecondary },
   screen: {
     paddingBottom: spacing[20],
   },
@@ -292,7 +252,7 @@ const styles = StyleSheet.create({
   lockIcon: {
     width: 60,
     height: 60,
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accentSurface,
@@ -301,7 +261,7 @@ const styles = StyleSheet.create({
   },
   centerTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 20,
     lineHeight: 25,
     textAlign: 'center',
@@ -313,102 +273,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
     maxWidth: 310,
-  },
-  hero: {
-    borderRadius: radius['2xl'],
-    padding: spacing[5],
-    gap: spacing[3],
-    overflow: 'hidden',
-    ...shadows.lg,
-  },
-  heroTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  heroIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(249, 115, 22, 0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(249, 115, 22, 0.28)',
-  },
-  trackPill: {
-    flexShrink: 1,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  trackPillText: {
-    color: colors.textOnDark,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-  },
-  heroKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.accentLight,
-    marginTop: spacing[2],
-  },
-  heroTitle: {
-    color: colors.white,
-    fontFamily: typography.fonts.heading,
-    fontSize: 31,
-    lineHeight: 36,
-  },
-  heroBody: {
-    color: 'rgba(255,255,255,0.74)',
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  heroMetrics: {
-    flexDirection: 'row',
-    gap: spacing[2],
-    marginTop: spacing[2],
-  },
-  metric: {
-    flex: 1,
-    minHeight: 72,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    padding: spacing[3],
-    justifyContent: 'center',
-  },
-  metricValue: {
-    color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 18,
-    marginTop: spacing[1],
-  },
-  metricLabel: {
-    color: 'rgba(255,255,255,0.58)',
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-    alignItems: 'flex-start',
-  },
-  sectionKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.accentStrong,
-  },
-  sectionTitle: {
-    ...typography.roles.title,
-    color: colors.text,
-    marginTop: spacing[1],
   },
   chipRow: {
     flexDirection: 'row',
@@ -424,78 +288,10 @@ const styles = StyleSheet.create({
     ...typography.roles.label,
     color: colors.textMuted,
   },
-  subjectShell: {
-    gap: spacing[4],
-  },
-  subjectHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  subjectCount: {
-    minWidth: 32,
-    height: 32,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
-  },
-  subjectCountText: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 13,
-  },
-  subjectGrid: {
-    gap: spacing[3],
-  },
-  subjectCard: {
-    minHeight: 142,
-    borderRadius: radius.xl,
-    backgroundColor: colors.backgroundElevated,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing[4],
-    gap: spacing[2],
-    ...shadows.xs,
-  },
-  subjectCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  subjectIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  subjectIconText: {
-    color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 18,
-  },
-  subjectMeta: {
-    color: colors.textSoft,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-  },
-  subjectTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 20,
-    lineHeight: 25,
-  },
-  subjectBody: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 19,
-  },
+  subjectIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  subjectIconText: { fontFamily: typography.fonts.bodyBold, fontSize: 15 },
+  subjectTitle: { ...typography.roles.rowTitle, color: colors.nav },
+  subjectBody: { ...typography.roles.caption, color: colors.textMuted },
   resourceCard: {
     gap: spacing[3],
   },
@@ -539,7 +335,7 @@ const styles = StyleSheet.create({
   },
   resourceTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
     lineHeight: 23,
   },
@@ -604,17 +400,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 12,
   },
-  emptyCard: {
-    gap: spacing[2],
-  },
-  emptyTitle: {
-    ...typography.roles.title,
-    color: colors.text,
-  },
-  emptyBody: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
+  emptyCard: { borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   pressed: {
     opacity: 0.78,
     transform: [{ scale: 0.99 }],

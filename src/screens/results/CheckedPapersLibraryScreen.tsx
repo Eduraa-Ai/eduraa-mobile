@@ -12,16 +12,14 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import Svg, { Circle } from 'react-native-svg'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { isLearnerRole } from '../../auth/roles'
-import { AppScreen, AnimatedButton, AuthLogoMark, ErrorState } from '../../components/ui'
+import { AppScreen, AnimatedButton, ErrorState, SectionHeading, SummaryStrip } from '../../components/ui'
+import { useAppHeaderScroll } from '../../navigation/headerScroll'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
 import type { CheckedPaper } from '../../types'
@@ -33,7 +31,6 @@ import {
   canDownloadPaperReport,
   canOpenPaper,
   CHECKED_PAPERS_POLL_INTERVAL_MS,
-  formatPaperCount,
   getPaperSubject,
   getPaperTitle,
   getQuestionCount,
@@ -81,49 +78,6 @@ function errorMessage(error: unknown) {
   if (typeof detail === 'string') return detail
   if (detail?.message) return detail.message
   return anyError.message || 'Unable to load checked papers right now.'
-}
-
-function ScoreRing({ percent, compact }: { percent: number | null; compact: boolean }) {
-  const size = compact ? 70 : 76
-  const stroke = 6
-  const radiusValue = (size - stroke) / 2
-  const circumference = 2 * Math.PI * radiusValue
-  const progress = percent == null ? 0 : Math.max(0, Math.min(100, percent))
-  const tone = colors.accent
-
-  return (
-    <View style={[styles.scoreRingWrap, { width: size, height: size }]}>
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Circle cx={size / 2} cy={size / 2} r={radiusValue} stroke="rgba(255,255,255,0.10)" strokeWidth={stroke} fill="none" />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radiusValue}
-          stroke={tone}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={circumference - (progress / 100) * circumference}
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
-        />
-      </Svg>
-      <View style={styles.scoreRingCopy}>
-        <Text style={styles.scoreRingValue}>{percent == null ? '--' : `${percent}%`}</Text>
-        <Text style={styles.scoreRingLabel}>latest</Text>
-      </View>
-    </View>
-  )
-}
-
-function SummaryMetric({ label, value, divider = false }: { label: string; value: string; divider?: boolean }) {
-  return (
-    <View style={[styles.metricCard, divider && styles.metricCardDivider]}>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-    </View>
-  )
 }
 
 function CheckedPaperRow({
@@ -185,7 +139,6 @@ function CheckedPaperRow({
       onPress={onPress}
       style={({ pressed }) => [styles.paperCard, featured && styles.paperCardFeatured, pressed && styles.paperCardPressed, opening && styles.paperCardOpening]}
     >
-      {featured ? <View pointerEvents="none" style={styles.featuredRail} /> : null}
       <View style={styles.paperCardTop}>
         <View style={[styles.paperIconTile, { backgroundColor: `${icon.tone}14`, borderColor: `${icon.tone}26` }]}>
           <Ionicons name={icon.name} size={20} color={icon.tone} />
@@ -232,9 +185,8 @@ function CheckedPaperRow({
               {deleting ? (
                 <ActivityIndicator color={colors.danger} size="small" />
               ) : (
-                <Ionicons name="trash-outline" size={16} color={deleteBlocked ? colors.textSoft : colors.danger} />
+                <Ionicons name="trash-outline" size={17} color={deleteBlocked ? colors.textSoft : colors.danger} />
               )}
-              <Text style={[styles.deleteActionText, deleteBlocked && styles.deleteActionTextBlocked]}>Delete</Text>
             </Pressable>
           ) : null}
           {canDownload ? (
@@ -259,9 +211,8 @@ function CheckedPaperRow({
               {downloading ? (
                 <ActivityIndicator color={colors.accentStrong} size="small" />
               ) : (
-                <Ionicons name="download-outline" size={16} color={downloadBlocked ? colors.textSoft : colors.accentStrong} />
+                <Ionicons name="download-outline" size={17} color={downloadBlocked ? colors.textSoft : colors.textSecondary} />
               )}
-              <Text style={[styles.downloadActionText, downloadBlocked && styles.downloadActionTextBlocked]}>PDF</Text>
             </Pressable>
           ) : null}
           <View style={styles.openAction}>
@@ -288,40 +239,7 @@ function CheckedPaperRow({
 function LibrarySkeleton() {
   return (
     <View style={styles.skeletonStack}>
-      <View style={styles.shellHeader}>
-        <View style={styles.headerIdentity}>
-          <View style={styles.backButtonSkeleton} />
-          <View style={styles.brandGroup}>
-            <AuthLogoMark size={40} />
-            <View>
-              <View style={styles.skeletonLineShort} />
-              <View style={[styles.skeletonLineTiny, { marginTop: spacing[1] }]} />
-            </View>
-          </View>
-        </View>
-        <View style={styles.countPillSkeleton} />
-      </View>
-
-      <View style={styles.overlineSkeleton} />
-      <View style={styles.heroTitleSkeleton} />
-      <View style={styles.heroTitleSkeletonShort} />
-      <View style={styles.heroBodySkeleton} />
-
-      <View style={styles.assessmentPanel}>
-        <View style={styles.skeletonAssessmentRow}>
-          <View style={styles.skeletonAssessmentCopy}>
-            <View style={styles.overlineSkeletonDark} />
-            <View style={styles.assessmentTitleSkeleton} />
-            <View style={styles.assessmentBodySkeleton} />
-          </View>
-          <View style={styles.scoreRingPlaceholder} />
-        </View>
-        <View style={styles.metricGrid}>
-          <View style={styles.metricCardSkeleton} />
-          <View style={styles.metricCardSkeleton} />
-          <View style={styles.metricCardSkeleton} />
-        </View>
-      </View>
+      <View style={styles.summarySkeleton} />
 
       <View style={styles.searchRowSkeleton}>
         <View style={styles.searchSkeleton} />
@@ -334,12 +252,7 @@ function LibrarySkeleton() {
         <View style={styles.tabSkeleton} />
       </View>
 
-      <View style={styles.sectionHeader}>
-        <View>
-          <View style={styles.sectionTitleSkeleton} />
-          <View style={[styles.sectionSubtitleSkeleton, { marginTop: spacing[1] }]} />
-        </View>
-      </View>
+      <View style={styles.sectionTitleSkeleton} />
 
       <View style={styles.paperList}>
         {Array.from({ length: 3 }).map((_, index) => (
@@ -734,12 +647,11 @@ function countActiveFilters(filters: CheckedPapersFilterValue) {
 }
 
 export default function CheckedPapersLibraryScreen() {
+  const onHeaderScroll = useAppHeaderScroll()
   const navigation = useNavigation<any>()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const isStaff = Boolean(user && !isLearnerRole(user.role))
-  const { width } = useWindowDimensions()
-  const compact = width < 380
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState<CheckedPapersFilterValue>(EMPTY_FILTERS)
   const [filterVisible, setFilterVisible] = useState(false)
@@ -964,62 +876,14 @@ export default function CheckedPapersLibraryScreen() {
 
   const header = (
     <View style={styles.headerStack}>
-      <View style={styles.shellHeader}>
-        <View style={styles.headerIdentity}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            accessibilityState={{ disabled: !navigation.canGoBack() }}
-            disabled={!navigation.canGoBack()}
-            onPress={() => {
-              if (navigation.canGoBack()) {
-                navigation.goBack()
-              }
-            }}
-            style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed, !navigation.canGoBack() && styles.backButtonDisabled]}
-          >
-            <Ionicons name="arrow-back" size={18} color={colors.nav} />
-          </Pressable>
-          <View style={styles.brandGroup}>
-            <AuthLogoMark size={40} />
-            <View>
-              <Text style={styles.brandName}>Eduraa AI</Text>
-              <Text style={styles.brandContext}>Assessment intelligence</Text>
-            </View>
-          </View>
-        </View>
-        <View style={styles.countPill}>
-          <Text style={styles.countPillText}>
-            {formatPaperCount(totalCount)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.introBlock}>
-        <Text style={[styles.pageTitle, compact && styles.pageTitleCompact]}>
-          Results that{'\n'}move you forward.
-        </Text>
-        <Text style={styles.pageSubtitle}>
-          Checked papers, honest feedback, and the next repair in one focused inbox.
-        </Text>
-      </View>
-
-      <LinearGradient colors={['#07152d', '#0f1d37', '#13253f']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.assessmentPanel}>
-        <View style={styles.assessmentTop}>
-          <View style={styles.assessmentCopy}>
-            <Text style={styles.assessmentEyebrow}>This week's signal</Text>
-            <Text style={styles.assessmentTitle}>{assessment.headline}</Text>
-            <Text style={styles.assessmentBody}>{assessment.insight}</Text>
-          </View>
-          <ScoreRing percent={scorePercentValue} compact={compact} />
-        </View>
-
-        <View style={styles.metricGrid}>
-          <SummaryMetric label="Checked" value={String(totalCount).padStart(2, '0')} />
-          <SummaryMetric label="Growth" value={assessment.delta == null ? '—' : `${assessment.delta > 0 ? '+' : ''}${assessment.delta}%`} divider />
-          <SummaryMetric label="In review" value={String(displayedReviewCount).padStart(2, '0')} divider />
-        </View>
-      </LinearGradient>
+      <SummaryStrip
+        stats={[
+          { label: assessment.latest ? 'Latest' : 'Average', value: scorePercentValue == null ? '—' : `${scorePercentValue}%` },
+          { label: 'Checked', value: String(totalCount) },
+          { label: 'Growth', value: assessment.delta == null ? '—' : `${assessment.delta > 0 ? '+' : ''}${assessment.delta}%`, tone: assessment.delta == null ? 'default' : assessment.delta >= 0 ? 'success' : 'danger' },
+          { label: 'In review', value: String(displayedReviewCount), tone: displayedReviewCount > 0 ? 'warning' : 'default' },
+        ]}
+      />
 
       <View style={styles.searchRow}>
         <View style={styles.searchField}>
@@ -1079,16 +943,11 @@ export default function CheckedPapersLibraryScreen() {
         </Pressable>
       ) : null}
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Recent papers</Text>
-        <Text style={styles.sectionSubtitle}>{visibleCount} result{visibleCount === 1 ? '' : 's'}</Text>
-        {isFetching ? (
-          <View style={styles.refreshChip}>
-            <ActivityIndicator size="small" color={colors.accentStrong} />
-            <Text style={styles.refreshChipText}>Refreshing</Text>
-          </View>
-        ) : null}
-      </View>
+      <SectionHeading
+        title="Recent papers"
+        meta={`${visibleCount} result${visibleCount === 1 ? '' : 's'}`}
+        action={isFetching ? <ActivityIndicator size="small" color={colors.accentStrong} accessibilityLabel="Refreshing" /> : undefined}
+      />
 
       {hasCacheAndError ? (
         <View style={styles.cachedBanner}>
@@ -1197,6 +1056,8 @@ export default function CheckedPapersLibraryScreen() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={header}
           ListEmptyComponent={listEmpty}
+          onScroll={onHeaderScroll}
+          scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={() => void refetch()} tintColor={colors.accent} colors={[colors.accent]} />}
@@ -1224,6 +1085,7 @@ export default function CheckedPapersLibraryScreen() {
 }
 
 const styles = StyleSheet.create({
+  summarySkeleton: { height: 72, borderRadius: radius.card, backgroundColor: colors.slate[100] },
   screenRoot: {
     flex: 1,
     paddingBottom: 0,
@@ -1247,206 +1109,6 @@ const styles = StyleSheet.create({
   },
   headerStack: {
     gap: spacing[3],
-  },
-  shellHeader: {
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  headerIdentity: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    minWidth: 0,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    ...shadows.xs,
-  },
-  backButtonPressed: {
-    opacity: 0.75,
-  },
-  backButtonDisabled: {
-    opacity: 0.56,
-  },
-  brandGroup: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-    minWidth: 0,
-  },
-  brandName: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 15,
-    lineHeight: 19,
-  },
-  brandContext: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
-    lineHeight: 14,
-    marginTop: 1,
-  },
-  countPill: {
-    minHeight: 36,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing[3],
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff0e5',
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
-  },
-  countPillText: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    letterSpacing: 1,
-  },
-  introBlock: {
-    gap: 1,
-  },
-  overline: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  pageTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.heading,
-    fontSize: 24,
-    lineHeight: 25,
-    letterSpacing: -0.3,
-  },
-  pageTitleCompact: {
-    fontSize: 23,
-    lineHeight: 25,
-  },
-  pageSubtitle: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 11,
-    lineHeight: 16,
-    maxWidth: 320,
-  },
-  assessmentPanel: {
-    borderRadius: 24,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[3],
-    gap: spacing[3],
-    backgroundColor: '#0f1d37',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    ...shadows.hero,
-  },
-  assessmentTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[2],
-  },
-  assessmentCopy: {
-    flex: 1,
-    gap: spacing[1],
-    minWidth: 0,
-  },
-  assessmentEyebrow: {
-    color: colors.accentLight,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 8,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  assessmentTitle: {
-    color: colors.textOnDark,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 15,
-    lineHeight: 18,
-    letterSpacing: -0.2,
-  },
-  assessmentBody: {
-    color: 'rgba(255,255,255,0.72)',
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 9,
-    lineHeight: 13,
-  },
-  scoreRingWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreRingCopy: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreRingValue: {
-    color: colors.textOnDark,
-    fontFamily: typography.fonts.heading,
-    fontSize: 18,
-    lineHeight: 21,
-  },
-  scoreRingLabel: {
-    color: 'rgba(255,255,255,0.62)',
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 7,
-    marginTop: 1,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  metricGrid: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.12)',
-  },
-  metricCard: {
-    flex: 1,
-    minWidth: 0,
-    paddingHorizontal: spacing[2],
-    paddingTop: spacing[2],
-    gap: 1,
-  },
-  metricCardDivider: {
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255,255,255,0.10)',
-  },
-  metricLabel: {
-    color: 'rgba(255,255,255,0.68)',
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 7,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  metricValue: {
-    color: colors.textOnDark,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 14,
-    lineHeight: 17,
-  },
-  assessmentFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-  },
-  assessmentFooterText: {
-    flex: 1,
-    color: 'rgba(255,255,255,0.74)',
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
   },
   searchRow: {
     flexDirection: 'row',
@@ -1501,14 +1163,6 @@ const styles = StyleSheet.create({
     borderColor: colors.borderBrand,
     backgroundColor: colors.accentSurface,
   },
-  filterButtonText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-  },
-  filterButtonTextActive: {
-    color: colors.accentStrong,
-  },
   filterBadge: {
     minWidth: 20,
     height: 20,
@@ -1556,75 +1210,16 @@ const styles = StyleSheet.create({
   },
   questionReviewTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 12,
     lineHeight: 16,
   },
   questionReviewText: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 9,
+    fontSize: 11,
     lineHeight: 13,
     marginTop: 2,
-  },
-  tabPill: {
-    minHeight: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 0,
-    paddingHorizontal: spacing[2],
-    borderRadius: radius.full,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tabPillSelected: {
-    backgroundColor: colors.nav,
-    borderColor: colors.nav,
-  },
-  tabPillPressed: {
-    opacity: 0.85,
-  },
-  tabText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
-  },
-  tabTextSelected: {
-    color: colors.textOnDark,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: spacing[2],
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 16,
-    lineHeight: 19,
-  },
-  sectionSubtitle: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 9,
-  },
-  refreshChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
-    backgroundColor: colors.accentSurface,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
-  },
-  refreshChipText: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
   },
   cachedBanner: {
     borderRadius: radius.card,
@@ -1663,33 +1258,8 @@ const styles = StyleSheet.create({
   paperList: {
     gap: spacing[3],
   },
-  paperCard: {
-    position: 'relative',
-    paddingHorizontal: spacing[1],
-    paddingVertical: spacing[3],
-    gap: spacing[2],
-    borderTopWidth: 1,
-    borderTopColor: '#e9ddcf',
-  },
-  paperCardFeatured: {
-    paddingHorizontal: spacing[3],
-    borderTopWidth: 0,
-    borderRadius: 22,
-    backgroundColor: '#fffdf9',
-    borderWidth: 1,
-    borderColor: 'rgba(7,21,45,0.07)',
-    overflow: 'hidden',
-  },
-  featuredRail: {
-    position: 'absolute',
-    left: 0,
-    top: spacing[4],
-    width: 3,
-    height: 44,
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
-    backgroundColor: colors.accent,
-  },
+  paperCard: { padding: spacing[4], gap: spacing[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  paperCardFeatured: { borderColor: colors.borderBrand },
   paperCardPressed: {
     opacity: 0.92,
   },
@@ -1701,81 +1271,35 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing[3],
   },
-  paperIconTile: {
-    width: 43,
-    height: 43,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
+  paperIconTile: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
   paperCopy: {
     flex: 1,
     minWidth: 0,
     gap: 2,
   },
-  paperMeta: {
-    color: colors.textSoft,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 8,
-    letterSpacing: 0,
-  },
-  paperTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  paperInsight: {
-    flex: 1,
-    minWidth: 0,
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 9,
-    lineHeight: 13,
-  },
+  paperMeta: { ...typography.roles.caption, color: colors.textMuted },
+  paperTitle: { ...typography.roles.rowTitle, color: colors.nav },
+  paperInsight: { ...typography.roles.caption, flex: 1, minWidth: 0, color: colors.textSecondary },
   scoreTile: {
     alignItems: 'flex-end',
     gap: 2,
   },
-  scorePercent: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 16,
-    lineHeight: 19,
-  },
+  scorePercent: { fontFamily: typography.fonts.bodyBold, fontSize: 20, lineHeight: 24, color: colors.nav, fontVariant: ['tabular-nums'] },
   scorePercentNeedsInput: {
     color: colors.accentStrong,
   },
-  scoreFraction: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 8,
-    letterSpacing: 0,
-  },
+  scoreFraction: { ...typography.roles.caption, color: colors.textMuted },
   scoreFractionNeedsInput: {
-    color: colors.accentStrong,
+    color: colors.textMuted,
     textTransform: 'uppercase',
   },
-  progressTrack: {
-    height: 4,
-    marginLeft: 55,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-    overflow: 'hidden',
-  },
+  progressTrack: { height: 4, borderRadius: radius.full, backgroundColor: colors.cardMuted, overflow: 'hidden' },
   progressFill: {
     height: '100%',
     borderRadius: radius.full,
     backgroundColor: colors.accent,
   },
-  paperFooter: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: spacing[1],
-    paddingLeft: 55,
-  },
+  paperFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
   reviewNotice: {
     marginTop: spacing[2],
     minHeight: 44,
@@ -1796,81 +1320,19 @@ const styles = StyleSheet.create({
   reviewNoticeTitle: {
     color: colors.text,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
   },
   reviewNoticeText: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 9,
+    fontSize: 11,
     lineHeight: 12,
   },
-  paperActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-    flexShrink: 0,
-  },
-  paperFooterLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-    minWidth: 0,
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: spacing[2],
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.accentSurface,
-  },
-  statusText: {
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  footerMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    minWidth: 0,
-  },
-  footerMetaText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
-  },
-  openAction: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-    flexShrink: 0,
-    paddingHorizontal: spacing[1],
-    borderRadius: radius.full,
-    backgroundColor: 'transparent',
-  },
-  openActionText: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
-  },
-  downloadAction: {
-    width: 44,
-    minHeight: 44,
-    paddingHorizontal: 0,
-    borderRadius: radius.full,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 0,
-  },
+  paperActions: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], flexShrink: 0 },
+  openAction: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: spacing[1] },
+  openActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  downloadAction: { width: 36, height: 36, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, alignItems: 'center', justifyContent: 'center' },
   downloadActionPressed: {
     backgroundColor: colors.accentSurface,
   },
@@ -1880,41 +1342,12 @@ const styles = StyleSheet.create({
   downloadActionBlocked: {
     opacity: 0.5,
   },
-  downloadActionText: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 7,
-    lineHeight: 9,
-    letterSpacing: 0.35,
-  },
-  downloadActionTextBlocked: {
-    color: colors.textSoft,
-  },
-  deleteAction: {
-    width: 44,
-    minHeight: 44,
-    paddingHorizontal: 0,
-    borderRadius: radius.full,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 0,
-  },
+  deleteAction: { width: 36, height: 36, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, alignItems: 'center', justifyContent: 'center' },
   deleteActionPressed: {
     backgroundColor: colors.dangerSurface,
   },
   deleteActionDisabled: {
     opacity: 0.5,
-  },
-  deleteActionText: {
-    color: colors.danger,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 7,
-    lineHeight: 9,
-    letterSpacing: 0.15,
-  },
-  deleteActionTextBlocked: {
-    color: colors.textSoft,
   },
   downloadErrorBanner: {
     minHeight: 48,
@@ -1946,14 +1379,14 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.textSecondary,
     fontFamily: typography.fonts.bodySemibold,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
   },
   downloadErrorText: {
     flex: 1,
     color: colors.danger,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
   },
   errorWrap: {
@@ -1972,7 +1405,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadows.sm,
   },
   stateIconWrap: {
     width: 72,
@@ -1986,7 +1418,7 @@ const styles = StyleSheet.create({
   },
   stateTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
     lineHeight: 23,
     textAlign: 'center',
@@ -2006,96 +1438,6 @@ const styles = StyleSheet.create({
   skeletonStack: {
     gap: spacing[3],
     padding: spacing[3],
-  },
-  backButtonSkeleton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
-  skeletonLineShort: {
-    width: 96,
-    height: 14,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
-  skeletonLineTiny: {
-    width: 70,
-    height: 10,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
-  countPillSkeleton: {
-    width: 86,
-    height: 36,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
-  overlineSkeleton: {
-    width: 198,
-    height: 10,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
-  heroTitleSkeleton: {
-    width: '84%',
-    height: 34,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
-  heroTitleSkeletonShort: {
-    width: '56%',
-    height: 34,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
-  heroBodySkeleton: {
-    width: '80%',
-    height: 16,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
-  skeletonAssessmentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[4],
-  },
-  skeletonAssessmentCopy: {
-    flex: 1,
-    gap: spacing[2],
-  },
-  overlineSkeletonDark: {
-    width: 126,
-    height: 10,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  assessmentTitleSkeleton: {
-    width: '86%',
-    height: 24,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-  },
-  assessmentBodySkeleton: {
-    width: '74%',
-    height: 15,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-  },
-  scoreRingPlaceholder: {
-    width: 104,
-    height: 104,
-    borderRadius: radius.full,
-    borderWidth: 10,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  metricCardSkeleton: {
-    flexGrow: 1,
-    flexBasis: 0,
-    minWidth: 96,
-    height: 74,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(255,255,255,0.10)',
   },
   searchRowSkeleton: {
     flexDirection: 'row',
@@ -2131,12 +1473,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     backgroundColor: colors.cardMuted,
   },
-  sectionSubtitleSkeleton: {
-    width: 86,
-    height: 12,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardMuted,
-  },
   paperCardSkeleton: {
     borderRadius: radius.card,
     padding: spacing[4],
@@ -2144,7 +1480,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fffdf8',
     borderWidth: 1,
     borderColor: colors.borderSubtle,
-    ...shadows.sm,
   },
   paperIconSkeleton: {
     width: 48,
@@ -2229,7 +1564,7 @@ const styles = StyleSheet.create({
   deleteSheetIcon: {
     width: 48,
     height: 48,
-    borderRadius: 18,
+    borderRadius: radius.card,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.dangerSurface,
@@ -2239,14 +1574,14 @@ const styles = StyleSheet.create({
   deleteSheetEyebrow: {
     color: colors.danger,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     lineHeight: 12,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   deleteSheetTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 22,
     lineHeight: 27,
     letterSpacing: -0.3,
@@ -2364,7 +1699,7 @@ const styles = StyleSheet.create({
   sheetTitle: {
     flex: 1,
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
     lineHeight: 23,
   },
@@ -2473,7 +1808,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing[3],
     paddingHorizontal: spacing[4],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.backgroundMuted,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
