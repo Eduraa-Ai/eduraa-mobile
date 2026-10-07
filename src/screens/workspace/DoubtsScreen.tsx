@@ -22,7 +22,7 @@ import { File as ExpoFile } from 'expo-file-system'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AppScreen, AuthenticatedImage, EmptyState, ErrorState, SkeletonCard } from '../../components/ui'
+import { AppHeaderConfig, AppScreen, AuthenticatedImage, EmptyState, ErrorState, SectionHeading, SegmentedTabs, SkeletonCard, StatusPill as SharedStatusPill } from '../../components/ui'
 import {
   type DoubtAttachment,
   type DoubtAttachmentInput,
@@ -83,92 +83,35 @@ function relativeDate(value: string) {
   return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
 
+// Each doubts view sets the shared app header: its title, and a back button that
+// returns to the previous view rather than leaving Doubts.
 function ScreenHeader({ title, onBack }: { title: string; onBack?: () => void }) {
-  return (
-    <View style={styles.header}>
-      {onBack ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to doubts"
-          hitSlop={8}
-          onPress={onBack}
-          style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-        >
-          <Ionicons name="arrow-back" size={21} color={colors.nav} />
-        </Pressable>
-      ) : (
-        <View style={styles.brandMark}>
-          <Ionicons name="chatbubble-ellipses" size={20} color={colors.accent} />
-        </View>
-      )}
-      <View style={styles.headerCopy}>
-        <Text style={styles.headerEyebrow}>PRIVATE ACADEMIC DESK</Text>
-        <Text style={styles.headerTitle} numberOfLines={2}>{title}</Text>
-      </View>
-    </View>
-  )
+  return <AppHeaderConfig title={title} onBack={onBack} />
 }
 
-function StatusPill({ status }: { status: DoubtStatus }) {
+function DoubtStatusPill({ status }: { status: DoubtStatus }) {
   const theme = statusTheme[status]
-  return (
-    <View style={[styles.statusPill, { backgroundColor: theme.surface }]} accessibilityLabel={`Status: ${theme.label}`}>
-      <Ionicons name={theme.icon} size={14} color={theme.color} />
-      <Text style={[styles.statusPillText, { color: theme.color }]}>{theme.label}</Text>
-    </View>
-  )
+  return <SharedStatusPill label={theme.label} icon={theme.icon} tone={status === 'resolved' ? 'success' : 'warning'} />
 }
 
-function FocusPanel({ items, isTeacher }: { items: DoubtSummary[]; isTeacher: boolean }) {
-  const pending = items.filter((item) => item.status !== 'resolved').length
-  const resolved = items.filter((item) => item.status === 'resolved').length
-  return (
-    <View style={styles.focusPanel} accessible accessibilityLabel={`${pending} pending and ${resolved} resolved doubts`}>
-      <View style={styles.focusGlow} />
-      <View style={styles.focusTop}>
-        <View style={styles.focusIcon}>
-          <Ionicons name={isTeacher ? 'file-tray-full-outline' : 'lock-closed-outline'} size={20} color="#fdba74" />
-        </View>
-        <View style={styles.focusCopy}>
-          <Text style={styles.focusKicker}>{isTeacher ? 'ASSIGNED QUEUE' : 'PRIVATE BY SCHOOL ROLE'}</Text>
-          <Text style={styles.focusPrivacy}>Only the assigned student and teacher can read these threads.</Text>
-        </View>
-      </View>
-      <View style={styles.focusQueueRow}>
-        <View style={styles.focusAttention}>
-          <View style={styles.focusDot} />
-          <Text style={styles.focusAttentionText}>
-            <Text style={styles.focusCount}>{pending}</Text> {isTeacher ? 'need your reply' : 'waiting for teacher'}
-          </Text>
-        </View>
-        <Ionicons name="arrow-forward" size={15} color="#aab5c6" />
-      </View>
-    </View>
-  )
-}
-
-function DoubtRow({ item, isTeacher, onPress }: { item: DoubtSummary; isTeacher: boolean; onPress: () => void }) {
+function DoubtRow({ item, isTeacher, first, onPress }: { item: DoubtSummary; isTeacher: boolean; first: boolean; onPress: () => void }) {
+  const person = isTeacher ? `${item.student_name}${item.class_label ? ` · ${item.class_label}` : ''}` : item.teacher_name
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}. ${statusTheme[item.status].label}. ${item.subject}`}
-      style={({ pressed }) => [styles.threadRow, pressed && styles.threadPressed]}
+      accessibilityLabel={`${item.title}. ${statusTheme[item.status].label}. ${item.subject}. ${person}`}
+      style={({ pressed }) => [styles.threadRow, !first && styles.threadDivider, pressed && styles.threadPressed]}
     >
-      <View style={styles.threadRail} />
       <View style={styles.threadContent}>
-        <View style={styles.threadMetaRow}>
-          <Text style={styles.threadSubject}>{item.subject}</Text>
-          <StatusPill status={item.status} />
-        </View>
-        <Text style={styles.threadTitle}>{item.title}</Text>
-        <Text style={styles.threadPreview} numberOfLines={2}>{item.last_message || 'Open the thread to read the question.'}</Text>
+        <Text style={styles.threadTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.threadPreview} numberOfLines={1}>{item.last_message || 'Open the thread to read the question.'}</Text>
         <View style={styles.threadFooter}>
-          <Text style={styles.threadPerson} numberOfLines={1}>{isTeacher ? `${item.student_name} · ${item.class_label ?? 'Assigned class'}` : item.teacher_name}</Text>
-          <Text style={styles.threadDate}>{relativeDate(item.latest_message_at)}</Text>
+          <Text style={styles.threadPerson} numberOfLines={1}>{`${item.subject} · ${person} · ${relativeDate(item.latest_message_at)}`}</Text>
+          <DoubtStatusPill status={item.status} />
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textSoft} />
+      <Ionicons name="chevron-forward" size={17} color={colors.textSoft} />
     </Pressable>
   )
 }
@@ -846,7 +789,7 @@ function ThreadView({ id, onBack }: { id: string; onBack: () => void }) {
 
       <View style={styles.threadHero}>
         <View style={styles.threadHeroTop}>
-          <StatusPill status={doubt.status} />
+          <DoubtStatusPill status={doubt.status} />
           <Text style={styles.threadHeroDate}>Updated {relativeDate(doubt.latest_message_at)}</Text>
         </View>
         <View style={styles.threadHeroIdentity}>
@@ -1048,7 +991,6 @@ export default function DoubtsScreen() {
       >
         <ScreenHeader title={isTeacher ? 'Student doubts' : 'Ask your teacher'} onBack={() => returnFromDoubts(navigation, isTeacher)} />
 
-        {listQuery.data ? <FocusPanel items={listQuery.data} isTeacher={isTeacher} /> : null}
         {listQuery.isLoading ? (
           <View style={styles.loadingStack}>
             <SkeletonCard lines={2} style={styles.focusSkeleton} />
@@ -1069,33 +1011,21 @@ export default function DoubtsScreen() {
 
         {listQuery.data ? (
           <>
-            <View style={styles.listHeadingRow}>
-              <View style={styles.listHeadingCopy}>
-                <Text style={styles.listTitle}>{isTeacher ? 'Assigned queue' : 'Your threads'}</Text>
-                <Text style={styles.listSubtitle}>{isTeacher ? 'Answer clearly, then resolve when complete.' : 'Every thread stays between you and the assigned teacher.'}</Text>
-              </View>
-              {!isTeacher ? (
+            <SectionHeading
+              title={isTeacher ? 'Assigned queue' : 'Your threads'}
+              subtitle={`${listQuery.data.filter((item) => item.status !== 'resolved').length} ${isTeacher ? 'need your reply' : 'waiting for a teacher'} · private to ${isTeacher ? 'you and the student' : 'you and your teacher'}`}
+              action={!isTeacher ? (
                 <Pressable accessibilityRole="button" accessibilityLabel="Create a new doubt" onPress={() => setComposing(true)} style={({ pressed }) => [styles.addButton, pressed && styles.buttonPressed]}>
                   <Ionicons name="add" size={22} color={colors.white} />
                 </Pressable>
-              ) : null}
-            </View>
-            <View style={styles.filters} accessibilityRole="tablist">
-              {filterOptions.map((option) => {
-                const selected = filter === option.key
-                return (
-                  <Pressable
-                    key={option.key}
-                    onPress={() => setFilter(option.key)}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected }}
-                    style={[styles.filter, selected && styles.filterSelected]}
-                  >
-                    <Text style={[styles.filterText, selected && styles.filterTextSelected]}>{option.label}</Text>
-                  </Pressable>
-                )
-              })}
-            </View>
+              ) : undefined}
+            />
+            <SegmentedTabs
+              accessibilityLabel="Doubt status"
+              tabs={filterOptions.map((option) => ({ id: option.key, label: option.label }))}
+              value={filter}
+              onChange={setFilter}
+            />
             {hasContextFilters ? (
               <>
                 <Pressable
@@ -1132,7 +1062,7 @@ export default function DoubtsScreen() {
               </>
             ) : null}
             {filtered.length ? (
-              <View style={styles.threadList}>{filtered.map((item) => <DoubtRow key={item.id} item={item} isTeacher={isTeacher} onPress={() => setActiveId(item.id)} />)}</View>
+              <View style={styles.threadList}>{filtered.map((item, index) => <DoubtRow key={item.id} item={item} isTeacher={isTeacher} first={index === 0} onPress={() => setActiveId(item.id)} />)}</View>
             ) : (
               <View>
                 <EmptyState
@@ -1155,29 +1085,10 @@ export default function DoubtsScreen() {
 }
 
 const styles = StyleSheet.create({
+  threadDivider: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
   flex: { flex: 1 },
-  screen: { paddingBottom: spacing[20], gap: spacing[4], backgroundColor: '#fbf6ec' },
-  header: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  brandMark: { width: 48, height: 48, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
-  iconButton: { width: 48, height: 48, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
-  headerCopy: { flex: 1 },
-  headerEyebrow: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.25 },
-  headerTitle: { marginTop: 2, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 22, lineHeight: 27, letterSpacing: -0.4 },
+  screen: { paddingBottom: spacing[20], gap: spacing[3] },
   pressed: { opacity: 0.7 },
-  focusPanel: { position: 'relative', overflow: 'hidden', minHeight: 116, padding: spacing[4], borderRadius: radius.lg, backgroundColor: '#07152d', ...shadows.md },
-  focusGlow: { position: 'absolute', width: 150, height: 150, borderRadius: 75, right: -55, bottom: -80, backgroundColor: 'rgba(243,108,33,0.18)' },
-  focusTop: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  focusIcon: { width: 42, height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
-  focusCopy: { flex: 1 },
-  focusKicker: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.05 },
-  focusPrivacy: { marginTop: 3, color: '#b7c1d0', fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
-  focusQueueRow: { minHeight: 26, marginTop: spacing[2], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
-  focusAttention: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  focusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fb923c' },
-  focusAttentionText: { color: '#fed7aa', fontFamily: typography.fonts.bodyBold, fontSize: 11 },
-  focusCount: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
-  statusPill: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing[2], borderRadius: radius.full },
-  statusPillText: { fontFamily: typography.fonts.bodyBold, fontSize: 10 },
   loadingStack: { gap: spacing[4] },
   focusSkeleton: { minHeight: 116 },
   threadHeroSkeleton: { minHeight: 104 },
@@ -1186,49 +1097,36 @@ const styles = StyleSheet.create({
   noticeText: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
   noticeAction: { minWidth: 48, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   noticeActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  listHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
-  listHeadingCopy: { flex: 1, minWidth: 0 },
-  listTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 20 },
-  listSubtitle: { flexShrink: 1, marginTop: 3, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
   addButton: { width: 48, height: 48, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, ...shadows.sm },
   buttonPressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
-  filters: { flexDirection: 'row', padding: 4, borderRadius: radius.md, backgroundColor: '#efe7db' },
-  filter: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
-  filterSelected: { backgroundColor: colors.white, ...shadows.xs },
-  filterText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
-  filterTextSelected: { color: colors.nav },
   contextFilterToggle: { alignSelf: 'flex-start', minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderWidth: 1, borderColor: '#d8cdbf', borderRadius: radius.sm, backgroundColor: colors.white },
   contextFilterToggleActive: { borderColor: colors.accent, backgroundColor: '#fff7ed' },
   contextFilterToggleText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   contextFilterToggleTextActive: { color: colors.accentStrong },
   contextFilters: { gap: spacing[3], paddingVertical: spacing[3], borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#ded4c7' },
   contextFilterGroup: { gap: spacing[2] },
-  contextFilterLabel: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  contextFilterLabel: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   contextFilterChoices: { gap: spacing[2], paddingRight: spacing[3] },
   contextFilterChip: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderWidth: 1, borderColor: '#ddd2c5', borderRadius: radius.full, backgroundColor: colors.white },
   contextFilterChipActive: { borderColor: colors.nav, backgroundColor: colors.nav },
   contextFilterChipText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   contextFilterChipTextActive: { color: colors.white },
-  contextFilterCount: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  contextFilterCount: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   clearContextFilters: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing[2] },
   clearContextFiltersText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
-  threadList: { overflow: 'hidden', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#d8cdbf' },
-  threadRow: { minHeight: 150, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[4], borderBottomWidth: 1, borderBottomColor: '#e8dfd3' },
-  threadPressed: { backgroundColor: '#fff7ed' },
-  threadRail: { width: 4, alignSelf: 'stretch', borderRadius: radius.full, backgroundColor: colors.accent },
-  threadContent: { flex: 1, gap: spacing[2] },
-  threadMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
-  threadSubject: { flex: 1, color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 0.7, textTransform: 'uppercase' },
-  threadTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 16, lineHeight: 21 },
-  threadPreview: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
-  threadFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
-  threadPerson: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  threadDate: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  threadList: { overflow: 'hidden', borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  threadRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingVertical: spacing[3], paddingHorizontal: spacing[4] },
+  threadPressed: { backgroundColor: colors.backgroundMuted },
+  threadContent: { flex: 1, minWidth: 0, gap: 3 },
+  threadTitle: { ...typography.roles.rowTitle, color: colors.nav },
+  threadPreview: { ...typography.roles.caption, color: colors.textSecondary },
+  threadFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: 2 },
+  threadPerson: { ...typography.roles.caption, flex: 1, fontSize: 11.5, color: colors.textMuted },
   composeIntro: { flexDirection: 'row', gap: spacing[4], paddingVertical: spacing[3], borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#d8cdbf' },
   composeStep: { width: 42, height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
-  composeStepText: { color: '#fdba74', fontFamily: typography.fonts.heading, fontSize: 18 },
+  composeStepText: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 18 },
   composeIntroCopy: { flex: 1 },
-  composeTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 18, lineHeight: 23 },
+  composeTitle: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 18, lineHeight: 23 },
   composeBody: { marginTop: spacing[1], color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
   formSection: { gap: spacing[3] },
   teacherList: { gap: spacing[2] },
@@ -1243,14 +1141,13 @@ const styles = StyleSheet.create({
   inputGroup: { gap: spacing[2] },
   inputLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   inputLabel: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  inputCount: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
   textInput: { minHeight: 54, paddingHorizontal: spacing[4], borderWidth: 1, borderColor: '#d8cdbf', borderRadius: radius.md, backgroundColor: colors.white, color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 14 },
   textArea: { minHeight: 150, paddingTop: spacing[4], lineHeight: 21 },
   inputError: { borderColor: colors.danger, backgroundColor: colors.dangerSurface },
   errorText: { color: colors.danger, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
   addFileAction: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[4], borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.accent, backgroundColor: colors.accentSurface },
   addFileText: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  addFileMeta: { marginLeft: 'auto', color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  addFileMeta: { marginLeft: 'auto', color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   attachmentList: { gap: spacing[2] },
   attachmentItem: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing[2], padding: spacing[2], borderRadius: radius.md, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
   attachmentItemImage: { minHeight: 72 },
@@ -1260,7 +1157,7 @@ const styles = StyleSheet.create({
   attachmentCopy: { flex: 1, minWidth: 0 },
   attachmentName: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   attachmentNameMine: { color: colors.white },
-  attachmentMeta: { marginTop: 3, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9 },
+  attachmentMeta: { marginTop: 3, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   attachmentMetaMine: { color: '#aab5c6' },
   attachmentAction: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: 'rgba(243,108,33,0.10)' },
   attachmentPreview: { width: 58, height: 58, overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.backgroundMuted },
@@ -1269,11 +1166,11 @@ const styles = StyleSheet.create({
   mediaPreviewSheet: { flex: 1, width: '100%', overflow: 'hidden', backgroundColor: colors.nav },
   mediaPreviewHeader: { minHeight: 82, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], paddingHorizontal: spacing[4], paddingBottom: spacing[3] },
   mediaPreviewHeadingCopy: { flex: 1, minWidth: 0, gap: 3 },
-  mediaPreviewEyebrow: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.2 },
+  mediaPreviewEyebrow: { color: '#fdba74', fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.2 },
   mediaPreviewTitle: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   mediaPreviewClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)' },
   mediaPreviewBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[3] },
-  mediaPreviewCanvas: { width: '100%', overflow: 'hidden', borderRadius: radius.lg, backgroundColor: '#020817', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
+  mediaPreviewCanvas: { width: '100%', overflow: 'hidden', borderRadius: radius.card, backgroundColor: '#020817', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
   mediaPreviewImage: { width: '100%', height: '100%' },
   mediaPreviewFooter: { minHeight: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[4], paddingTop: spacing[3] },
   mediaPreviewFooterCopy: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
@@ -1281,44 +1178,44 @@ const styles = StyleSheet.create({
   primaryButton: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, backgroundColor: colors.nav, ...shadows.sm },
   primaryButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   buttonDisabled: { opacity: 0.46 },
-  formFootnote: { alignSelf: 'center', color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  formFootnote: { alignSelf: 'center', color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   emptyAction: { alignSelf: 'center', minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[5], borderRadius: radius.md, backgroundColor: colors.nav },
   emptyActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  threadHero: { padding: spacing[4], borderRadius: radius.lg, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white, ...shadows.sm },
+  threadHero: { padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
   threadHeroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
-  threadHeroDate: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  threadHeroDate: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   threadHeroIdentity: { marginTop: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
-  threadHeroSubject: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' },
+  threadHeroSubject: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase' },
   threadHeroContext: { flex: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, textAlign: 'right' },
   conversationHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  conversationTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 19 },
-  conversationMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  conversationTitle: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 19 },
+  conversationMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   messageStack: { gap: spacing[3] },
   message: { maxWidth: '91%', padding: spacing[4], borderRadius: radius.lg },
   messageWithAttachment: { width: '91%' },
   messageMine: { alignSelf: 'flex-end', borderBottomRightRadius: radius.xs, backgroundColor: colors.nav },
   messageOther: { alignSelf: 'flex-start', borderBottomLeftRadius: radius.xs, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
-  messageAuthor: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  messageAuthor: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   messageAuthorMine: { color: '#fdba74' },
   messageBody: { marginTop: spacing[2], color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 14, lineHeight: 21 },
   messageBodyMine: { color: colors.white },
-  messageTime: { marginTop: spacing[2], color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 9 },
+  messageTime: { marginTop: spacing[2], color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   messageTimeMine: { color: '#aab5c6' },
   historyStrip: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[2], paddingHorizontal: spacing[3], borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#d8cdbf' },
   historyCopy: { flex: 1 },
   historyTitle: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  historyBody: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
-  resolvedPanel: { flexDirection: 'row', gap: spacing[3], padding: spacing[5], borderRadius: radius.lg, backgroundColor: colors.successSurface },
+  historyBody: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
+  resolvedPanel: { flexDirection: 'row', gap: spacing[3], padding: spacing[4], borderRadius: radius.card, backgroundColor: colors.successSurface },
   resolvedCopy: { flex: 1 },
-  resolvedTitle: { color: colors.success, fontFamily: typography.fonts.headingSemibold, fontSize: 16 },
-  resolvedBody: { marginTop: spacing[1], color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17 },
-  replyPanel: { gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: '#e0d6c8', backgroundColor: colors.white },
+  resolvedTitle: { color: colors.successText, fontFamily: typography.fonts.bodyBold, fontSize: 15 },
+  resolvedBody: { ...typography.roles.caption, marginTop: 2, color: colors.textSecondary },
+  replyPanel: { gap: spacing[2], padding: spacing[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
   replyLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  replyInput: { minHeight: 130, padding: spacing[4], borderRadius: radius.md, backgroundColor: colors.backgroundTint, color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 14, lineHeight: 21 },
+  replyInput: { minHeight: 96, padding: spacing[3], borderRadius: radius.sm, backgroundColor: colors.backgroundMuted, color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 14, lineHeight: 21 },
   resolveAction: { gap: spacing[2] },
-  markResolvedButton: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successSurface },
-  markResolvedButtonText: { color: colors.success, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  markResolvedButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  markResolvedButtonText: { color: colors.successText, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   replyActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing[2] },
-  replyButton: { minWidth: 134, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.md, backgroundColor: colors.nav },
-  replyButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
+  replyButton: { minWidth: 120, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.control, backgroundColor: colors.accent },
+  replyButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
 })

@@ -3,13 +3,13 @@ import { ActivityIndicator, FlatList, StyleSheet, Text, View, RefreshControl } f
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { AnimatedButton, AppScreen } from '../../components/ui'
+import { AnimatedButton, AppScreen, SummaryStrip } from '../../components/ui'
 import { ClassValidationReport, ValidationIssue, classTeacherApi, toApiFailure } from '../../api/classTeacher'
 import { classTeacherKeys, useActiveClassSection, useActiveSemester, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
 import { useClassTeacherStore } from '../../stores/classTeacherStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
-import { ClassContextBar, EmptyCard, FailureCard, InlineLoading, SearchField, StatTile } from './components'
+import { ClassContextBar, EmptyCard, FailureCard, InlineLoading, SearchField } from './components'
 
 function IssueCard({ issue }: { issue: ValidationIssue }) {
   const shortfall = issue.expected_subjects - issue.total_subjects
@@ -135,15 +135,13 @@ export default function ClassValidationScreen() {
 
       {report ? (
         <>
-          <View style={styles.statRow}>
-            <StatTile label="On roster" value={String(report.total_students)} />
-            <StatTile label="With division" value={String(report.assigned_students)} tone={colors.success} />
-            <StatTile
-              label="No division"
-              value={String(report.unassigned_students)}
-              tone={report.unassigned_students > 0 ? colors.danger : colors.text}
-            />
-          </View>
+          <SummaryStrip
+            stats={[
+              { label: 'On roster', value: String(report.total_students) },
+              { label: 'With division', value: String(report.assigned_students), tone: 'success' },
+              { label: 'No division', value: String(report.unassigned_students), tone: report.unassigned_students > 0 ? 'danger' : 'default' },
+            ]}
+          />
 
           <Text style={styles.summaryLine}>
             {report.issues.length === 0
@@ -237,10 +235,6 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     paddingBottom: spacing[6],
   },
-  statRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
-  },
   summaryLine: {
     color: colors.textSecondary,
     fontFamily: typography.fonts.bodyMedium,
@@ -264,7 +258,7 @@ const styles = StyleSheet.create({
   issueName: {
     flex: 1,
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
     lineHeight: 20,
   },

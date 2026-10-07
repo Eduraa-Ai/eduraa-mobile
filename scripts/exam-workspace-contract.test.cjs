@@ -9,19 +9,19 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 test('the B2B learner workspace keeps teacher and owned-practice contracts separate', () => {
   const examsApi = read('src/api/exams.ts')
   const screen = read('src/screens/workspace/ExamsScreen.tsx')
-  const home = read('src/screens/home/HomeScreen.tsx')
+  const home = read('src/screens/workspace/WorkspaceScreen.tsx')
 
   assert.match(examsApi, /apiClient\.get<StudentExamRead\[]>\('\/exams\/student'\)/)
   assert.match(examsApi, /params:\s*\{\s*scope:\s*'mine',\s*limit:\s*200\s*\}/)
   assert.match(screen, /role === 'student'/)
-  assert.match(screen, /label="Teacher"/)
-  assert.match(screen, /label="Practice"/)
+  assert.match(screen, /id: 'teacher', label: 'Teacher'/)
+  assert.match(screen, /id: 'practice', label: 'Practice'/)
   assert.match(screen, /label="More"/)
   assert.match(screen, /function PaperActionsSheet/)
   assert.match(screen, /Download checked PDF/)
   assert.match(screen, /Start a fresh retest/)
   assert.doesNotMatch(screen, /function ExamsPhotoHeader/)
-  assert.match(home, /navigate\("Exams"\)/)
+  assert.match(home, /control\.id === 'student-exams'[\s\S]*navigation\.navigate\('Exams'\)/)
 })
 
 test('download, retest, and owned-paper deletion use the website production contracts', () => {
@@ -141,7 +141,8 @@ test('exam setup cascades teacher, subject, class, and paper context', () => {
 test('exam setup follows the restrained scan-upload composition', () => {
   const screen = read('src/screens/workspace/ExamsScreen.tsx')
 
-  assert.match(screen, /EXAM SETUP/)
+  // The shared app header names the screen; the form must not repeat it.
+  assert.doesNotMatch(screen, /EXAM SETUP/)
   assert.match(screen, /Choose class and subject/)
   assert.match(screen, /Choose paper and name/)
   assert.match(screen, /Student experience/)
@@ -157,7 +158,7 @@ test('existing staff exams render as compact operational records', () => {
   const screen = read('src/screens/workspace/ExamsScreen.tsx')
 
   assert.match(screen, /styles\.staffExamRecord/)
-  assert.match(screen, /Manage schedules, papers, and student visibility\./)
+  assert.match(screen, /title="Your exams"/)
   assert.match(screen, /\{exams\.length\} total/)
   assert.match(screen, /No time limit/)
   assert.match(screen, /Not published/)

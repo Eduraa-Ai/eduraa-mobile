@@ -712,7 +712,7 @@ const styles = StyleSheet.create({
   },
   scanStatusTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.heading,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 28,
     lineHeight: 33,
   },
@@ -742,7 +742,7 @@ const styles = StyleSheet.create({
   },
   statusTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
   },
   statusMeta: {
@@ -769,13 +769,13 @@ const styles = StyleSheet.create({
   },
   focusedTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 19,
     lineHeight: 24,
   },
   proposedScore: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
   },
   blockedCard: {
@@ -794,7 +794,7 @@ const styles = StyleSheet.create({
   },
   blockedTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
   },
   blockerRow: {
@@ -823,7 +823,7 @@ const styles = StyleSheet.create({
   blockerMeta: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     marginTop: 2,
     textTransform: 'capitalize',
   },
@@ -836,14 +836,14 @@ const styles = StyleSheet.create({
   },
   reviewProgress: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 16,
   },
   reviewQuestion: {
     gap: spacing[3],
     borderWidth: 1,
     borderColor: colors.borderSubtle,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.backgroundMuted,
     padding: spacing[4],
   },
@@ -864,7 +864,7 @@ const styles = StyleSheet.create({
   reviewedChip: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.8,
   },
   reviewedChipComplete: {
@@ -873,7 +873,7 @@ const styles = StyleSheet.create({
   reviewQuestionNumber: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 1.1,
   },
   aiMark: {
@@ -898,7 +898,7 @@ const styles = StyleSheet.create({
   answerLabel: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.8,
   },
   answerValue: {
@@ -938,7 +938,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 16,
     paddingHorizontal: spacing[3],
     textAlign: 'center',
@@ -998,13 +998,13 @@ const styles = StyleSheet.create({
   },
   completedScore: {
     color: colors.text,
-    fontFamily: typography.fonts.heading,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 40,
     lineHeight: 44,
   },
   completedScoreMax: {
     color: colors.textMuted,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
   },
   completedOutcome: {
@@ -1085,7 +1085,7 @@ const styles = StyleSheet.create({
   },
   revokeInput: {
     minHeight: 60,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     backgroundColor: colors.backgroundMuted,

@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Modal, Platform, Pressable, RefreshControl, S
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, DateField, ErrorState, MultiSelectField, SelectField, SkeletonCard, TextInputField } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, DateField, EmptyState, ErrorState, MultiSelectField, SectionHeading, SegmentedTabs, SelectField, SkeletonCard, StatusPill, TextInputField } from '../../components/ui'
 import { examsApi, ExamPayload } from '../../api/exams'
 import { cheatSheetsApi, CheatSheetSyllabus, CheatSheetSyllabusList } from '../../api/cheatSheets'
 import { checkedPapersApi } from '../../api/checkedPapers'
@@ -125,34 +125,7 @@ function LibraryStat({ value, label, tone = colors.text }: { value: ReactNode; l
 }
 
 function SectionHeader({ title, subtitle, count }: { title: string; subtitle: string; count?: number }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionCopy}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <Text style={styles.sectionSubtitle}>{subtitle}</Text>
-      </View>
-      {typeof count === 'number' ? (
-        <View style={styles.countPill}>
-          <Text style={styles.countText}>{count}</Text>
-        </View>
-      ) : null}
-    </View>
-  )
-}
-
-function ExamModeButton({ label, icon, selected, onPress }: { label: string; icon: keyof typeof Ionicons.glyphMap; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityLabel={`${label} exams`}
-      accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [styles.examModeButton, selected && styles.examModeButtonActive, pressed && styles.pressed]}
-    >
-      <Ionicons name={icon} size={16} color={selected ? colors.accent : colors.textMuted} />
-      <Text style={[styles.examModeText, selected && styles.examModeTextActive]}>{label}</Text>
-    </Pressable>
-  )
+  return <SectionHeading title={title} subtitle={subtitle} action={count ? <StatusPill label={String(count)} tone="brand" /> : undefined} />
 }
 
 function ExamWorkspaceHero({
@@ -185,23 +158,18 @@ function ExamWorkspaceHero({
 
   return (
     <View style={styles.examHero}>
-      <View style={styles.examQueueRail} />
-      <View style={styles.examHeroTop}>
-        <View style={styles.examHeroIcon}>
-          <Ionicons name="school-outline" size={20} color={colors.accent} />
-        </View>
-        <View style={styles.examHeroCopy}>
-          <Text style={styles.examHeroKicker}>Exam queue · {queueSummary}</Text>
-          <Text style={styles.examHeroTitle}>{focusLabel}</Text>
-        </View>
-      </View>
-
       {!isB2C ? (
-        <View style={styles.examModeSwitch}>
-          <ExamModeButton label="Teacher" icon="calendar-clear-outline" selected={activeTab === 'teacher'} onPress={onTeacher} />
-          <ExamModeButton label="Practice" icon="flash-outline" selected={activeTab === 'practice'} onPress={onPractice} />
-        </View>
+        <SegmentedTabs
+          accessibilityLabel={`Exam sections. ${focusLabel}`}
+          tabs={[
+            { id: 'teacher', label: 'Teacher' },
+            { id: 'practice', label: 'Practice' },
+          ]}
+          value={activeTab}
+          onChange={(tab) => (tab === 'teacher' ? onTeacher() : onPractice())}
+        />
       ) : null}
+      <Text style={styles.examHeroKicker}>{queueSummary}</Text>
     </View>
   )
 }
@@ -1003,6 +971,7 @@ function StaffCardActionButton({
   icon,
   primary = false,
   danger = false,
+  iconOnly = false,
   disabled,
   loading,
   onPress,
@@ -1011,6 +980,8 @@ function StaffCardActionButton({
   icon: keyof typeof Ionicons.glyphMap
   primary?: boolean
   danger?: boolean
+  /** Square icon button; the label stays as the accessibility name. */
+  iconOnly?: boolean
   disabled?: boolean
   loading?: boolean
   onPress: () => void
@@ -1026,6 +997,7 @@ function StaffCardActionButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.staffCardActionButton,
+        iconOnly && styles.staffCardActionIconOnly,
         primary ? styles.staffCardActionButtonPrimary : styles.staffCardActionButtonSecondary,
         danger && styles.staffCardActionButtonDelete,
         disabled && styles.staffCardActionButtonDisabled,
@@ -1037,9 +1009,9 @@ function StaffCardActionButton({
       ) : (
         <Ionicons name={icon} size={16} color={tintColor} />
       )}
-      <Text style={[styles.staffCardActionText, { color: tintColor }]} numberOfLines={1}>
+      {iconOnly ? null : <Text style={[styles.staffCardActionText, { color: tintColor }]} numberOfLines={1}>
         {label}
-      </Text>
+      </Text>}
     </Pressable>
   )
 }
@@ -1047,7 +1019,6 @@ function StaffCardActionButton({
 function StaffExamCard({
   exam,
   linkedPapers,
-  selected,
   syllabus,
   sharingSyllabus,
   deleting,
@@ -1057,7 +1028,6 @@ function StaffExamCard({
 }: {
   exam: Exam
   linkedPapers: PaperListItem[]
-  selected: boolean
   syllabus?: CheatSheetSyllabus
   sharingSyllabus?: boolean
   deleting?: boolean
@@ -1072,7 +1042,7 @@ function StaffExamCard({
   const remainingPaperCount = Math.max(0, linkedPapers.length - visiblePapers.length)
 
   return (
-    <AnimatedCard style={selected ? styles.staffExamRecordSelected : styles.staffExamRecord}>
+    <AnimatedCard style={styles.staffExamRecord}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Edit ${exam.name}`}
@@ -1080,36 +1050,12 @@ function StaffExamCard({
         style={({ pressed }) => [styles.staffExamMain, pressed && styles.pressed]}
       >
         <View style={styles.staffExamHeader}>
-          <View style={styles.staffExamTitleBlock}>
-            <Text style={styles.staffExamTitle} numberOfLines={2}>{exam.name}</Text>
-            <View style={styles.staffExamStatus}>
-              <View style={[styles.staffExamStatusDot, exam.results_published && styles.staffExamStatusDotPublished]} />
-              <Text style={styles.staffExamStatusText}>{exam.results_published ? 'Published' : 'Not published'}</Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textSoft} />
+          <Text style={styles.staffExamTitle} numberOfLines={2}>{exam.name}</Text>
+          <StatusPill label={exam.results_published ? 'Published' : 'Not published'} tone={exam.results_published ? 'success' : 'neutral'} />
         </View>
-
-        <View style={styles.staffExamMetaRow}>
-          <View style={styles.staffExamMetaItem}>
-            <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.staffExamMetaText}>{formatDate(exam.exam_date)}</Text>
-          </View>
-          {classLabel ? <View style={styles.staffExamMetaDivider} /> : null}
-          {classLabel ? <Text style={styles.staffExamMetaText}>{classLabel}</Text> : null}
-        </View>
-
-        <View style={styles.staffExamFacts}>
-          <View style={styles.staffExamFact}>
-            <Ionicons name="documents-outline" size={15} color={colors.accentStrong} />
-            <Text style={styles.staffExamFactText}>{paperCount} {paperCount === 1 ? 'paper' : 'papers'}</Text>
-          </View>
-          <View style={styles.staffExamFactDivider} />
-          <View style={styles.staffExamFact}>
-            <Ionicons name="time-outline" size={15} color={colors.accentStrong} />
-            <Text style={styles.staffExamFactText}>{durationLabel}</Text>
-          </View>
-        </View>
+        <Text style={styles.staffExamMetaText} numberOfLines={1}>
+          {[formatDate(exam.exam_date), classLabel, durationLabel, `${paperCount} ${paperCount === 1 ? 'paper' : 'papers'}`].filter(Boolean).join(' · ')}
+        </Text>
       </Pressable>
 
       {visiblePapers.length > 0 ? (
@@ -1128,12 +1074,12 @@ function StaffExamCard({
         <StaffCardActionButton
           label="Edit exam"
           icon="create-outline"
-          primary
           onPress={onPress}
         />
         <StaffCardActionButton
           label={syllabus ? 'Update syllabus' : 'Share syllabus'}
           icon="share-social-outline"
+          iconOnly
           loading={sharingSyllabus}
           disabled={Boolean(deleting)}
           onPress={onShareSyllabus}
@@ -1142,6 +1088,7 @@ function StaffExamCard({
           label="Delete exam"
           icon="trash-outline"
           danger
+          iconOnly
           loading={deleting}
           disabled={Boolean(deleting || sharingSyllabus)}
           onPress={onDelete}
@@ -1220,6 +1167,8 @@ function StaffExamsView({ role }: { role?: Role }) {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null)
+  // Exams open on the list; the form appears only for New exam or Edit.
+  const [composerOpen, setComposerOpen] = useState(false)
   const [form, setForm] = useState<ExamFormState>(emptyForm)
   const [paperAssistError, setPaperAssistError] = useState('')
   const [paperDefaultsLoadingId, setPaperDefaultsLoadingId] = useState('')
@@ -1429,6 +1378,7 @@ function StaffExamsView({ role }: { role?: Role }) {
   }
 
   const resetForm = () => {
+    setComposerOpen(false)
     setSelectedExam(null)
     setForm(emptyForm)
     setPaperAssistError('')
@@ -1605,15 +1555,13 @@ function StaffExamsView({ role }: { role?: Role }) {
         void syllabiQuery.refetch()
       }} tintColor={colors.accent} colors={[colors.accent]} />}
     >
-      <View style={styles.composerHeader}>
-        <Text style={styles.composerEyebrow}>{selectedExam ? 'EDIT EXAM' : 'EXAM SETUP'}</Text>
-        <Text style={styles.composerTitle}>{selectedExam ? 'Update this exam' : 'Create an exam'}</Text>
-        <Text style={styles.composerSubtitle}>
-          {selectedExam
-            ? 'Adjust the setup below. Existing student work stays untouched.'
-            : 'Choose the class and paper. Eduraa will fill every detail it already knows.'}
-        </Text>
-      </View>
+      {composerOpen || selectedExam ? (
+      <>
+      <SectionHeading
+        title={selectedExam ? 'Update exam' : 'New exam'}
+        subtitle={selectedExam ? 'Existing student work stays untouched.' : undefined}
+        action={<AnimatedButton label="Cancel" variant="ghost" size="compact" onPress={resetForm} />}
+      />
 
       <View style={styles.workflowSurface}>
           <View style={styles.composerSection}>
@@ -1622,7 +1570,6 @@ function StaffExamsView({ role }: { role?: Role }) {
               title="Choose class and subject"
               complete={contextComplete}
             />
-            <Text style={styles.sectionHelp}>Start with the teaching context. Each selection narrows the choices that follow.</Text>
             {isAdminLike(role) ? (
               <SelectField
                 label="Teacher"
@@ -1675,7 +1622,6 @@ function StaffExamsView({ role }: { role?: Role }) {
               title="Choose paper and name"
               complete={detailsComplete}
             />
-            <Text style={styles.sectionHelp}>Select a paper first and Eduraa will reuse its name, class, term, and duration where available.</Text>
             <View style={styles.formGuide} accessibilityLiveRegion="polite">
               <Ionicons name="sparkles-outline" size={16} color={paperPickerQuery.isError ? colors.danger : colors.accentStrong} />
               <Text style={[styles.formGuideText, paperPickerQuery.isError && styles.formGuideError]}>{setupGuide}</Text>
@@ -1707,7 +1653,6 @@ function StaffExamsView({ role }: { role?: Role }) {
               title="Set the schedule"
               complete={scheduleComplete}
             />
-            <Text style={styles.sectionHelp}>Confirm the academic term and date. Duration is optional.</Text>
             <SelectField
               label="Semester"
               value={form.semester}
@@ -1745,7 +1690,6 @@ function StaffExamsView({ role }: { role?: Role }) {
               title="Student experience"
               complete
             />
-            <Text style={styles.sectionHelp}>The recommended defaults are already on. Change them only when this exam needs different handling.</Text>
             <View style={styles.settingsList}>
               <ExamSettingToggle
                 icon="sparkles-outline"
@@ -1786,31 +1730,35 @@ function StaffExamsView({ role }: { role?: Role }) {
               onPress={() => saveMutation.mutate()}
             />
           </View>
-          <Pressable accessibilityRole="button" onPress={resetForm} style={({ pressed }) => [styles.clearLink, pressed && styles.pressed]}>
-            <Ionicons name="refresh-outline" size={16} color={colors.textMuted} />
-            <Text style={styles.clearLinkText}>{selectedExam ? 'Cancel editing' : 'Clear form'}</Text>
-          </Pressable>
       </View>
+      </>
+      ) : (
 
       <View style={styles.section}>
-        <View style={styles.staffLibraryHeader}>
-          <View style={styles.staffLibraryHeaderCopy}>
-            <Text style={styles.staffLibraryTitle}>Existing exams</Text>
-            <Text style={styles.staffLibrarySubtitle}>Manage schedules, papers, and student visibility.</Text>
-          </View>
-          <Text style={styles.staffLibraryCount}>{exams.length} total</Text>
-        </View>
+        <SectionHeading
+          title="Your exams"
+          subtitle={`${exams.length} total`}
+          action={
+            <AnimatedButton
+              label="New exam"
+              size="compact"
+              icon={<Ionicons name="add" size={17} color={colors.white} />}
+              onPress={() => {
+                setForm(emptyForm)
+                setComposerOpen(true)
+                scrollRef.current?.scrollTo({ y: 0, animated: false })
+              }}
+            />
+          }
+        />
         {exams.length === 0 ? (
-          <AnimatedCard style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No exams created yet.</Text>
-          </AnimatedCard>
+          <EmptyState icon="calendar-outline" title="No exams yet" body="Create an exam to schedule a paper for your class." />
         ) : (
           exams.map((exam) => (
             <StaffExamCard
               key={exam.id}
               exam={exam}
               linkedPapers={papersByExamId.get(exam.id) ?? []}
-              selected={selectedExam?.id === exam.id}
               syllabus={syllabiByExamId.get(exam.id)}
               sharingSyllabus={shareSyllabusMutation.isPending && shareSyllabusMutation.variables?.id === exam.id}
               deleting={deletingExamId === exam.id}
@@ -1825,6 +1773,7 @@ function StaffExamsView({ role }: { role?: Role }) {
           ))
         )}
       </View>
+      )}
     </AppScreen>
   )
 }
@@ -1837,6 +1786,7 @@ export default function ExamsScreen() {
 }
 
 const styles = StyleSheet.create({
+  staffCardActionIconOnly: { flexGrow: 0, flexShrink: 0, flexBasis: 40, width: 40, paddingHorizontal: 0 },
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1857,44 +1807,9 @@ const styles = StyleSheet.create({
     ...typography.roles.body,
     color: colors.textMuted,
   },
-  composerHeader: {
-    gap: spacing[1],
-    paddingHorizontal: spacing[1],
-    paddingTop: spacing[1],
-  },
-  composerEyebrow: {
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-    letterSpacing: 1.5,
-  },
-  composerTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.heading,
-    fontSize: 27,
-    lineHeight: 32,
-  },
-  composerSubtitle: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 14,
-    lineHeight: 20,
-    maxWidth: 540,
-  },
-  libraryStats: {
-    minHeight: 74,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.backgroundElevated,
-    flexDirection: 'row',
-    gap: spacing[2],
-    padding: spacing[3],
-    ...shadows.sm,
-  },
   libraryStat: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: radius.card,
     backgroundColor: colors.slate[50],
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -1903,145 +1818,24 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   libraryStatValue: {
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 20,
     lineHeight: 23,
   },
   libraryStatLabel: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.9,
     textTransform: 'uppercase',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[2],
   },
   section: {
     gap: spacing[3],
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  sectionCopy: {
-    flex: 1,
-  },
-  sectionTitle: {
-    ...typography.roles.title,
-    color: colors.text,
-  },
-  sectionSubtitle: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  countPill: {
-    minWidth: 24,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countText: {
-    color: colors.accent,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 13,
-  },
-  examHero: {
-    position: 'relative',
-    paddingLeft: spacing[4],
-    paddingRight: spacing[1],
-    paddingVertical: spacing[2],
-    gap: spacing[3],
-    overflow: 'hidden',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderStrong,
-  },
-  examQueueRail: {
-    position: 'absolute',
-    left: 0,
-    top: spacing[2],
-    bottom: spacing[2],
-    width: 3,
-    borderRadius: radius.full,
-    backgroundColor: colors.accent,
-  },
-  examHeroTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  examHeroIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
-  },
-  examHeroCopy: {
-    flex: 1,
-  },
-  examHeroKicker: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
-    lineHeight: 13,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  examHeroTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.heading,
-    fontSize: 24,
-    lineHeight: 28,
-    marginTop: 2,
-  },
-  examModeSwitch: {
-    minHeight: 44,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    flexDirection: 'row',
-  },
-  examModeButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing[2],
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  examModeButtonActive: {
-    borderBottomColor: colors.accent,
-  },
-  examModeText: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 12,
-  },
-  examModeTextActive: {
-    color: colors.accent,
-  },
-  card: {
-    gap: spacing[4],
-  },
-  examCard: {
-    gap: spacing[4],
-    backgroundColor: colors.backgroundElevated,
-    borderColor: colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.accent,
-    padding: spacing[4],
-  },
-  examCardFocused: {
-    borderColor: colors.accentStrong,
-    backgroundColor: colors.accentSurface,
-  },
+  examHero: { gap: spacing[2] },
+  examHeroKicker: { ...typography.roles.caption, color: colors.textMuted },
+  examCard: { gap: spacing[3], backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.border, borderRadius: radius.card, padding: spacing[4] },
+  examCardFocused: { borderColor: colors.borderBrand },
   dashboardFocusPill: {
     alignSelf: 'flex-start',
     minHeight: 30,
@@ -2057,25 +1851,18 @@ const styles = StyleSheet.create({
   dashboardFocusPillText: {
     color: colors.accentStrong,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
   },
   examCardTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing[3],
   },
-  examSubjectIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
+  examSubjectIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
   examCardKicker: {
-    color: colors.accent,
+    color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 2,
@@ -2118,7 +1905,7 @@ const styles = StyleSheet.create({
   },
   examProgressPercent: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
   },
   examProgressTrack: {
@@ -2133,7 +1920,7 @@ const styles = StyleSheet.create({
   },
   actionNotice: {
     minHeight: 52,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: `${colors.success}35`,
     backgroundColor: colors.successSurface,
@@ -2160,13 +1947,12 @@ const styles = StyleSheet.create({
   practiceCard: {
     position: 'relative',
     minHeight: 112,
-    borderRadius: 24,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
     padding: spacing[4],
     overflow: 'hidden',
-    ...shadows.sm,
   },
   practiceAccent: {
     position: 'absolute',
@@ -2195,16 +1981,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   practiceSubject: {
-    color: colors.accent,
+    color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 2,
   },
   practiceTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
     lineHeight: 21,
   },
@@ -2213,14 +1999,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
     fontSize: 12,
     marginTop: 2,
-  },
-  practiceArrow: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.slate[950],
   },
   practiceFooter: {
     marginTop: spacing[4],
@@ -2262,7 +2040,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
   },
   cardMeta: {
@@ -2271,137 +2049,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  staffExamRecord: {
-    gap: 0,
-    padding: 0,
-    overflow: 'hidden',
-    borderRadius: radius.lg,
-    borderColor: colors.border,
-    backgroundColor: colors.backgroundElevated,
-  },
-  staffLibraryHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[3],
-    paddingHorizontal: spacing[1],
-  },
-  staffLibraryHeaderCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  staffLibraryTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 20,
-    lineHeight: 25,
-  },
-  staffLibrarySubtitle: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  staffLibraryCount: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodySemibold,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  staffExamRecordSelected: {
-    gap: 0,
-    padding: 0,
-    overflow: 'hidden',
-    borderRadius: radius.lg,
-    borderColor: colors.text,
-    backgroundColor: colors.backgroundElevated,
-  },
-  staffExamMain: {
-    gap: spacing[3],
-    padding: spacing[4],
-  },
-  staffExamHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[3],
-  },
-  staffExamTitleBlock: {
-    flex: 1,
-    gap: spacing[1],
-  },
-  staffExamTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 17,
-    lineHeight: 22,
-  },
-  staffExamStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  staffExamStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.textSoft,
-  },
-  staffExamStatusDotPublished: {
-    backgroundColor: colors.success,
-  },
-  staffExamStatusText: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  staffExamMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing[2],
-  },
-  staffExamMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  staffExamMetaText: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  staffExamMetaDivider: {
-    width: 3,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.borderStrong,
-  },
-  staffExamFacts: {
-    minHeight: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderRadius: radius.md,
-    backgroundColor: colors.backgroundMuted,
-    paddingHorizontal: spacing[3],
-  },
-  staffExamFact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  staffExamFactText: {
-    color: colors.text,
-    fontFamily: typography.fonts.bodySemibold,
-    fontSize: 12,
-  },
-  staffExamFactDivider: {
-    width: 1,
-    height: 16,
-    marginHorizontal: spacing[3],
-    backgroundColor: colors.border,
-  },
+  staffExamRecord: { gap: spacing[3], padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  staffExamMain: { gap: spacing[1] },
+  staffExamHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
+  staffExamTitle: { ...typography.roles.rowTitle, flex: 1, color: colors.nav },
+  staffExamMetaText: { ...typography.roles.caption, color: colors.textMuted },
   staffExamPaperList: {
     gap: spacing[2],
     marginHorizontal: spacing[4],
@@ -2427,26 +2079,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     paddingLeft: spacing[5],
   },
-  staffCardActions: {
-    flexDirection: 'row',
-    gap: spacing[2],
-    marginTop: spacing[3],
-    padding: spacing[3],
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSubtle,
-    backgroundColor: colors.backgroundMuted,
-  },
-  staffCardActionButton: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[2],
-    paddingHorizontal: spacing[3],
-  },
+  staffCardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  staffCardActionButton: { flex: 1, minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: spacing[3], borderRadius: radius.sm, borderWidth: 1 },
   staffCardActionButtonPrimary: {
     borderColor: colors.text,
     backgroundColor: colors.text,
@@ -2462,10 +2096,7 @@ const styles = StyleSheet.create({
   staffCardActionButtonDisabled: {
     opacity: 0.5,
   },
-  staffCardActionText: {
-    fontFamily: typography.fonts.bodySemibold,
-    fontSize: 12,
-  },
+  staffCardActionText: { fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   paperList: {
     gap: spacing[2],
   },
@@ -2592,7 +2223,7 @@ const styles = StyleSheet.create({
   },
   learnerEmptyTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
     lineHeight: 23,
   },
@@ -2646,15 +2277,15 @@ const styles = StyleSheet.create({
     gap: spacing[1],
   },
   sheetKicker: {
-    color: colors.accent,
+    color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   sheetTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 20,
     lineHeight: 25,
   },
@@ -2673,7 +2304,7 @@ const styles = StyleSheet.create({
   },
   sheetAction: {
     minHeight: 72,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundMuted,
@@ -2740,7 +2371,7 @@ const styles = StyleSheet.create({
   confirmationIcon: {
     width: 48,
     height: 48,
-    borderRadius: 18,
+    borderRadius: radius.card,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accentSurface,
@@ -2753,7 +2384,7 @@ const styles = StyleSheet.create({
   },
   confirmationTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 21,
     lineHeight: 25,
   },
@@ -2771,7 +2402,7 @@ const styles = StyleSheet.create({
   confirmationButton: {
     flex: 1,
     minHeight: 48,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.borderStrong,
     alignItems: 'center',
@@ -2795,13 +2426,6 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: typography.fonts.bodyBold,
     fontSize: 13,
-  },
-  emptyCard: {
-    backgroundColor: colors.backgroundElevated,
-  },
-  emptyText: {
-    ...typography.roles.body,
-    color: colors.textMuted,
   },
   workflowSurface: {
     backgroundColor: 'transparent',
@@ -2831,21 +2455,10 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyBold,
     fontSize: 12,
   },
-  composerSectionTitle: {
-    flex: 1,
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 18,
-  },
+  composerSectionTitle: { ...typography.roles.section, color: colors.nav },
   composerDivider: {
     height: 1,
     backgroundColor: colors.border,
-  },
-  sectionHelp: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 13,
-    lineHeight: 19,
   },
   formGuide: {
     minHeight: 44,
@@ -2904,7 +2517,7 @@ const styles = StyleSheet.create({
   settingDescription: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 15,
   },
   settingSwitch: {
@@ -2930,7 +2543,7 @@ const styles = StyleSheet.create({
   },
   submitSurface: {
     gap: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
@@ -2968,20 +2581,8 @@ const styles = StyleSheet.create({
   readinessDescription: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 15,
-  },
-  clearLink: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[2],
-  },
-  clearLinkText: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodySemibold,
-    fontSize: 12,
   },
   twoColumn: {
     flexDirection: 'row',

@@ -688,17 +688,16 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[4],
   },
   card: {
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     padding: spacing[4],
     gap: spacing[3],
-    ...shadows.xs,
   },
   cardKicker: {
     ...typography.roles.eyebrow,
-    color: colors.accent,
+    color: colors.textMuted,
   },
   cardBody: {
     color: colors.textMuted,
@@ -728,7 +727,7 @@ const styles = StyleSheet.create({
     minWidth: 44,
     textAlign: 'center',
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 26,
   },
   groupRow: {
@@ -748,7 +747,7 @@ const styles = StyleSheet.create({
   },
   groupName: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 14,
   },
   groupRule: {
@@ -842,7 +841,7 @@ const styles = StyleSheet.create({
   },
   subjectName: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
     lineHeight: 20,
   },
@@ -899,12 +898,11 @@ const styles = StyleSheet.create({
   },
   saveBar: {
     gap: spacing[2],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.backgroundElevated,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     padding: spacing[4],
-    ...shadows.sm,
   },
   dirtyNote: {
     color: colors.warning,

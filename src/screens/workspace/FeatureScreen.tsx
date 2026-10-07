@@ -1,11 +1,11 @@
-import React, { useMemo } from 'react'
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import React, { useEffect, useMemo, useState } from 'react'
+import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useRoute } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SelectableChip } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, NoticeCard, SelectableChip } from '../../components/ui'
 import { workspaceApi, WorkspaceSnapshotBlock } from '../../api/workspace'
-import { mobileControls } from '../../data/mobileControlCatalog'
+import { mobileControls, roleCanSeeControl } from '../../data/mobileControlCatalog'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, spacing, typography } from '../../theme'
 
@@ -74,27 +74,66 @@ function SnapshotBlock({ block }: { block: WorkspaceSnapshotBlock }) {
 }
 
 export default function FeatureScreen() {
+  const navigation = useNavigation<any>()
   const route = useRoute()
-  const { featureId } = route.params as RouteParams
+  const featureId = (route.params as RouteParams | undefined)?.featureId ?? ''
   const user = useAuthStore((state) => state.user)
   const control = useMemo(() => mobileControls.find((item) => item.id === featureId), [featureId])
+  const [openingWebsite, setOpeningWebsite] = useState(false)
+  const [websiteError, setWebsiteError] = useState<string | null>(null)
+
+  useEffect(() => {
+    navigation.setOptions({ headerTitle: control?.label || 'School workflow' })
+  }, [control?.label, navigation])
 
   const snapshotQuery = useQuery({
-    queryKey: ['workspace-feature', featureId, user?.role],
+    queryKey: ['workspace-feature', featureId, user?.id, user?.role],
     queryFn: () => workspaceApi.getFeatureSnapshot(featureId, user?.role),
+    enabled: Boolean(control && user?.role && roleCanSeeControl(user.role, control) && control.nativeStatus !== 'web-only'),
   })
 
-  if (!control) {
+  if (!control || !user?.role || !roleCanSeeControl(user.role, control)) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
-        <ErrorState title="Feature unavailable" message="This mobile feature is not registered." />
+        <ErrorState title="Workflow unavailable" message="This school account does not have access to that workflow." />
+      </AppScreen>
+    )
+  }
+
+  const openWebsite = async () => {
+    if (openingWebsite) return
+    setOpeningWebsite(true)
+    setWebsiteError(null)
+    try {
+      const origin = process.env.EXPO_PUBLIC_WEB_APP_URL?.trim() || 'https://www.eduraa-ai.com'
+      const destination = new URL(control.webPath, origin)
+      if (!['https:', 'http:'].includes(destination.protocol)) throw new Error('Invalid website address')
+      await Linking.openURL(destination.toString())
+    } catch {
+      setWebsiteError('We could not open the website. Check your connection and try again.')
+    } finally {
+      setOpeningWebsite(false)
+    }
+  }
+
+  if (control.nativeStatus === 'web-only') {
+    return (
+      <AppScreen contentStyle={styles.screen}>
+        <AnimatedCard style={styles.websiteCard}>
+          <View style={styles.websiteIcon}><Ionicons name="globe-outline" size={25} color={colors.accentStrong} /></View>
+          <Text style={styles.websiteTitle}>Continue on Eduraa web</Text>
+          <Text style={styles.websiteBody}>{control.description}</Text>
+          <AnimatedButton label="Open website" loading={openingWebsite} onPress={() => void openWebsite()} />
+          <Text style={styles.websiteHint}>Sign in on the website if asked.</Text>
+          {websiteError ? <Text accessibilityRole="alert" style={styles.websiteError}>{websiteError}</Text> : null}
+        </AnimatedCard>
       </AppScreen>
     )
   }
 
   return (
     <AppScreen contentStyle={styles.screen}>
-      <GradientHeroCard eyebrow="MOBILE WORKFLOW" title={control.label} subtitle={control.description} />
+      <NoticeCard eyebrow="MOBILE WORKFLOW" title={control.label} subtitle={control.description} />
 
       <View style={styles.chipRow}>
         <SelectableChip label="In app" selected />
@@ -142,6 +181,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing[2],
   },
+  websiteCard: { gap: spacing[3] },
+  websiteIcon: { width: 50, height: 50, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  websiteTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 21 },
+  websiteBody: { ...typography.roles.body, color: colors.textMuted },
+  websiteHint: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
+  websiteError: { ...typography.roles.body, color: colors.danger },
   loading: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -161,7 +206,7 @@ const styles = StyleSheet.create({
   },
   blockLabel: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
   },
   blockCount: {
@@ -225,7 +270,7 @@ const styles = StyleSheet.create({
   },
   noteTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
   },
   noteBody: {
