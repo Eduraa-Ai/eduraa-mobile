@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Eduraa 2026 — Two Product Directions</title>
+  <style>
+    :root {
+      --orange: #ff6422;
+      --orange-dark: #c7430c;
+      --ink: #101522;
+      --muted: #697386;
+      --line: rgba(16,21,34,.09);
+      --paper: #ffffff;
+      --calm: #f3f5f8;
+      --night: #080c16;
+      --night-2: #111726;
+      --cyan: #6de8f2;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #e9ebef;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; cursor: pointer; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 330px 390px;
+      align-items: center;
+      justify-content: center;
+      gap: 62px;
+      min-height: 100vh;
+      padding: 22px;
+      background:
+        radial-gradient(circle at 14% 18%, rgba(255,100,34,.10), transparent 27%),
+        radial-gradient(circle at 85% 80%, rgba(61,105,210,.09), transparent 28%),
+        #e9ebef;
+    }
+    .control-panel h1 { margin: 0; font-size: 39px; line-height: 1.03; letter-spacing: -.052em; }
+    .control-panel > p { margin: 16px 0 22px; color: #596276; font-size: 14px; line-height: 1.6; }
+    .switcher { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 5px; border: 1px solid var(--line); border-radius: 17px; background: rgba(255,255,255,.7); }
+    .switcher button { min-height: 48px; border: 0; border-radius: 13px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .switcher button.active { background: var(--ink); color: white; box-shadow: 0 7px 18px rgba(16,21,34,.14); }
+    .direction-copy { display: none; margin-top: 18px; }
+    .direction-copy.active { display: block; animation: appear .24s ease; }
+    .direction-copy .tag { color: var(--orange-dark); font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .direction-copy h2 { margin: 7px 0 7px; font-size: 20px; letter-spacing: -.03em; }
+    .direction-copy p { margin: 0; color: #667085; font-size: 12px; line-height: 1.55; }
+    .parity { margin-top: 18px; padding-top: 15px; border-top: 1px solid rgba(16,21,34,.10); color: #667085; font-size: 11px; line-height: 1.55; }
+    .parity strong { color: var(--ink); }
+    @keyframes appear { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+
+    .phone {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      border: 8px solid #17191e;
+      border-radius: 48px;
+      background: var(--calm);
+      box-shadow: 0 32px 82px rgba(16,21,34,.25), 0 4px 16px rgba(16,21,34,.13);
+    }
+    .phone::before { content:""; position:absolute; z-index:100; top:9px; left:50%; width:108px; height:28px; transform:translateX(-50%); border-radius:18px; background:#17191e; }
+    .status { position:absolute; z-index:101; top:16px; left:27px; right:23px; display:flex; justify-content:space-between; font-size:11px; font-weight:850; pointer-events:none; }
+    .status.light { color:white; }
+    .status-icons { letter-spacing:2px; }
+    .variant { position:absolute; inset:0; display:none; overflow:hidden; }
+    .variant.active { display:block; animation: appear .28s ease both; }
+    .scroll { height:100%; overflow-y:auto; padding:50px 18px 112px; scrollbar-width:none; }
+    .scroll::-webkit-scrollbar { display:none; }
+
+    /* Direction A: Calm Intelligence */
+    .calm { background:var(--calm); }
+    .calm-head { display:flex; align-items:center; justify-content:space-between; }
+    .calm-head .overline { margin:0 0 3px; color:var(--orange-dark); font-size:10px; font-weight:850; letter-spacing:.1em; text-transform:uppercase; }
+    .calm-head h2 { margin:0; font-size:34px; line-height:1; letter-spacing:-.055em; }
+    .avatar { display:grid; place-items:center; width:46px; height:46px; border:1px solid var(--line); border-radius:16px; background:white; color:var(--orange-dark); font-size:15px; font-weight:850; }
+    .calm-sub { margin:11px 0 21px; color:var(--muted); font-size:12px; }
+    .first-action { position:relative; overflow:hidden; min-height:226px; padding:20px; border-radius:27px; background:var(--ink); color:white; }
+    .first-action::after { content:""; position:absolute; right:-63px; bottom:-80px; width:205px; height:205px; border:1px solid rgba(255,255,255,.08); border-radius:50%; box-shadow:0 0 0 32px rgba(255,255,255,.025), 0 0 0 64px rgba(255,255,255,.014); }
+    .first-top { position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center; }
+    .brand-lock { display:flex; align-items:center; gap:8px; color:rgba(255,255,255,.65); font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .brand-lock img { width:27px; height:27px; padding:3px; border-radius:9px; background:white; object-fit:contain; }
+    .zero-pill { padding:7px 9px; border:1px solid rgba(255,255,255,.1); border-radius:99px; background:rgba(255,255,255,.06); color:rgba(255,255,255,.72); font-size:9.5px; font-weight:750; }
+    .first-action h3 { position:relative; z-index:2; max-width:270px; margin:22px 0 8px; font-size:27px; line-height:1.06; letter-spacing:-.04em; }
+    .first-action p { position:relative; z-index:2; margin:0; max-width:280px; color:rgba(255,255,255,.6); font-size:11px; line-height:1.5; }
+    .start-row { position:absolute; z-index:3; left:20px; right:20px; bottom:18px; display:flex; align-items:center; gap:9px; }
+    .start-row button { flex:1; min-height:48px; border:0; border-radius:15px; background:var(--orange); color:white; font-size:12px; font-weight:850; }
+    .round-arrow { display:grid; place-items:center; flex:0 0 48px; height:48px; border-radius:15px; background:white; color:var(--ink); font-size:20px; }
+    .label-row { display:flex; align-items:center; justify-content:space-between; margin:23px 2px 11px; }
+    .label-row h3 { margin:0; font-size:17px; letter-spacing:-.025em; }
+    .label-row span { color:var(--muted); font-size:10px; font-weight:700; }
+    .flow { padding:4px 0; }
+    .flow-step { display:grid; grid-template-columns:43px 1fr auto; gap:11px; align-items:center; min-height:67px; position:relative; }
+    .flow-step:not(:last-child)::after { content:""; position:absolute; top:49px; bottom:-18px; left:21px; width:1px; background:#d7dce4; }
+    .step-mark { position:relative; z-index:2; display:grid; place-items:center; width:43px; height:43px; border:1px solid #dfe3ea; border-radius:15px; background:white; color:#9aa2af; font-size:11px; font-weight:850; }
+    .flow-step.current .step-mark { border-color:rgba(255,100,34,.18); background:#fff0e8; color:var(--orange-dark); }
+    .step-copy strong { display:block; font-size:12px; }
+    .step-copy span { display:block; margin-top:3px; color:var(--muted); font-size:9.5px; }
+    .step-state { color:#98a2b3; font-size:9px; font-weight:800; text-transform:uppercase; }
+    .step-state.now { color:var(--orange-dark); }
+    .tool-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+    .tool { min-height:81px; padding:12px; border:1px solid var(--line); border-radius:19px; background:white; text-align:left; }
+    .tool i { display:grid; place-items:center; width:30px; height:30px; border-radius:10px; background:#eef2f8; color:#3c557d; font-size:13px; font-style:normal; }
+    .tool strong { display:block; margin-top:10px; font-size:11px; }
+    .tool span { display:block; margin-top:2px; color:var(--muted); font-size:9px; }
+
+    /* Direction B: Performance */
+    .pulse { background:var(--night); color:white; }
+    .pulse .scroll { background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px); background-size:28px 28px; }
+    .pulse-head { display:flex; align-items:center; justify-content:space-between; }
+    .pulse-brand { display:flex; align-items:center; gap:9px; }
+    .pulse-brand img { width:37px; height:37px; padding:4px; border-radius:13px; background:white; object-fit:contain; }
+    .pulse-brand strong { display:block; font-size:13px; letter-spacing:.03em; }
+    .pulse-brand span { display:block; margin-top:2px; color:#818da4; font-size:9px; font-weight:700; }
+    .pulse-profile { display:grid; place-items:center; width:44px; height:44px; border:1px solid rgba(255,255,255,.09); border-radius:15px; background:rgba(255,255,255,.04); color:#ff9567; font-size:13px; font-weight:850; }
+    .pulse-kicker { margin:27px 0 6px; color:var(--cyan); font-size:9px; font-weight:850; letter-spacing:.18em; text-transform:uppercase; }
+    .pulse h2 { margin:0; max-width:320px; font-size:39px; line-height:.98; letter-spacing:-.055em; text-transform:uppercase; }
+    .pulse h2 em { color:var(--orange); font-style:normal; }
+    .launch { display:grid; grid-template-columns:1fr 112px; gap:14px; align-items:center; margin-top:22px; padding:17px; border:1px solid rgba(255,255,255,.08); border-radius:25px; background:rgba(17,23,38,.90); }
+    .launch-copy .mini { color:#7f8ba2; font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .launch-copy h3 { margin:7px 0 6px; font-size:19px; line-height:1.1; letter-spacing:-.025em; }
+    .launch-copy p { margin:0; color:#8e99ad; font-size:10px; line-height:1.45; }
+    .launch-button { display:grid; place-items:center; width:106px; height:106px; border:1px solid rgba(255,255,255,.12); border-radius:50%; background:var(--orange); color:white; box-shadow:0 0 0 8px rgba(255,100,34,.08),0 0 38px rgba(255,100,34,.20); }
+    .launch-button strong { display:block; font-size:11px; letter-spacing:.08em; }
+    .launch-button b { display:block; margin-top:2px; font-size:25px; line-height:1; }
+    .zero-stats { display:grid; grid-template-columns:repeat(3,1fr); margin-top:15px; border-top:1px solid rgba(255,255,255,.08); border-bottom:1px solid rgba(255,255,255,.08); }
+    .zero-stat { padding:15px 8px; border-right:1px solid rgba(255,255,255,.08); }
+    .zero-stat:last-child { border-right:0; }
+    .zero-stat strong { display:block; font-size:19px; }
+    .zero-stat span { display:block; margin-top:3px; color:#717e94; font-size:8.5px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .command-title { display:flex; align-items:center; justify-content:space-between; margin:23px 1px 9px; }
+    .command-title h3 { margin:0; font-size:14px; letter-spacing:.03em; text-transform:uppercase; }
+    .command-title span { color:#66738a; font-size:9px; }
+    .commands { display:grid; gap:8px; }
+    .command { display:grid; grid-template-columns:39px 1fr auto; gap:11px; align-items:center; min-height:61px; padding:10px 12px; border:1px solid rgba(255,255,255,.075); border-radius:17px; background:rgba(17,23,38,.76); color:white; text-align:left; }
+    .cmd-icon { display:grid; place-items:center; width:39px; height:39px; border-radius:13px; background:rgba(109,232,242,.10); color:var(--cyan); font-size:13px; font-weight:850; }
+    .command:nth-child(2) .cmd-icon { background:rgba(255,100,34,.12); color:#ff8d5c; }
+    .command:nth-child(3) .cmd-icon { background:rgba(140,105,255,.12); color:#ad91ff; }
+    .command:nth-child(4) .cmd-icon { background:rgba(72,202,151,.12); color:#65dbaa; }
+    .cmd-copy strong { display:block; font-size:11px; }
+    .cmd-copy span { display:block; margin-top:3px; color:#748096; font-size:9px; }
+    .cmd-arrow { color:#647087; font-size:18px; }
+    .promise { margin-top:14px; padding:13px; border-left:2px solid var(--orange); background:rgba(255,100,34,.055); color:#8995a9; font-size:9.5px; line-height:1.5; }
+    .promise strong { color:#ff9567; }
+
+    .nav { position:absolute; z-index:70; left:12px; right:12px; bottom:10px; display:grid; grid-template-columns:repeat(5,1fr); height:77px; padding:7px 5px 8px; border-radius:25px; }
+    .calm .nav { border:1px solid var(--line); background:rgba(255,255,255,.95); box-shadow:0 14px 34px rgba(16,21,34,.12); backdrop-filter:blur(22px); }
+    .pulse .nav { border:1px solid rgba(255,255,255,.09); background:rgba(13,18,30,.94); box-shadow:0 16px 35px rgba(0,0,0,.34); backdrop-filter:blur(22px); }
+    .nav button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-width:44px; min-height:44px; border:0; background:transparent; color:#7b8494; font-size:8.5px; font-weight:780; }
+    .nav svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.8; }
+    .calm .nav button.active { color:var(--orange-dark); }
+    .pulse .nav button.active { color:#ff8d5c; }
+    .nav button.active .nav-icon { display:grid; place-items:center; width:36px; height:36px; margin-top:-14px; border-radius:13px; background:var(--orange); color:white; box-shadow:0 8px 17px rgba(255,100,34,.25); }
+    .home-indicator { position:absolute; z-index:80; bottom:3px; left:50%; width:122px; height:4px; transform:translateX(-50%); border-radius:99px; }
+    .calm .home-indicator { background:rgba(16,21,34,.72); }
+    .pulse .home-indicator { background:rgba(255,255,255,.70); }
+    .toast { position:absolute; z-index:90; left:26px; right:26px; bottom:98px; min-height:48px; padding:11px 14px; border-radius:15px; background:#111827; color:white; box-shadow:0 12px 30px rgba(0,0,0,.24); font-size:10.5px; font-weight:750; opacity:0; transform:translateY(12px); pointer-events:none; transition:.22s ease; }
+    .toast.show { opacity:1; transform:none; }
+    .toast b { color:#ff9567; }
+
+    @media (max-width:830px) {
+      body { overflow:auto; }
+      .workspace { display:block; min-height:100vh; padding:0; }
+      .control-panel { display:none; }
+      .phone { width:100vw; height:100vh; border:0; border-radius:0; box-shadow:none; }
+      .phone::before { top:8px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="workspace">
+    <aside class="control-panel">
+      <h1>Two fresh starts.</h1>
+      <p>No path gimmick. No beige dashboard. Pick the emotional character that should define Eduraa.</p>
+      <div class="switcher"><button class="active" data-variant="calm">Calm Intelligence</button><button data-variant="pulse">Performance Mode</button></div>
+      <section class="direction-copy active" data-copy="calm"><span class="tag">Direction A · Apple restraint</span><h2>Quiet confidence.</h2><p>Large typography, generous space, a single first action, and familiar system-like navigation. Premium without looking expensive for the sake of it.</p></section>
+      <section class="direction-copy" data-copy="pulse"><span class="tag">Direction B · Athletic energy</span><h2>Serious momentum.</h2><p>A focused dark interface inspired by performance products: high contrast, decisive actions, and an identity ambitious students can feel proud of.</p></section>
+      <div class="parity"><strong>Same functionality in both:</strong><br>Home · Papers · Results · AI Tutor · Profile · Previous Papers · Cheat Sheets · JEE Workspace · Exams.</div>
+    </aside>
+
+    <section class="phone" aria-label="Eduraa mobile design directions">
+      <div class="status" id="status"><span>9:41</span><span class="status-icons">▮ ◔ ▰</span></div>
+
+      <section class="variant calm active" id="calm" aria-label="Calm Intelligence direction">
+        <div class="scroll">
+          <header class="calm-head"><div><p class="overline">Saturday · JEE</p><h2>Today</h2></div><div class="avatar">J</div></header>
+          <p class="calm-sub">Good morning, Jee. Your first useful step is ready.</p>
+          <section class="first-action">
+            <div class="first-top"><div class="brand-lock"><img src="../assets/eduraa-book-brain.png" alt="Eduraa" /> Eduraa recommends</div><span class="zero-pill">0 papers</span></div>
+            <h3>Create your first JEE paper</h3>
+            <p>Choose the syllabus and difficulty using the existing paper generator.</p>
+            <div class="start-row"><button data-route="GeneratePaper">Generate paper</button><span class="round-arrow">→</span></div>
+          </section>
+
+          <div class="label-row"><h3>How it works</h3><span>Your existing workflow</span></div>
+          <section class="flow">
+            <div class="flow-step current"><div class="step-mark">01</div><div class="step-copy"><strong>Generate a paper</strong><span>JEE syllabus, questions, and difficulty</span></div><span class="step-state now">Now</span></div>
+            <div class="flow-step"><div class="step-mark">02</div><div class="step-copy"><strong>Attempt the paper</strong><span>Resume safely if interrupted</span></div><span class="step-state">Next</span></div>
+            <div class="flow-step"><div class="step-mark">03</div><div class="step-copy"><strong>Submit or upload</strong><span>Use the current checking flow</span></div><span class="step-state">Later</span></div>
+            <div class="flow-step"><div class="step-mark">04</div><div class="step-copy"><strong>Review your result</strong><span>Score, feedback, and checked answers</span></div><span class="step-state">Later</span></div>
+          </section>
+
+          <div class="label-row"><h3>Explore</h3><span>All existing tools</span></div>
+          <section class="tool-grid"><button class="tool" data-route="PreviousPapers"><i>PY</i><strong>Previous papers</strong><span>JEE PYQs</span></button><button class="tool" data-route="CheatSheets"><i>ƒ</i><strong>Cheat sheets</strong><span>Quick revision</span></button><button class="tool" data-route="AIStudio"><i>✦</i><strong>AI Tutor</strong><span>Ask a doubt</span></button><button class="tool" data-route="CompetitiveExam"><i>J</i><strong>JEE workspace</strong><span>Subjects and chapters</span></button></section>
+        </div>
+        <nav class="nav" aria-label="Calm primary navigation">
+          <button class="active" data-route="Home"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8M5 10v10h14V10M9 20v-6h6v6"/></svg></span><span>Home</span></button>
+          <button data-route="Papers"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg></span><span>Papers</span></button>
+          <button data-route="Results"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span>Results</span></button>
+          <button data-route="AIStudio"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m12 3-1.4 3.6L7 8l3.6 1.4L12 13l1.4-3.6L17 8l-3.6-1.4L12 3Z"/></svg></span><span>AI Tutor</span></button>
+          <button data-route="Profile"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span>Profile</span></button>
+        </nav>
+        <div class="home-indicator"></div>
+      </section>
+
+      <section class="variant pulse" id="pulse" aria-label="Performance Mode direction">
+        <div class="scroll">
+          <header class="pulse-head"><div class="pulse-brand"><img src="../assets/eduraa-book-brain.png" alt="Eduraa" /><div><strong>EDURAA // JEE</strong><span>MAIN + ADVANCED</span></div></div><div class="pulse-profile">J</div></header>
+          <p class="pulse-kicker">First mission · Ready</p>
+          <h2>Build your<br><em>baseline.</em></h2>
+          <section class="launch">
+            <div class="launch-copy"><span class="mini">Existing paper generator</span><h3>Your first JEE paper</h3><p>Set syllabus, difficulty, and question count.</p></div>
+            <button class="launch-button" data-route="GeneratePaper"><span><strong>BEGIN</strong><b>→</b></span></button>
+          </section>
+          <section class="zero-stats"><div class="zero-stat"><strong>00</strong><span>Papers</span></div><div class="zero-stat"><strong>00</strong><span>Attempts</span></div><div class="zero-stat"><strong>00</strong><span>Checked</span></div></section>
+          <div class="command-title"><h3>Quick access</h3><span>Existing features</span></div>
+          <section class="commands">
+            <button class="command" data-route="AIStudio"><span class="cmd-icon">AI</span><span class="cmd-copy"><strong>Ask AI Tutor</strong><span>Explain concepts and clear doubts</span></span><span class="cmd-arrow">›</span></button>
+            <button class="command" data-route="PreviousPapers"><span class="cmd-icon">PY</span><span class="cmd-copy"><strong>Previous papers</strong><span>Practice JEE previous-year questions</span></span><span class="cmd-arrow">›</span></button>
+            <button class="command" data-route="CheatSheets"><span class="cmd-icon">ƒ</span><span class="cmd-copy"><strong>Cheat sheets</strong><span>Open formula and revision packs</span></span><span class="cmd-arrow">›</span></button>
+            <button class="command" data-route="CompetitiveExam"><span class="cmd-icon">J</span><span class="cmd-copy"><strong>JEE workspace</strong><span>Subjects, chapters, and learning tools</span></span><span class="cmd-arrow">›</span></button>
+          </section>
+          <aside class="promise"><strong>No fake readiness score.</strong> Subject insights appear only after a real paper attempt.</aside>
+        </div>
+        <nav class="nav" aria-label="Performance primary navigation">
+          <button class="active" data-route="Home"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8M5 10v10h14V10M9 20v-6h6v6"/></svg></span><span>Home</span></button>
+          <button data-route="Papers"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg></span><span>Papers</span></button>
+          <button data-route="Results"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span>Results</span></button>
+          <button data-route="AIStudio"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m12 3-1.4 3.6L7 8l3.6 1.4L12 13l1.4-3.6L17 8l-3.6-1.4L12 3Z"/></svg></span><span>AI Tutor</span></button>
+          <button data-route="Profile"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span>Profile</span></button>
+        </nav>
+        <div class="home-indicator"></div>
+      </section>
+
+      <div class="toast" id="toast" role="status"><b>Function preserved · </b><span id="toast-copy"></span></div>
+    </section>
+  </main>
+
+  <script>
+    const switchButtons = document.querySelectorAll('[data-variant]');
+    const variants = document.querySelectorAll('.variant');
+    const copies = document.querySelectorAll('[data-copy]');
+    const status = document.getElementById('status');
+    switchButtons.forEach((button) => button.addEventListener('click', () => {
+      switchButtons.forEach((item) => item.classList.remove('active'));
+      variants.forEach((item) => item.classList.remove('active'));
+      copies.forEach((item) => item.classList.remove('active'));
+      button.classList.add('active');
+      document.getElementById(button.dataset.variant).classList.add('active');
+      document.querySelector(`[data-copy="${button.dataset.variant}"]`).classList.add('active');
+      status.classList.toggle('light', button.dataset.variant === 'pulse');
+    }));
+
+    const toast = document.getElementById('toast');
+    const toastCopy = document.getElementById('toast-copy');
+    let toastTimer;
+    document.querySelectorAll('[data-route]').forEach((button) => button.addEventListener('click', () => {
+      toastCopy.textContent = `opens existing ${button.dataset.route} flow`;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2100);
+    }));
+  </script>
+</body>
+</html>

@@ -180,6 +180,23 @@ const server = http.createServer(async (request, response) => {
     })
   }
 
+  if (request.method === 'GET' && path === '/api/v1/analytics/teacher-dashboard-lab') {
+    if (activeRole !== 'teacher') return json(response, 403, { detail: 'Teacher dashboard access only.' })
+    if (mode === 'dashboard-error') return json(response, 503, { detail: 'The dashboard is temporarily unavailable.' })
+    if (mode === 'dashboard-slow' && url.searchParams.has('standard')) await new Promise(resolve => setTimeout(resolve, 3500))
+    const filtered = url.searchParams.has('standard')
+    return json(response, 200, {
+      teacher: { first_name: 'Kabir', last_name: 'Singh', school_name: 'Eduraa School', branch_name: 'North Campus' },
+      filters: { standards: ['9', '10'], divisions: ['A'], subjects: [], papers: [] },
+      summary: { roster_students: filtered ? 12 : 30, active_students: filtered ? 10 : 27, submissions: filtered ? 14 : 42, papers: 3, average_percent: filtered ? 71 : 63, at_risk_students: 1, integrity_flags: 1 },
+      students: [
+        { student_id: 'a3000000-0000-4000-8000-000000000001', student_name: 'Aarav Sharma', standard: '10', division: 'A', average_percent: 38, submissions_count: 2, risk_level: 'at_risk' },
+        { student_id: 'a3000000-0000-4000-8000-000000000002', student_name: 'Meera Shah', standard: '10', division: 'A', average_percent: 86, submissions_count: 3, risk_level: 'on_track' },
+      ],
+      recent_submissions: [{ submission_id: 'b1000000-0000-4000-8000-000000000001', paper_id: 'paper-1', paper_title: 'Physics unit check', student_id: 'a3000000-0000-4000-8000-000000000001', student_name: 'Aarav Sharma', misconduct_score: 75, submitted_at: '2026-08-20T08:00:00Z' }],
+    })
+  }
+
   if (request.method === 'GET' && queueByPath.has(path)) {
     const key = queueByPath.get(path)
     if (!allowedQueue(activeRole, key)) return json(response, 403, { detail: 'This role is not permitted to open this approval queue.' })
@@ -192,12 +209,17 @@ const server = http.createServer(async (request, response) => {
   const decision = decisionPath(path)
   if (request.method === 'POST' && decision) {
     if (!allowedQueue(activeRole, decision.key)) return json(response, 403, { detail: 'This role cannot decide this request.' })
+    const payload = await body(request)
+    const reason = typeof payload.reason === 'string' ? payload.reason.trim() : ''
+    if (decision.action === 'reject' && (reason.length < 3 || reason.length > 500)) {
+      return json(response, 422, { detail: 'Provide a rejection reason between 3 and 500 characters.' })
+    }
     if (mode === 'conflict') return json(response, 409, { detail: 'Another reviewer already completed this request.' })
     const item = queues[decision.key].find(candidate => candidate.id === decision.id)
     if (!item) return json(response, 409, { detail: 'This request is no longer pending.' })
     if (mode === 'mutation-slow') await new Promise(resolve => setTimeout(resolve, 1500))
     mutationCount += 1
-    audit.push({ actor: userForRole(activeRole).id, target: decision.id, action: decision.action, timestamp: new Date().toISOString() })
+    audit.push({ actor: userForRole(activeRole).id, target: decision.id, action: decision.action, reason: decision.action === 'reject' ? reason : null, timestamp: new Date().toISOString() })
     queues[decision.key] = queues[decision.key].filter(candidate => candidate.id !== decision.id)
     return json(response, 200, item)
   }
