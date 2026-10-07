@@ -17,6 +17,8 @@ class Session {
     this.pending = new Map()
     socket.addEventListener('message', event => {
       const payload = JSON.parse(String(event.data))
+      if (payload.method === 'Runtime.exceptionThrown') console.error('Browser exception:', payload.params?.exceptionDetails?.exception?.description || payload.params?.exceptionDetails?.text)
+      if (payload.method === 'Runtime.consoleAPICalled' && payload.params?.type === 'error') console.error('Browser console:', payload.params?.args?.map(arg => arg.value || arg.description).join(' '))
       if (payload.method === 'Page.javascriptDialogOpening') {
         void this.call('Page.handleJavaScriptDialog', { accept: true })
         return
@@ -62,13 +64,13 @@ async function evaluate(session, expression) {
   return result.result?.value
 }
 
-async function waitForText(session, expected, timeout = 25000) {
+async function waitForText(session, expected, timeout = 60000) {
   const started = Date.now()
   while (Date.now() - started < timeout) {
     if (await evaluate(session, `document.body?.innerText?.includes(${JSON.stringify(expected)})`)) return
     await sleep(250)
   }
-  throw new Error(`Timed out waiting for ${expected}: ${await evaluate(session, 'document.body?.innerText?.slice(0,1800)')}`)
+  throw new Error(`Timed out waiting for ${expected}: ${await evaluate(session, 'JSON.stringify({ url: location.href, state: document.readyState, body: document.body?.innerText?.slice(0,1800), root: document.querySelector("#root")?.innerHTML?.slice(0,500), scripts: [...document.scripts].map(item => item.src), resources: performance.getEntriesByType("resource").slice(-5).map(item => [item.name, item.duration, item.responseEnd]) })')}`)
 }
 
 async function clickText(session, expected) {
@@ -86,6 +88,18 @@ async function clickText(session, expected) {
   })()`)
   if (!result?.clicked) throw new Error(`Could not click ${expected}.`)
   await sleep(500)
+}
+
+async function clickAccessible(session, selector, label) {
+  const clicked = await evaluate(session, `(() => {
+    const target = [...document.querySelectorAll(${JSON.stringify(selector)})].find(item =>
+      (item.getAttribute('aria-label') || item.innerText || '').trim() === ${JSON.stringify(label)});
+    if (!target) return false;
+    target.scrollIntoView({ block: 'center' }); target.click();
+    return true;
+  })()`)
+  if (!clicked) throw new Error(`Could not click ${label}.`)
+  await sleep(350)
 }
 
 async function fill(session, placeholder, value) {
@@ -155,9 +169,9 @@ async function login(session, identifier) {
   await waitForText(session, 'TODAY’S DESK')
 }
 
-async function openApprovals(session) {
+async function openApprovals(session, expected = 'Every completed decision keeps its actor and server time.') {
   await clickText(session, 'Approvals')
-  await waitForText(session, 'Every completed decision keeps its actor and server time.')
+  await waitForText(session, expected)
   await scrollTo(session, 0)
 }
 
@@ -188,11 +202,36 @@ try {
   await capture(session, 'principal-many-390x844.png')
   await clickText(session, 'Reject')
   await waitForText(session, 'Reject this request?')
-  await fill(session, 'Explain what must be corrected', 'Registration details require correction.')
+  const rejectionReason = 'School email does not match the submitted staff record.'
+  await fill(session, 'Explain what must be corrected', rejectionReason)
   await capture(session, 'principal-rejection-confirmation-390x844.png')
-  await clickText(session, 'Keep pending')
+  await clickText(session, 'Reject request')
+  await waitForText(session, 'The queue is up to date.')
+  const rejectionAudit = await (await fetch(`${mockUrl}/__test__/audit`)).json()
+  if (rejectionAudit.events[0]?.reason !== rejectionReason) throw new Error('The typed rejection reason was not sent to the server.')
+  await mode('ready', true)
+  await session.call('Page.reload', { ignoreCache: true })
+  await waitForText(session, 'TODAY’S DESK')
+  await openApprovals(session)
   await viewport(session, 320, 700)
   await capture(session, 'principal-many-320x700.png')
+  await clickText(session, 'Reject')
+  await waitForText(session, 'Reject this request?')
+  await fill(session, 'Explain what must be corrected', 'No')
+  await capture(session, 'principal-rejection-validation-320x700.png')
+  await fill(session, 'Explain what must be corrected', 'School email does not match the submitted staff record.')
+  await viewport(session, 320, 500)
+  await capture(session, 'principal-rejection-keyboard-320x500.png')
+  const decisionVisible = await evaluate(session, `(() => {
+    const action = [...document.querySelectorAll('[role="button"]')].find(item => item.innerText?.includes('Reject request'));
+    action?.scrollIntoView({ block: 'end' });
+    const rect = action?.getBoundingClientRect();
+    return Boolean(rect && rect.top >= 0 && rect.bottom <= innerHeight);
+  })()`)
+  if (!decisionVisible) throw new Error('Rejection action is not reachable in the short keyboard viewport.')
+  await capture(session, 'principal-rejection-keyboard-actions-320x500.png')
+  await viewport(session, 320, 700)
+  await clickText(session, 'Keep pending')
   await scrollTo(session, 99999)
   await capture(session, 'principal-final-320x700.png')
   await viewport(session, 390, 844, 1.3)
@@ -209,7 +248,7 @@ try {
   await mode('partial')
   await session.call('Page.reload', { ignoreCache: true })
   await waitForText(session, 'TODAY’S DESK')
-  await openApprovals(session)
+  await openApprovals(session, 'No decision was made while a queue is unavailable.')
   await waitForText(session, 'needs attention')
   await scrollTo(session, 1400)
   await capture(session, 'principal-partial-failure-390x844.png')
@@ -217,6 +256,52 @@ try {
   await clear(session)
   await mode('ready', true)
   await login(session, 'teacher@example.test')
+  await clickText(session, 'Dashboard')
+  await waitForText(session, 'Kabir, here is your class pulse.')
+  await capture(session, 'teacher-dashboard-390x844.png')
+  await viewport(session, 320, 700)
+  await capture(session, 'teacher-dashboard-320x700.png')
+  await viewport(session, 390, 844)
+  await clickText(session, 'Filters')
+  await clickAccessible(session, '[aria-label]', 'Standard: All')
+  await mode('dashboard-slow')
+  await clickAccessible(session, '[role="radio"]', '10')
+  await waitForText(session, 'Updating dashboard')
+  await capture(session, 'teacher-dashboard-updating-390x844.png')
+  await viewport(session, 320, 700)
+  await capture(session, 'teacher-dashboard-updating-320x700.png')
+  await waitForText(session, '10 active', 10000)
+  await clickText(session, 'Filters')
+  await capture(session, 'teacher-dashboard-filtered-320x700.png')
+  await viewport(session, 390, 844)
+  await capture(session, 'teacher-dashboard-filtered-390x844.png')
+  await mode('dashboard-error')
+  await session.call('Page.reload', { ignoreCache: true })
+  await waitForText(session, 'TODAY’S DESK')
+  await clickText(session, 'Dashboard')
+  await waitForText(session, 'Dashboard could not load')
+  await viewport(session, 320, 700)
+  await capture(session, 'teacher-dashboard-error-320x700.png')
+  await mode('ready')
+  await clickText(session, 'Try again')
+  await waitForText(session, '27 active')
+  await capture(session, 'teacher-dashboard-retry-320x700.png')
+  await viewport(session, 390, 844)
+  await evaluate(session, 'history.back()')
+  await waitForText(session, 'TODAY’S DESK')
+  await mode('ready')
+  await clickText(session, 'Index Notes')
+  await waitForText(session, 'Continue on Eduraa web')
+  await capture(session, 'teacher-web-workflow-390x844.png')
+  await evaluate(session, 'window.__openedSchoolUrl = null; window.open = (url) => { window.__openedSchoolUrl = url; return null }')
+  await clickText(session, 'Open website')
+  const openedSchoolUrl = await evaluate(session, 'window.__openedSchoolUrl')
+  if (openedSchoolUrl !== 'https://www.eduraa-ai.com/index-notes') throw new Error(`Unexpected school website destination: ${openedSchoolUrl}`)
+  await viewport(session, 320, 700)
+  await capture(session, 'teacher-web-workflow-320x700.png')
+  await viewport(session, 390, 844)
+  await evaluate(session, 'history.back()')
+  await waitForText(session, 'TODAY’S DESK')
   await openApprovals(session)
   await capture(session, 'teacher-students-390x844.png')
   await viewport(session, 320, 700)
