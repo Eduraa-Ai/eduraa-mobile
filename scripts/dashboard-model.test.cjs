@@ -58,6 +58,25 @@ test('teacher dashboard exposes the web analytics sections and tolerates optiona
   assert.equal(view.sections[3].rows[0].title, 'Algebra')
 })
 
+test('integrity signals open only a scoped student analysis when a student id exists', () => {
+  const view = model.buildStaffDashboardModel({
+    kind: 'teacher',
+    data: {
+      teacher: { first_name: 'Mira', last_name: 'Shah' },
+      summary: { roster_students: 2, active_students: 2, submissions: 2, papers: 1, average_percent: 65, at_risk_students: 0, integrity_flags: 2 },
+      students: [],
+      recent_submissions: [
+        { submission_id: 'sub-1', paper_id: 'paper-1', paper_title: 'Unit test', student_id: 'student-1', student_name: 'Ravi', misconduct_score: 75, submitted_at: '2026-08-20T08:00:00Z' },
+        { submission_id: 'sub-2', paper_id: 'paper-1', paper_title: 'Unit test', student_id: '', student_name: 'Unknown', misconduct_score: 70, submitted_at: '2026-08-20T08:00:00Z' },
+      ],
+    },
+  })
+
+  const signals = view.sections.find((section) => section.id === 'integrity')
+  assert.deepEqual(signals.rows[0].action, { kind: 'student', id: 'student-1' })
+  assert.equal(signals.rows[1].action, undefined)
+})
+
 test('teacher dashboard rankings and intervention insight use the same scoped analytics and preserve drill-down actions', () => {
   const view = model.buildStaffDashboardModel({
     kind: 'teacher',
@@ -140,7 +159,8 @@ test('dashboard uses focused analytics pages without a promotional hero', () => 
   assert.match(screen, /SelectField label="Standard"/)
   assert.match(screen, /DateField label="From"/)
   assert.match(screen, /Update the filters before opening an analysis/)
-  assert.match(screen, /if \(dateRangeInvalid\) return/)
+  assert.match(screen, /scopePending = dashboardQuery\.isPlaceholderData \|\| dateRangeInvalid/)
+  assert.match(screen, /Your new scope is loading/)
   assert.match(screen, /Dashboard not available/)
   assert.match(screen, /enabled: Boolean\(dashboardKind\)/)
   assert.doesNotMatch(screen, /getLeadershipSummary\(\)/)

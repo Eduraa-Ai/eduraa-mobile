@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
@@ -58,21 +58,6 @@ const pagesByKind: Record<Extract<ReturnType<typeof resolveStaffDashboardKind>, 
     { id: 'teachers', label: 'Teachers', icon: 'people-outline', sectionIds: ['teachers'] },
     { id: 'subjects', label: 'Subjects', icon: 'book-outline', sectionIds: ['subjects'] },
   ],
-}
-
-function DashboardHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <View style={styles.header}>
-      <View style={styles.headerMark}>
-        <Ionicons name="analytics-outline" size={22} color={colors.accentStrong} />
-      </View>
-      <View style={styles.headerCopy}>
-        <Text style={styles.headerTitle}>Dashboard</Text>
-        <Text style={styles.headerContext} numberOfLines={1}>{title}</Text>
-        <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text>
-      </View>
-    </View>
-  )
 }
 
 function StatTile({ label, value, helper, tone, onPress, disabled = false }: {
@@ -141,16 +126,32 @@ export default function DashboardScreen() {
     () => dashboardQuery.data ? buildStaffDashboardModel(dashboardQuery.data) : null,
     [dashboardQuery.data],
   )
+  const scopePending = dashboardQuery.isPlaceholderData || dateRangeInvalid
   const activePage = pages.find((page) => page.id === activePageId) ?? null
   const visibleSections = model?.sections.filter((section) => activePage?.sectionIds.includes(section.id)) ?? []
   const filterOptions = dashboardQuery.data?.data.filters
   const appliedFilterCount = Object.values(filters).filter(Boolean).length
+  const appliedFilterLabels = [
+    filters.standard && `Standard ${filters.standard}`,
+    filters.division && `Division ${filters.division}`,
+    filters.subject_id && `Subject ${filterOptions?.subjects.find((item) => item.id === filters.subject_id)?.name ?? filters.subject_id}`,
+    filters.paper_id && `Paper ${filterOptions?.papers?.find((item) => item.id === filters.paper_id)?.title ?? filters.paper_id}`,
+    filters.teacher_id && `Teacher ${filterOptions?.teachers?.find((item) => item.id === filters.teacher_id)?.name ?? filters.teacher_id}`,
+    filters.date_from && `From ${filters.date_from}`,
+    filters.date_to && `To ${filters.date_to}`,
+  ].filter((label): label is string => Boolean(label))
+  const filterSummary = appliedFilterLabels.length > 1
+    ? `${appliedFilterLabels[0]} · ${appliedFilterLabels.length - 1} more`
+    : appliedFilterLabels[0] ?? 'All available data'
+  const averageMetric = model?.metrics.find((metric) => metric.label === 'Class average' || metric.label === 'School average')
+  const riskMetric = model?.metrics.find((metric) => metric.label === 'At risk')
+  const moreMetrics = model?.metrics.filter((metric) => metric !== averageMetric && metric !== riskMetric) ?? []
   const selectOptions = (items: Array<{ value: string; label: string }>) => [{ value: '', label: 'All' }, ...items]
   const updateFilter = (field: keyof DashboardFilterParams, value: string) => {
     setFilters((current) => ({ ...current, [field]: value || undefined }))
   }
   const handleRowAction = (action: NonNullable<import('./dashboardModel').DashboardRow['action']>) => {
-    if (dateRangeInvalid) return
+    if (scopePending) return
     if (action.kind === 'student') {
       navigation.navigate('DashboardStudentDetail', { studentId: action.id, source: dashboardKind === 'institution' ? 'institution' : 'teacher', filters })
       return
@@ -171,7 +172,7 @@ export default function DashboardScreen() {
     return null
   }
   const handleMetricAction = (label: string) => {
-    if (dateRangeInvalid) return
+    if (scopePending) return
     const destination = metricDestination(label)
     if (destination) setActivePageId(destination)
   }
@@ -216,7 +217,6 @@ export default function DashboardScreen() {
   if (dashboardQuery.isError || !model) {
     return (
       <AppScreen contentStyle={styles.screen}>
-        <DashboardHeader title="Your analytics" subtitle="Role-aware school and learning performance." />
         <ErrorState
           title="Dashboard could not load"
           message={dashboardErrorMessage(dashboardQuery.error)}
@@ -242,9 +242,9 @@ export default function DashboardScreen() {
         />
       )}
     >
-      <DashboardHeader title={model.title} subtitle={model.subtitle} />
+      <Text style={styles.context} numberOfLines={2}>{model.subtitle}</Text>
 
-      <View style={styles.pageTabs} accessibilityRole="tablist">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pageTabs} accessibilityRole="tablist" accessibilityLabel="Dashboard pages; swipe to see more">
         {pages.map((page) => {
           const selected = page.id === activePage?.id
           return (
@@ -256,28 +256,36 @@ export default function DashboardScreen() {
               onPress={() => setActivePageId(page.id)}
               style={({ pressed }) => [styles.pageTab, selected && styles.pageTabSelected, pressed && styles.pressed]}
             >
-              <Ionicons name={page.icon} size={16} color={selected ? colors.textOnBrand : colors.textMuted} />
+              <Ionicons name={page.icon} size={14} color={selected ? colors.textOnBrand : colors.textMuted} />
               <Text numberOfLines={1} style={[styles.pageTabText, selected && styles.pageTabTextSelected]}>{page.label}</Text>
             </Pressable>
           )
         })}
-      </View>
+      </ScrollView>
 
       {filterOptions ? (
         <View style={styles.filterArea}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: filtersOpen }}
-            onPress={() => setFiltersOpen((open) => !open)}
-            style={({ pressed }) => [styles.filterTrigger, pressed && styles.pressed]}
-          >
-            <View style={styles.filterTriggerIcon}><Ionicons name="options-outline" size={17} color={colors.accentStrong} /></View>
-            <View style={styles.filterTriggerCopy}>
-              <Text style={styles.filterTriggerTitle}>Filters</Text>
-              <Text style={styles.filterTriggerMeta}>{appliedFilterCount ? `${appliedFilterCount} applied` : 'All available data'}</Text>
-            </View>
-            <Ionicons name={filtersOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
-          </Pressable>
+          <View style={styles.filterTriggerRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: filtersOpen }}
+              onPress={() => setFiltersOpen((open) => !open)}
+              style={({ pressed }) => [styles.filterTrigger, pressed && styles.pressed]}
+            >
+              <View style={styles.filterTriggerIcon}><Ionicons name="options-outline" size={15} color={colors.textSecondary} /></View>
+              <View style={styles.filterTriggerCopy}>
+                <Text style={styles.filterTriggerTitle}>Filters</Text>
+                <Text accessibilityLiveRegion="polite" numberOfLines={1} style={styles.filterTriggerMeta}>{scopePending && !dateRangeInvalid ? `Updating ${filterSummary}…` : filterSummary}</Text>
+              </View>
+              {scopePending && !dateRangeInvalid ? <ActivityIndicator size="small" color={colors.accentStrong} /> : null}
+              <Ionicons name={filtersOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+            </Pressable>
+            {appliedFilterCount ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Clear all dashboard filters" onPress={() => setFilters({})} style={({ pressed }) => [styles.filterQuickClear, pressed && styles.pressed]}>
+                <Ionicons name="close" size={19} color={colors.accentStrong} />
+              </Pressable>
+            ) : null}
+          </View>
           {filtersOpen ? (
             <View style={styles.filterComposer}>
               <SelectField label="Standard" value={filters.standard || ''} placeholder="All standards" options={selectOptions(filterOptions.standards.map((value) => ({ value, label: value })))} onChange={(value) => updateFilter('standard', value)} />
@@ -306,24 +314,45 @@ export default function DashboardScreen() {
         </View>
       ) : null}
 
-      {activePage?.id === 'overview' ? (
+      {scopePending ? (
+        <View style={styles.updatingScope} accessibilityLiveRegion="polite">
+          <Text style={styles.updatingTitle}>{dateRangeInvalid ? 'Check the date range' : 'Updating dashboard'}</Text>
+          <Text style={styles.updatingBody}>{dateRangeInvalid ? 'Choose an end date on or after the start date to see results.' : 'Your new scope is loading. Results will appear when they are ready.'}</Text>
+          {!dateRangeInvalid ? <><SkeletonCard lines={2} /><SkeletonCard lines={4} /></> : null}
+        </View>
+      ) : null}
+
+      {!scopePending && activePage?.id === 'overview' ? (
         <View style={styles.overviewBlock}>
-          <SectionHeading title="Key metrics" subtitle="A high-level view of the current reporting period." />
+          {averageMetric && riskMetric ? (
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryMain}>
+                <Text style={styles.summaryLabel}>{averageMetric.label}</Text>
+                <Text style={styles.summaryValue}>{averageMetric.value}</Text>
+                <Text style={styles.summaryHelper}>{averageMetric.helper}</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${riskMetric.value} at risk; view students`} onPress={() => handleMetricAction(riskMetric.label)} style={({ pressed }) => [styles.summaryRisk, pressed && styles.rowPressed]}>
+                <Text style={styles.summaryRiskValue}>{riskMetric.value}</Text>
+                <Text style={styles.summaryRiskLabel}>At risk</Text>
+                <Ionicons name="arrow-forward" size={15} color={colors.accentStrong} style={styles.summaryRiskArrow} />
+              </Pressable>
+            </View>
+          ) : null}
           <View style={styles.metricsGrid}>
-            {model.metrics.map((metric) => (
-              <StatTile key={metric.label} {...metric} disabled={dateRangeInvalid} onPress={metricDestination(metric.label) ? () => handleMetricAction(metric.label) : undefined} />
+            {moreMetrics.map((metric) => (
+              <StatTile key={metric.label} {...metric} onPress={metricDestination(metric.label) ? () => handleMetricAction(metric.label) : undefined} />
             ))}
           </View>
         </View>
       ) : null}
 
-      {activePage?.id === 'integrity' && visibleSections.length === 0 ? (
+      {!scopePending && activePage?.id === 'integrity' && visibleSections.length === 0 ? (
         <AnimatedCard style={styles.quietState}>
           <EmptyState icon="shield-checkmark-outline" title="No integrity alerts" body="There are no recent submissions that need review." />
         </AnimatedCard>
       ) : null}
 
-      {activePage?.id === 'assistant' ? (
+      {!scopePending && activePage?.id === 'assistant' ? (
         <AnimatedCard style={styles.assistantCard}>
           <View style={styles.assistantIcon}><Ionicons name="sparkles-outline" size={22} color={colors.accentStrong} /></View>
           <View style={styles.assistantCopy}>
@@ -341,7 +370,7 @@ export default function DashboardScreen() {
         </AnimatedCard>
       ) : null}
 
-      {visibleSections.map((section) => (
+      {!scopePending && visibleSections.map((section) => (
         <View key={section.id} style={styles.section}>
           <SectionHeading title={section.title} subtitle={section.subtitle} />
           {section.rows.length ? (
@@ -391,67 +420,25 @@ const styles = StyleSheet.create({
     gap: spacing[5],
     paddingBottom: spacing[20],
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[3],
-    paddingTop: spacing[1],
-  },
-  headerMark: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.backgroundElevated,
-  },
-  headerCopy: { flex: 1, minWidth: 0 },
-  headerTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 24,
-    letterSpacing: -0.5,
-  },
-  headerContext: {
-    marginTop: spacing[1],
-    color: colors.accentStrong,
-    fontFamily: typography.fonts.bodySemibold,
-    fontSize: 13,
-  },
-  headerSubtitle: {
-    marginTop: spacing[1],
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  pageTabs: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  pageTab: {
-    flexGrow: 1,
-    flexBasis: '47%',
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-    paddingHorizontal: spacing[4],
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.backgroundElevated,
-  },
-  pageTabSelected: {
-    borderColor: colors.text,
-    backgroundColor: colors.text,
-  },
-  pageTabText: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodySemibold,
-    fontSize: 12,
-  },
+  context: { ...typography.roles.caption, color: colors.textMuted },
+  pageTabs: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingRight: spacing[5] },
+  pageTab: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing[3], borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  pageTabSelected: { borderColor: colors.nav, backgroundColor: colors.nav },
+  pageTabText: { color: colors.textSecondary, fontFamily: typography.fonts.bodySemibold, fontSize: 13 },
   pageTabTextSelected: { color: colors.textOnBrand },
   overviewBlock: { gap: spacing[3] },
+  summaryCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  summaryMain: { flex: 1, gap: spacing[1] },
+  summaryLabel: { ...typography.roles.caption, color: colors.textMuted },
+  summaryValue: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 28, lineHeight: 34, fontVariant: ['tabular-nums'] },
+  summaryHelper: { ...typography.roles.caption, color: colors.successText },
+  summaryRisk: { minWidth: 84, minHeight: 64, alignItems: 'flex-start', justifyContent: 'center', gap: 1, paddingHorizontal: spacing[3], borderRadius: radius.sm, backgroundColor: colors.dangerSurface },
+  summaryRiskValue: { color: colors.dangerText, fontFamily: typography.fonts.bodyBold, fontSize: 22, lineHeight: 26 },
+  summaryRiskLabel: { ...typography.roles.caption, fontFamily: typography.fonts.bodySemibold, color: colors.dangerText },
+  summaryRiskArrow: { position: 'absolute', right: spacing[2], top: spacing[2] },
+  updatingScope: { gap: spacing[3], paddingVertical: spacing[2] },
+  updatingTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 17 },
+  updatingBody: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
   assistantCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -484,13 +471,15 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     fontFamily: typography.fonts.bodySemibold,
   },
-  filterArea: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
-  filterTrigger: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[3] },
-  filterTriggerIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.accentSurface },
-  filterTriggerCopy: { flex: 1 },
-  filterTriggerTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
-  filterTriggerMeta: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
-  filterComposer: { gap: spacing[4], paddingBottom: spacing[5] },
+  filterArea: { borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, paddingHorizontal: spacing[3] },
+  filterTriggerRow: { flexDirection: 'row', alignItems: 'center' },
+  filterTrigger: { flex: 1, minWidth: 0, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  filterQuickClear: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  filterTriggerIcon: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: radius.xs, backgroundColor: colors.backgroundMuted },
+  filterTriggerCopy: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', gap: spacing[2] },
+  filterTriggerTitle: { ...typography.roles.body, fontFamily: typography.fonts.bodyBold, color: colors.nav },
+  filterTriggerMeta: { ...typography.roles.caption, flex: 1, color: colors.textMuted },
+  filterComposer: { gap: spacing[3], paddingBottom: spacing[4] },
   filterDates: { flexDirection: 'row', gap: spacing[3] },
   filterDate: { flex: 1 },
   clearFilters: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
@@ -501,22 +490,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing[2],
   },
-  statTile: {
-    width: '48.5%',
-    minHeight: 116,
-    justifyContent: 'space-between',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.backgroundElevated,
-    padding: spacing[4],
-  },
+  statTile: { width: '48.5%', justifyContent: 'space-between', gap: 2, borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, paddingHorizontal: spacing[3], paddingVertical: spacing[3] },
   statTileDisabled: { opacity: 0.56 },
   statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   statDot: { width: 7, height: 7, borderRadius: 4 },
-  statLabel: { flex: 1, color: colors.textMuted, fontFamily: typography.fonts.bodySemibold, fontSize: 11 },
-  statValue: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 28, letterSpacing: -0.7 },
-  statHelper: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 14 },
+  statLabel: { ...typography.roles.caption, flex: 1, fontFamily: typography.fonts.bodySemibold, color: colors.textMuted },
+  statValue: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 22, lineHeight: 28, fontVariant: ['tabular-nums'] },
+  statHelper: { ...typography.roles.caption, fontSize: 11.5, color: colors.textMuted },
   statArrow: { position: 'absolute', right: spacing[3], top: spacing[3] },
   metricSkeleton: {
     flex: 1,
@@ -524,31 +504,15 @@ const styles = StyleSheet.create({
   },
   loadingHeader: { minHeight: 92 },
   loadingTabs: { minHeight: 48 },
-  listCard: {
-    paddingVertical: spacing[1],
-  },
+  listCard: { paddingVertical: 0, paddingHorizontal: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   section: {
     gap: spacing[3],
   },
-  row: {
-    minHeight: 76,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    paddingVertical: spacing[4],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
-  },
+  row: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
   lastRow: {
     borderBottomWidth: 0,
   },
-  rowIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  rowIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   rowCopy: {
     flex: 1,
     minWidth: 0,
@@ -559,19 +523,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
   },
-  rowTitle: {
-    flex: 1,
-    color: colors.text,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 14,
-  },
-  rowMeta: {
-    marginTop: spacing[1],
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 11,
-    lineHeight: 16,
-  },
+  rowTitle: { ...typography.roles.body, flex: 1, fontFamily: typography.fonts.bodyBold, color: colors.nav },
+  rowMeta: { ...typography.roles.caption, marginTop: 2, color: colors.textMuted },
   rowValue: {
     maxWidth: 76,
     fontFamily: typography.fonts.bodyBold,

@@ -1,10 +1,10 @@
 import React, { ReactNode } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { AnimatedButton, AnimatedCard } from '../../components/ui'
+import { EmptyState, ErrorState, SectionHeading } from '../../components/ui'
 import type { ApiFailure } from '../../api/classTeacher'
 import type { ClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
-import { colors, radius, shadows, spacing, typography } from '../../theme'
+import { colors, radius, spacing, typography } from '../../theme'
 
 /**
  * The class context banner. Issue #61 requires school, standard, division,
@@ -30,45 +30,26 @@ export function ClassContextBar({
   const scope = [school, branch].filter(Boolean).join(' · ')
   const classLabel = standard && division ? `Class ${standard}-${division}` : standard ? `Class ${standard}` : 'Class not set'
 
+  const semester = semesterName?.trim() || 'Semester not selected'
+  const teacher = identity.teacherCode ? `${identity.teacherName} (${identity.teacherCode})` : identity.teacherName
+
+  // Issue #61: school, class, semester and class-teacher identity stay visible,
+  // as two plain lines rather than a card of chips.
   return (
-    <View style={styles.contextBar} accessibilityRole="header">
-      <View style={styles.contextTop}>
-        <View style={styles.contextIcon}>
-          <Ionicons name="school" size={16} color={colors.accentStrong} />
-        </View>
-        <View style={styles.contextCopy}>
-          <Text style={styles.contextClass} numberOfLines={2}>
-            {classLabel}
-          </Text>
-          <Text style={styles.contextScope} numberOfLines={2}>
-            {scope || 'School not linked to this account'}
-          </Text>
-        </View>
+    <View style={styles.contextBar} accessibilityRole="header" accessibilityLabel={`${classLabel}, ${semester}. ${scope || 'School not linked to this account'}. ${teacher}`}>
+      <View style={styles.contextIcon}>
+        <Ionicons name="school-outline" size={17} color={colors.iconInk} />
       </View>
-
-      <View style={styles.contextChips}>
-        <ContextChip icon="calendar-outline" label={semesterName?.trim() || 'Semester not selected'} />
-        <ContextChip icon="person-circle-outline" label={identity.teacherName} />
-        {identity.teacherCode ? <ContextChip icon="id-card-outline" label={identity.teacherCode} /> : null}
+      <View style={styles.contextCopy}>
+        <Text style={styles.contextClass} numberOfLines={1}>
+          {classLabel}
+          <Text style={styles.contextSemester}>{`  ·  ${semester}`}</Text>
+        </Text>
+        <Text style={styles.contextScope} numberOfLines={1}>
+          {[scope || 'School not linked to this account', teacher].join(' · ')}
+        </Text>
+        {isStale ? <Text style={styles.staleText}>Showing the last loaded copy while it refreshes.</Text> : null}
       </View>
-
-      {isStale ? (
-        <View style={styles.staleRow}>
-          <Ionicons name="time-outline" size={13} color={colors.warning} />
-          <Text style={styles.staleText}>Showing the last loaded copy while it refreshes.</Text>
-        </View>
-      ) : null}
-    </View>
-  )
-}
-
-function ContextChip({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
-  return (
-    <View style={styles.contextChip}>
-      <Ionicons name={icon} size={12} color={colors.textSecondary} />
-      <Text style={styles.contextChipText} numberOfLines={1}>
-        {label}
-      </Text>
     </View>
   )
 }
@@ -96,42 +77,26 @@ export function FailureCard({
   retryLabel?: string
 }) {
   const canRetry = onRetry && failure.kind !== 'session_expired' && failure.kind !== 'not_authorized'
+  const body = failure.kind === 'not_authorized'
+    ? 'This class is not assigned to your account, so the server declined the request.'
+    : failure.kind === 'not_found'
+      ? 'This class or semester no longer exists on the server.'
+      : failure.message
+  const detail = failure.detail && failure.detail !== failure.message ? ` Server said: ${failure.detail}` : ''
 
   return (
-    <AnimatedCard style={styles.failureCard}>
-      <View style={styles.failureHeader}>
-        <View style={styles.failureIcon}>
-          <Ionicons
-            name={failure.kind === 'offline' ? 'cloud-offline' : failure.kind === 'not_authorized' ? 'lock-closed' : 'alert-circle'}
-            size={18}
-            color={colors.danger}
-          />
-        </View>
-        <Text style={styles.failureTitle}>{FAILURE_TITLES[failure.kind]}</Text>
-      </View>
-      <Text style={styles.failureBody}>
-        {failure.kind === 'not_authorized'
-          ? 'This class is not assigned to your account, so the server declined the request.'
-          : failure.kind === 'not_found'
-            ? 'This class or semester no longer exists on the server.'
-            : failure.message}
-      </Text>
-      {failure.detail && failure.detail !== failure.message ? <Text style={styles.failureDetail}>Server said: {failure.detail}</Text> : null}
-      {canRetry ? <AnimatedButton label={retryLabel} variant="secondary" onPress={onRetry} /> : null}
-    </AnimatedCard>
+    <ErrorState
+      kind={failure.kind === 'offline' ? 'offline' : 'error'}
+      title={FAILURE_TITLES[failure.kind]}
+      message={`${body}${detail}`}
+      actionLabel={retryLabel}
+      onAction={canRetry ? onRetry : undefined}
+    />
   )
 }
 
 export function SectionHeaderRow({ title, meta, action }: { title: string; meta?: string; action?: ReactNode }) {
-  return (
-    <View style={styles.sectionRow}>
-      <View style={styles.sectionCopy}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {meta ? <Text style={styles.sectionMeta}>{meta}</Text> : null}
-      </View>
-      {action}
-    </View>
-  )
+  return <SectionHeading title={title} subtitle={meta} action={action} />
 }
 
 export function SearchField({
@@ -174,15 +139,6 @@ export function SearchField({
   )
 }
 
-export function StatTile({ label, value, tone = colors.text }: { label: string; value: string; tone?: string }) {
-  return (
-    <View style={styles.statTile}>
-      <Text style={[styles.statValue, { color: tone }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  )
-}
-
 export function InlineLoading({ label }: { label: string }) {
   return (
     <View style={styles.inlineLoading}>
@@ -194,13 +150,9 @@ export function InlineLoading({ label }: { label: string }) {
 
 export function EmptyCard({ icon, title, body }: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }) {
   return (
-    <AnimatedCard style={styles.emptyCard}>
-      <View style={styles.emptyIcon}>
-        <Ionicons name={icon} size={20} color={colors.accentStrong} />
-      </View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyBody}>{body}</Text>
-    </AnimatedCard>
+    <View style={styles.emptyCard}>
+      <EmptyState icon={icon} title={title} body={body} />
+    </View>
   )
 }
 
@@ -249,128 +201,13 @@ export function NavRow({
 }
 
 const styles = StyleSheet.create({
-  contextBar: {
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundElevated,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing[4],
-    gap: spacing[3],
-    ...shadows.xs,
-  },
-  contextTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  contextIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
-  },
-  contextCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  contextClass: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 17,
-    lineHeight: 22,
-  },
-  contextScope: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  contextChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[2],
-  },
-  contextChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-    borderRadius: radius.full,
-    backgroundColor: colors.backgroundMuted,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-    maxWidth: '100%',
-  },
-  contextChipText: {
-    flexShrink: 1,
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 11,
-  },
-  staleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-  },
-  staleText: {
-    flex: 1,
-    color: colors.warning,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  failureCard: {
-    gap: spacing[3],
-    borderColor: colors.dangerBorder,
-  },
-  failureHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  failureIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.dangerSurface,
-  },
-  failureTitle: {
-    flex: 1,
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 16,
-  },
-  failureBody: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  failureDetail: {
-    color: colors.textSecondary,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: spacing[3],
-  },
-  sectionCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  sectionTitle: {
-    ...typography.roles.title,
-    color: colors.text,
-  },
-  sectionMeta: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
+  contextSemester: { fontFamily: typography.fonts.bodySemibold, color: colors.textSecondary },
+  contextBar: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[1] },
+  contextIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface },
+  contextCopy: { flex: 1, minWidth: 0, gap: 1 },
+  contextClass: { ...typography.roles.body, fontFamily: typography.fonts.bodyBold, color: colors.nav },
+  contextScope: { ...typography.roles.caption, color: colors.textMuted },
+  staleText: { ...typography.roles.caption, flex: 1, color: colors.warning },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -395,25 +232,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statTile: {
-    flex: 1,
-    minWidth: 84,
-    borderRadius: radius.md,
-    backgroundColor: colors.backgroundMuted,
-    padding: spacing[3],
-    gap: 2,
-  },
-  statValue: {
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 21,
-  },
-  statLabel: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
   inlineLoading: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -424,52 +242,12 @@ const styles = StyleSheet.create({
     ...typography.roles.label,
     color: colors.textMuted,
   },
-  emptyCard: {
-    gap: spacing[2],
-    alignItems: 'flex-start',
-  },
-  emptyIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentSurface,
-    borderWidth: 1,
-    borderColor: colors.borderBrand,
-  },
-  emptyTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 16,
-  },
-  emptyBody: {
-    ...typography.roles.body,
-    color: colors.textMuted,
-  },
-  navRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    minHeight: 72,
-    borderRadius: radius.lg,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    ...shadows.xs,
-  },
+  emptyCard: { borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], minHeight: 64, borderRadius: radius.card, backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing[4], paddingVertical: spacing[3] },
   navRowDisabled: {
     opacity: 0.55,
   },
-  navIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  navIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   navCopy: {
     flex: 1,
     gap: 2,
@@ -479,22 +257,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
   },
-  navTitle: {
-    flex: 1,
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 15,
-  },
+  navTitle: { ...typography.roles.rowTitle, flex: 1, color: colors.nav },
   navMeta: {
     fontFamily: typography.fonts.bodyBold,
     fontSize: 11,
   },
-  navBody: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
-  },
+  navBody: { ...typography.roles.caption, color: colors.textMuted },
   pressed: {
     opacity: 0.78,
   },

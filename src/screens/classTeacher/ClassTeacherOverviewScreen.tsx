@@ -3,13 +3,13 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, T
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, GradientHeroCard } from '../../components/ui'
+import { AnimatedButton, AppScreen, NoticeCard, SummaryStrip } from '../../components/ui'
 import { classTeacherApi, ClassTeacherRequest, ClassValidationReport, Semester, toApiFailure } from '../../api/classTeacher'
 import { classTeacherKeys, useActiveClassSection, useClassTeacherAccess, useClassTeacherIdentity } from '../../hooks/useClassTeacherAccess'
 import { useAppResume } from '../../hooks/useAppResume'
 import { useClassTeacherStore } from '../../stores/classTeacherStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
-import { ClassContextBar, EmptyCard, FailureCard, InlineLoading, NavRow, SectionHeaderRow, StatTile } from './components'
+import { ClassContextBar, EmptyCard, FailureCard, InlineLoading, NavRow, SectionHeaderRow } from './components'
 
 function readinessTone(report?: ClassValidationReport) {
   if (!report) return colors.textMuted
@@ -110,7 +110,7 @@ export default function ClassTeacherOverviewScreen() {
   if (access.failure) {
     return (
       <AppScreen contentStyle={styles.screen}>
-        <GradientHeroCard
+        <NoticeCard
           eyebrow="CLASS TEACHER"
           title="Workspace locked"
           subtitle="Class management is only available to teachers with an approved class-teacher assignment."
@@ -123,7 +123,7 @@ export default function ClassTeacherOverviewScreen() {
   if (access.hasNoClass) {
     return (
       <AppScreen contentStyle={styles.screen}>
-        <GradientHeroCard
+        <NoticeCard
           eyebrow="CLASS TEACHER"
           title="No class assigned to you"
           subtitle="Your account is signed in, but the school has not approved a class-teacher assignment for it yet."
@@ -159,7 +159,7 @@ export default function ClassTeacherOverviewScreen() {
     const rejected = latestPlan?.status === 'rejected'
     return (
       <AppScreen contentStyle={styles.screen}>
-        <GradientHeroCard
+        <NoticeCard
           eyebrow="CLASS TEACHER"
           title={latestPlan?.status === 'pending' ? 'Plan awaiting approval' : rejected ? 'Plan needs an update' : 'One quick setup left'}
           subtitle={latestPlan?.status === 'pending' ? 'Your principal is reviewing the teaching plan. Class management will open automatically after approval.' : rejected ? latestPlan.rejection_reason || 'Update the teaching plan and send it again.' : 'Choose your class and send its teaching plan to your principal.'}
@@ -239,32 +239,25 @@ export default function ClassTeacherOverviewScreen() {
         <Text style={styles.partialNote}>School details could not load, so only your class assignment is shown.</Text>
       ) : null}
 
-      <AnimatedCard style={styles.readinessCard}>
-        <Text style={styles.readinessKicker}>Class readiness</Text>
-        {validationQuery.isLoading ? (
-          <InlineLoading label="Building the readiness report" />
-        ) : validationFailure ? (
-          <FailureCard failure={validationFailure} onRetry={() => void validationQuery.refetch()} />
-        ) : (
-          <>
-            <Text style={[styles.readinessHeadline, { color: readinessTone(report) }]}>{readinessHeadline(report)}</Text>
-            <View style={styles.statRow}>
-              <StatTile label="On roster" value={report ? String(report.total_students) : '—'} />
-              <StatTile label="With division" value={report ? String(report.assigned_students) : '—'} tone={colors.success} />
-              <StatTile
-                label="Needs division"
-                value={report ? String(report.unassigned_students) : '—'}
-                tone={report && report.unassigned_students > 0 ? colors.danger : colors.text}
-              />
-            </View>
-            <Text style={styles.readinessMeta}>
-              {report
-                ? `Expecting ${report.expected_subject_count} subject${report.expected_subject_count === 1 ? '' : 's'} per student this semester.`
-                : 'Subject expectations load with the report.'}
-            </Text>
-          </>
-        )}
-      </AnimatedCard>
+      {validationQuery.isLoading ? (
+        <InlineLoading label="Building the readiness report" />
+      ) : validationFailure ? (
+        <FailureCard failure={validationFailure} onRetry={() => void validationQuery.refetch()} />
+      ) : (
+        <View style={styles.readiness}>
+          <SummaryStrip
+            stats={[
+              { label: 'On roster', value: report ? String(report.total_students) : '—' },
+              { label: 'With division', value: report ? String(report.assigned_students) : '—', tone: 'success' },
+              { label: 'Needs division', value: report ? String(report.unassigned_students) : '—', tone: report && report.unassigned_students > 0 ? 'danger' : 'default' },
+            ]}
+          />
+          <Text style={[styles.readinessMeta, { color: readinessTone(report) }]}>
+            {readinessHeadline(report)}
+            {report ? ` ${report.expected_subject_count} subject${report.expected_subject_count === 1 ? '' : 's'} expected per student.` : ''}
+          </Text>
+        </View>
+      )}
 
       <SectionHeaderRow title="Teacher assignment" meta="The principal approves this plan before it becomes active." />
 
@@ -371,6 +364,7 @@ export default function ClassTeacherOverviewScreen() {
 }
 
 const styles = StyleSheet.create({
+  readiness: { gap: spacing[2] },
   screen: {
     paddingBottom: spacing[20],
   },
@@ -406,28 +400,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
-  readinessCard: {
-    gap: spacing[3],
-  },
-  readinessKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.accent,
-  },
-  readinessHeadline: {
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 19,
-    lineHeight: 25,
-  },
-  statRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
-  },
-  readinessMeta: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-    lineHeight: 17,
-  },
+  readinessMeta: { ...typography.roles.caption, fontSize: 12.5 },
   semesterRow: {
     gap: spacing[2],
     paddingRight: spacing[4],

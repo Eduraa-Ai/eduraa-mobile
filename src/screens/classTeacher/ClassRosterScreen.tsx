@@ -421,30 +421,10 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyBold,
     fontSize: 12,
   },
-  list: {
-    flex: 1,
-    minHeight: 0,
-  },
-  listContent: {
-    gap: spacing[2],
-    paddingBottom: spacing[4],
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    minHeight: 60,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-  },
-  rowSelected: {
-    borderColor: colors.borderBrand,
-    backgroundColor: colors.accentSurface,
-  },
+  list: { flex: 1, minHeight: 0, borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  listContent: { paddingBottom: 0 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], minHeight: 52, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+  rowSelected: { backgroundColor: colors.accentSurface },
   checkbox: {
     width: 24,
     height: 24,
@@ -458,20 +438,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     borderColor: colors.accent,
   },
-  rowCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  rowName: {
-    color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
-    fontSize: 15,
-  },
-  rowMeta: {
-    color: colors.textMuted,
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 12,
-  },
+  rowCopy: { flex: 1, minWidth: 0, gap: 1 },
+  rowName: { ...typography.roles.body, fontFamily: typography.fonts.bodyBold, color: colors.nav },
+  rowMeta: { ...typography.roles.caption, fontSize: 11.5, color: colors.textMuted },
   divisionPill: {
     minWidth: 42,
     alignItems: 'center',
@@ -493,12 +462,11 @@ const styles = StyleSheet.create({
   },
   actionBar: {
     gap: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.backgroundElevated,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     padding: spacing[4],
-    ...shadows.sm,
   },
   actionLabel: {
     ...typography.roles.eyebrow,

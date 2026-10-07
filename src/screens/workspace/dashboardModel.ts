@@ -139,6 +139,7 @@ function teacherModel(data: TeacherDashboardOverview, attendance?: TeacherAttend
       meta: `${submission.paper_title} · ${compactDate(submission.submitted_at)}`,
       value: safeNumber(submission.misconduct_score) > 0 ? formatPercent(submission.misconduct_score) : 'Review',
       tone: 'danger',
+      ...(submission.student_id ? { action: { kind: 'student' as const, id: submission.student_id } } : {}),
     }))
   const rankingRows: DashboardRow[] = rankedStudents.map((student, index) => ({
     id: student.student_id,
@@ -179,7 +180,7 @@ function teacherModel(data: TeacherDashboardOverview, attendance?: TeacherAttend
       { label: 'At risk', value: formatCount(summary.at_risk_students), helper: 'Below 40%', tone: summary.at_risk_students > 0 ? 'danger' : 'success' },
       { label: 'Papers given', value: formatCount(summary.papers), helper: `${formatCount(summary.submissions)} submissions`, tone: 'default' },
       { label: 'Highest avg', value: topStudent ? formatPercent(topStudent.average_percent) : '—', helper: topStudent?.student_name || 'No active students', tone: 'success' },
-      { label: 'Integrity flags', value: formatCount(summary.integrity_flags), helper: summary.integrity_flags > 0 ? 'Review needed' : 'No alerts', tone: summary.integrity_flags > 0 ? 'danger' : 'success' },
+      { label: 'Integrity flags', value: formatCount(summary.integrity_flags), helper: summary.integrity_flags > 0 ? 'View signals' : 'No alerts', tone: summary.integrity_flags > 0 ? 'danger' : 'success' },
       ...(attendancePercent == null ? [] : [{
         label: 'Attendance today', value: formatPercent(attendancePercent),
         helper: `${formatCount(attendance?.present_count)} of ${formatCount(attendance?.total_students)} present`,
@@ -206,7 +207,7 @@ function teacherModel(data: TeacherDashboardOverview, attendance?: TeacherAttend
       { id: 'ranking', title: 'Student ranking', subtitle: 'Ranked by average score for the active filters. Tap a student for the full analysis.', rows: rankingRows, emptyTitle: 'No ranked students yet', emptyBody: 'Student rankings appear after graded submissions are available.' },
       { id: 'attention', title: 'Students needing attention', subtitle: 'Prioritised from the current reporting period. Tap a student to plan support from their analysis.', rows: attentionRows, emptyTitle: 'No students need attention', emptyBody: 'No at-risk, low-progress, or inactive students match these filters.' },
       { id: 'focus', title: 'Priority learning focus', subtitle: 'Lowest-performing topics and question formats from graded work.', rows: focusRows, emptyTitle: 'No priority focus yet', emptyBody: 'Learning focus appears once enough answers have been graded.' },
-      ...(summary.integrity_flags > 0 ? [{ id: 'integrity', title: 'Integrity review', subtitle: 'Recent submissions that may need review.', rows: integrityRows, emptyTitle: 'Flag details are not available yet', emptyBody: 'Open the web integrity view for the complete flagged-submission report.' }] : []),
+      ...(summary.integrity_flags > 0 ? [{ id: 'integrity', title: 'Integrity signals', subtitle: 'Recent flagged submissions. Open a student to see their learning context.', rows: integrityRows, emptyTitle: 'No recent flagged submissions', emptyBody: 'The summary includes flags outside this recent list or reporting scope.' }] : []),
     ],
   }
 }

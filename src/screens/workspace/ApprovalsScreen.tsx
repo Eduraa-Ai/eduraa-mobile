@@ -2,10 +2,13 @@ import React, { ReactNode, useEffect, useMemo, useState } from 'react'
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
   PixelRatio,
+  Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -14,7 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatedButton, AnimatedCard, AppScreen, ErrorState, GradientHeroCard, SectionHeading, TextInputField } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, Avatar, ErrorState, SectionHeading, StatusPill, TextInputField } from '../../components/ui'
 import {
   approvalsApi,
   type ApprovalQueueData,
@@ -123,27 +126,28 @@ function DecisionActions({
     <AnimatedButton
       label="Approve"
       accessibilityLabel={`Approve ${label}`}
-      icon={<Ionicons name="checkmark" size={18} color={colors.white} />}
+      icon={<Ionicons name="checkmark" size={16} color={colors.white} />}
       loading={busyAction === 'approve'}
       disabled={disabled}
       onPress={onApprove}
       variant="primary"
-      style={stacked ? styles.stackedAction : styles.approveButton}
+      size="compact"
+      style={stacked ? styles.stackedAction : undefined}
     />
   )
   return (
     <View style={[styles.actionRow, stacked && styles.actionColumn]} accessibilityRole="toolbar" accessibilityLabel={`Decision for ${label}`}>
-      {approve}
       <AnimatedButton
         label="Reject"
         accessibilityLabel={`Reject ${label}`}
-        icon={<Ionicons name="close" size={18} color={colors.danger} />}
         loading={busyAction === 'reject'}
         disabled={disabled}
         onPress={onReject}
         variant="secondary"
-        style={stacked ? styles.stackedRejectAction : styles.rejectButton}
+        size="compact"
+        style={stacked ? styles.stackedAction : undefined}
       />
+      {approve}
     </View>
   )
 }
@@ -170,41 +174,29 @@ function QueueSection({
   const copy = QUEUE_COPY[queueKey]
   return (
     <View style={styles.section} accessibilityRole="summary">
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionCopy}>
-          <Text style={styles.sectionTitle}>{copy.title}</Text>
-          <Text style={styles.sectionSubtitle}>{copy.subtitle}</Text>
-        </View>
-        <View style={[styles.countPill, outcomeUnknown && styles.countPillUnavailable]} accessibilityLabel={outcomeUnknown ? `${copy.title} is unavailable` : `${count} pending`}>
-          <Text style={[styles.countText, outcomeUnknown && styles.countTextUnavailable]}>{outcomeUnknown ? 'Unavailable' : count}</Text>
-        </View>
-      </View>
+      <SectionHeading
+        title={copy.title}
+        subtitle={copy.subtitle}
+        action={
+          <View accessibilityLabel={outcomeUnknown ? `${copy.title} is unavailable` : `${count} pending`}>
+            <StatusPill label={outcomeUnknown ? 'Unavailable' : String(count)} tone={outcomeUnknown ? 'danger' : count > 0 ? 'brand' : 'neutral'} />
+          </View>
+        }
+      />
       {loading ? (
         <View style={styles.queueLoading} accessibilityLiveRegion="polite">
           <ActivityIndicator color={colors.accent} />
           <Text style={styles.queueLoadingText}>Loading only this queue</Text>
         </View>
       ) : error ? (
-        <View style={styles.queueError} accessibilityRole="alert">
-          <View style={styles.queueStateIcon}>
-            <Ionicons name="cloud-offline-outline" size={20} color={colors.danger} />
-          </View>
-          <View style={styles.queueStateCopy}>
-            <Text style={styles.queueStateTitle}>{copy.title} needs attention</Text>
-            <Text style={styles.queueStateBody}>{queueErrorMessage(error)}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Retry ${copy.title}`}
-              accessibilityState={{ busy: retrying }}
-              onPress={onRetry}
-              disabled={retrying}
-              style={styles.retryButton}
-            >
-              {retrying ? <ActivityIndicator color={colors.accentStrong} /> : <Ionicons name="refresh" size={17} color={colors.accentStrong} />}
-              <Text style={styles.retryText}>{retrying ? 'Retrying' : `Retry ${copy.title}`}</Text>
-            </Pressable>
-          </View>
-        </View>
+        <ErrorState
+          kind="offline"
+          title={`${copy.title} could not load`}
+          message={queueErrorMessage(error)}
+          actionLabel={`Retry ${copy.title}`}
+          loading={retrying}
+          onAction={onRetry}
+        />
       ) : count === 0 ? (
         <View style={styles.emptyLane}>
           <View style={styles.emptyCheck}>
@@ -230,20 +222,20 @@ function AccountCard({
   onApprove: () => void
   onReject: () => void
 }) {
+  const details = [
+    item.standards_taught?.length ? `Std ${item.standards_taught.join(', ')}` : null,
+    item.subjects_taught?.length ? item.subjects_taught.join(', ') : null,
+    item.class_teacher_opt_in ? `Class teacher ${`${item.class_teacher_standard ?? ''} ${item.class_teacher_division ?? ''}`.trim()}` : null,
+  ].filter(Boolean).join(' · ')
   return (
     <AnimatedCard style={styles.requestCard}>
       <View style={styles.cardTop}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{item.display_name.slice(0, 1).toUpperCase()}</Text></View>
+        <Avatar name={item.display_name} seed={item.id} />
         <View style={styles.cardCopy}>
-          <Text style={styles.cardTitle}>{item.display_name}</Text>
-          <Text style={styles.cardMeta}>{item.identifier}</Text>
+          <Text style={styles.cardTitle} numberOfLines={1}>{item.display_name}</Text>
+          <Text style={styles.cardMeta} numberOfLines={1}>{[item.identifier, item.created_at ? `Requested ${formatDate(item.created_at)}` : null].filter(Boolean).join(' · ')}</Text>
+          {details ? <Text style={styles.cardMeta} numberOfLines={2}>{details}</Text> : null}
         </View>
-      </View>
-      <View style={styles.detailGrid}>
-        <DetailLine label="Requested" value={formatDate(item.created_at)} />
-        <DetailLine label="Standards" value={item.standards_taught?.join(', ')} />
-        <DetailLine label="Subjects" value={item.subjects_taught?.join(', ')} />
-        <DetailLine label="Class" value={item.class_teacher_opt_in ? `${item.class_teacher_standard ?? ''} ${item.class_teacher_division ?? ''}`.trim() : undefined} />
       </View>
       <DecisionActions label={item.display_name} disabled={disabled} busyAction={busyAction} onApprove={onApprove} onReject={onReject} />
     </AnimatedCard>
@@ -267,7 +259,7 @@ function ClassTeacherCard({
   return (
     <AnimatedCard style={styles.requestCard}>
       <View style={styles.cardTop}>
-        <View style={styles.planIcon}><Ionicons name="git-branch-outline" size={20} color={colors.accent} /></View>
+        <View style={styles.planIcon}><Ionicons name="git-branch-outline" size={19} color={colors.iconInk} /></View>
         <View style={styles.cardCopy}>
           <Text style={styles.cardTitle}>{item.class_teacher_name}</Text>
           <Text style={styles.cardMeta}>{item.standard} · Division {item.division}</Text>
@@ -334,13 +326,12 @@ type DecisionVariables = {
   id: string
   label: string
   action: 'approve' | 'reject'
-  run: () => Promise<unknown>
+  run: (reason: string) => Promise<unknown>
+  reason?: string
 }
 
 export default function ApprovalsScreen() {
   const navigation = useNavigation<any>()
-  const { height } = useWindowDimensions()
-  const compactHeight = height < 760
   const user = useAuthStore((state) => state.user)
   const roleContract = getApprovalRoleContract(user?.role)
   const visibleQueues = getVisibleApprovalQueues(user?.role)
@@ -394,12 +385,14 @@ export default function ApprovalsScreen() {
 
   const decisionMutation = useMutation({
     retry: false,
-    mutationFn: async (variables: DecisionVariables) => variables.run(),
+    mutationFn: async (variables: DecisionVariables) => variables.run(variables.reason ?? ''),
     onMutate: (variables) => {
       setNotice(null)
       setBusyKey(`${variables.queue}:${variables.id}:${variables.action}`)
     },
     onSuccess: async (_data, variables) => {
+      if (variables.action === 'reject') setRejectionReason('')
+      if (variables.queue === 'principals') setPrincipalPassword('')
       queryClient.setQueryData<Array<{ id: string }>>(
         ['approvals', user?.id, variables.queue],
         (current) => removeCompletedApproval(current, variables.id),
@@ -413,8 +406,12 @@ export default function ApprovalsScreen() {
     },
     onError: async (error, variables) => {
       setNotice({ tone: 'error', text: mutationErrorMessage(error) })
-      if ((error as { response?: { status?: number } }).response?.status === 409) {
+      const status = (error as { response?: { status?: number } }).response?.status
+      if (status === 409) {
         await queryClient.invalidateQueries({ queryKey: ['approvals', user?.id, variables.queue] })
+      } else if (variables.action === 'reject') {
+        setRejectionReason(variables.reason ?? '')
+        setPendingDecision(variables)
       }
     },
     onSettled: () => setBusyKey(null),
@@ -428,6 +425,7 @@ export default function ApprovalsScreen() {
       AccessibilityInfo.announceForAccessibility(message)
       return
     }
+    setNotice(null)
     setPendingDecision(variables)
   }
 
@@ -439,7 +437,7 @@ export default function ApprovalsScreen() {
         : () => approvalsApi.approveStudent(item.id)
     requestDecision({ queue, id: item.id, label: item.display_name, action: 'approve', run })
   }
-  const accountRejection = (queue: 'principals' | 'teachers' | 'students', item: PendingAccount) => requestDecision({ queue, id: item.id, label: item.display_name, action: 'reject', run: () => queue === 'principals' ? approvalsApi.rejectPrincipal(item.id, rejectionReason, principalPassword) : queue === 'teachers' ? approvalsApi.rejectTeacher(item.id, rejectionReason) : approvalsApi.rejectStudent(item.id, rejectionReason) })
+  const accountRejection = (queue: 'principals' | 'teachers' | 'students', item: PendingAccount) => requestDecision({ queue, id: item.id, label: item.display_name, action: 'reject', run: (reason) => queue === 'principals' ? approvalsApi.rejectPrincipal(item.id, reason, principalPassword) : queue === 'teachers' ? approvalsApi.rejectTeacher(item.id, reason) : approvalsApi.rejectStudent(item.id, reason) })
 
   const requestPlanDecision = (item: ClassTeacherApproval) => requestDecision({
     queue: 'classTeacherRequests',
@@ -448,7 +446,7 @@ export default function ApprovalsScreen() {
     action: 'approve',
     run: () => approvalsApi.approveClassTeacherRequest(item.id),
   })
-  const requestPlanRejection = (item: ClassTeacherApproval) => requestDecision({ queue: 'classTeacherRequests', id: item.id, label: `${item.class_teacher_name}'s class-teacher plan`, action: 'reject', run: () => approvalsApi.rejectClassTeacherRequest(item.id, rejectionReason) })
+  const requestPlanRejection = (item: ClassTeacherApproval) => requestDecision({ queue: 'classTeacherRequests', id: item.id, label: `${item.class_teacher_name}'s class-teacher plan`, action: 'reject', run: (reason) => approvalsApi.rejectClassTeacherRequest(item.id, reason) })
 
   const requestProfileDecision = (item: TeacherProfileApproval) => requestDecision({
     queue: 'teacherProfileUpdates',
@@ -457,17 +455,10 @@ export default function ApprovalsScreen() {
     action: 'approve',
     run: () => approvalsApi.approveTeacherProfileUpdate(item.id),
   })
-  const requestProfileRejection = (item: TeacherProfileApproval) => requestDecision({ queue: 'teacherProfileUpdates', id: item.id, label: `${item.teacher_name}'s profile update`, action: 'reject', run: () => approvalsApi.rejectTeacherProfileUpdate(item.id, rejectionReason) })
+  const requestProfileRejection = (item: TeacherProfileApproval) => requestDecision({ queue: 'teacherProfileUpdates', id: item.id, label: `${item.teacher_name}'s profile update`, action: 'reject', run: (reason) => approvalsApi.rejectTeacherProfileUpdate(item.id, reason) })
 
   const isItemBusy = (queue: ApprovalQueueKey, id: string) => busyKey?.startsWith(`${queue}:${id}:`) ? busyKey.split(':').at(-1) as 'approve' | 'reject' : undefined
   const refreshVisible = () => void Promise.all(visibleQueues.map((key) => queryMap[key].refetch()))
-  const leaveApprovals = () => {
-    const routeNames: string[] = navigation.getState?.().routeNames ?? []
-    if (routeNames.includes('StaffHome')) navigation.navigate('StaffHome')
-    else if (routeNames.includes('StaffWorkspace')) navigation.navigate('StaffWorkspace')
-    else if (navigation.canGoBack?.()) navigation.goBack()
-  }
-
   if (!canDecide || !roleContract) {
     return (
       <AppScreen scroll={false} contentStyle={styles.center}>
@@ -495,29 +486,10 @@ export default function ApprovalsScreen() {
       contentStyle={styles.screen}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshVisible} tintColor={colors.accent} colors={[colors.accent]} />}
     >
-      <View style={styles.screenTopbar}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to workspace" onPress={leaveApprovals} style={({ pressed }) => [styles.backButton, pressed && styles.buttonPressed]}>
-          <Ionicons name="arrow-back" size={20} color={colors.nav} />
-        </Pressable>
-        <View style={styles.screenTopbarCopy}>
-          <Text style={styles.screenTopbarEyebrow}>SCHOOL REVIEW</Text>
-          <Text style={styles.screenTopbarTitle}>Approvals</Text>
-        </View>
-      </View>
-
-      <GradientHeroCard
-        eyebrow={roleContract.label.toUpperCase()}
-        title={hasUnavailableQueue ? `${unavailableQueues.length === 1 ? 'A review queue needs attention.' : 'Review queues need attention.'}` : totalPending ? `${totalPending} decision${totalPending === 1 ? '' : 's'} need you.` : 'Your review desk is clear.'}
-        subtitle={hasUnavailableQueue ? 'We could not confirm every permitted queue. Retry the highlighted queue; other loaded queues remain available.' : `${roleContract.purpose} Other roles’ queues stay private.`}
-        style={compactHeight ? styles.heroCompact : styles.hero}
-      >
-        <View style={styles.heroTrustRow}>
-          <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.78)" />
-          <Text style={styles.heroTrustText}>{hasUnavailableQueue ? 'No decision was made while a queue is unavailable.' : 'Every completed decision keeps its actor and server time.'}</Text>
-        </View>
-      </GradientHeroCard>
-
-      <SectionHeading title="Pending review" subtitle="Approve or reject requests from your assigned school scope." />
+      <SectionHeading
+        title={hasUnavailableQueue ? (unavailableQueues.length === 1 ? 'A review queue needs attention' : 'Review queues need attention') : totalPending ? `${totalPending} decision${totalPending === 1 ? '' : 's'} need you` : 'Your review desk is clear'}
+        subtitle={hasUnavailableQueue ? 'No decision was made while a queue is unavailable.' : 'Decisions are recorded with your identity and server time.'}
+      />
 
       {slow && loadingAny ? (
         <View style={styles.slowBanner} accessibilityLiveRegion="polite">
@@ -576,7 +548,8 @@ export default function ApprovalsScreen() {
       ) : null}
 
       <Modal visible={Boolean(pendingDecision)} transparent animationType="fade" onRequestClose={() => setPendingDecision(null)}>
-        <View style={styles.confirmBackdrop}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined} style={styles.confirmBackdrop}>
+          <ScrollView contentContainerStyle={styles.confirmScroll} keyboardShouldPersistTaps="handled">
           <View style={styles.confirmSheet} accessibilityRole="alert">
             <View style={styles.confirmIcon}>
               <Ionicons name="shield-outline" size={24} color={colors.danger} />
@@ -584,7 +557,8 @@ export default function ApprovalsScreen() {
             <Text style={styles.confirmEyebrow}>FINAL SCHOOL DECISION</Text>
             <Text style={styles.confirmTitle}>{pendingDecision?.action === 'reject' ? 'Reject this request?' : 'Approve this request?'}</Text>
             <Text style={styles.confirmTarget}>{pendingDecision?.label}</Text>
-            {pendingDecision?.action === 'reject' ? <View style={styles.rejectionReasonBlock}><TextInputField label="Reason for rejection (required)" value={rejectionReason} onChangeText={setRejectionReason} placeholder="Explain what must be corrected" multiline error={rejectionReason.trim().length > 0 && rejectionReason.trim().length < 3 ? 'Use at least 3 characters.' : undefined} /><Text style={styles.rejectionReasonHint}>Tell the educator what to correct (minimum 3 characters).</Text></View> : null}
+            {pendingDecision?.action === 'reject' ? <View style={styles.rejectionReasonBlock}><TextInputField label="Reason for rejection (required)" value={rejectionReason} onChangeText={setRejectionReason} maxLength={500} placeholder="Explain what must be corrected" multiline error={rejectionReason.trim().length > 0 && rejectionReason.trim().length < 3 ? 'Use at least 3 characters.' : undefined} /><Text style={styles.rejectionReasonHint}>Tell the educator what to correct (minimum 3 characters).</Text></View> : null}
+            {notice?.tone === 'error' ? <Text accessibilityRole="alert" style={styles.decisionError}>{notice.text}</Text> : null}
             <View style={styles.confirmAuditRow}>
               <Ionicons name="time-outline" size={17} color={colors.textMuted} />
               <Text style={styles.confirmAuditText}>Your identity, this target, the decision, and server time will be recorded.</Text>
@@ -600,7 +574,9 @@ export default function ApprovalsScreen() {
                 disabled={pendingDecision?.action === 'reject' && rejectionReason.trim().length < 3}
                 onPress={() => {
                   if (!pendingDecision || decisionMutation.isPending || (pendingDecision.action === 'reject' && rejectionReason.trim().length < 3)) return
-                  const decision = pendingDecision
+                  const decision = pendingDecision.action === 'reject'
+                    ? { ...pendingDecision, reason: rejectionReason.trim() }
+                    : pendingDecision
                   setPendingDecision(null)
                   decisionMutation.mutate(decision)
                 }}
@@ -610,7 +586,8 @@ export default function ApprovalsScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </AppScreen>
   )
@@ -618,72 +595,41 @@ export default function ApprovalsScreen() {
 
 const styles = StyleSheet.create({
   screen: { paddingBottom: spacing[20] + 84, gap: spacing[6] },
-  screenTopbar: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  backButton: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, ...shadows.xs },
-  screenTopbarCopy: { flex: 1 },
-  screenTopbarEyebrow: { ...typography.roles.eyebrow, color: colors.accentStrong },
-  screenTopbarTitle: { marginTop: 2, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 19 },
   center: { alignItems: 'center', justifyContent: 'center' },
   loadingRoot: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[8] },
   loadingMark: { width: 64, height: 64, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
-  loadingEyebrow: { ...typography.roles.eyebrow, marginTop: spacing[5], color: colors.accentStrong },
+  loadingEyebrow: { ...typography.roles.eyebrow, marginTop: spacing[5], color: colors.textMuted },
   loadingTitle: { ...typography.roles.screenTitle, marginTop: spacing[2], color: colors.nav, textAlign: 'center' },
   loadingBody: { ...typography.roles.body, maxWidth: 320, marginTop: spacing[3], color: colors.textMuted, textAlign: 'center' },
-  hero: { marginTop: spacing[1] },
-  heroCompact: { marginTop: spacing[1] },
-  heroTrustRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[5], paddingTop: spacing[4], borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
-  heroTrustText: { flex: 1, color: 'rgba(255,255,255,0.78)', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
   slowBanner: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, backgroundColor: colors.warningSurface },
   slowText: { ...typography.roles.body, flex: 1, color: colors.warning },
-  notice: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1 },
+  notice: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[4], borderRadius: radius.card, borderWidth: 1 },
   noticeSuccess: { backgroundColor: colors.successSurface, borderColor: colors.successBorder },
   noticeError: { backgroundColor: colors.dangerSurface, borderColor: colors.dangerBorder },
   noticeText: { ...typography.roles.body, flex: 1 },
   noticeSuccessText: { color: colors.successText },
   noticeErrorText: { color: colors.dangerText },
   section: { gap: spacing[4] },
-  sectionHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing[4], paddingHorizontal: spacing[1] },
-  sectionCopy: { flex: 1 },
-  sectionTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 18, lineHeight: 24 },
-  sectionSubtitle: { ...typography.roles.body, marginTop: spacing[1], color: colors.textMuted },
-  countPill: { minWidth: 44, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface, borderWidth: 1, borderColor: colors.borderBrand },
-  countPillUnavailable: { minWidth: 94, paddingHorizontal: spacing[3], backgroundColor: colors.dangerSurface, borderColor: colors.dangerBorder },
-  countText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 15 },
-  countTextUnavailable: { fontFamily: typography.fonts.bodyBold, fontSize: 11, color: colors.dangerText },
-  queueError: { flexDirection: 'row', gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface },
-  queueLoading: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.xl, backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.borderSubtle },
+  queueLoading: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.card, backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.borderSubtle },
   queueLoadingText: { ...typography.roles.body, color: colors.textMuted },
-  queueStateIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white },
-  queueStateCopy: { flex: 1 },
-  queueStateTitle: { color: colors.dangerText, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
-  queueStateBody: { ...typography.roles.body, marginTop: spacing[1], color: colors.textSecondary },
-  retryButton: { minHeight: 48, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], marginTop: spacing[3], paddingHorizontal: spacing[3], borderRadius: radius.full, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.white },
-  retryText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
-  emptyLane: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  emptyLane: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   emptyCheck: { width: 40, height: 40, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successSurface },
   emptyText: { ...typography.roles.body, flex: 1, color: colors.textSecondary },
   passwordBlock: { gap: spacing[2], paddingVertical: spacing[1] },
   passwordHint: { marginHorizontal: spacing[2], color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16 },
-  requestCard: { gap: spacing[3], padding: spacing[4], borderColor: colors.borderSubtle, borderWidth: 1, borderRadius: radius.xl },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  avatar: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
-  avatarText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 16 },
-  planIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface, borderWidth: 1, borderColor: colors.borderBrand },
+  requestCard: { gap: spacing[3], padding: spacing[4], borderColor: colors.border, borderWidth: 1, borderRadius: radius.card },
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
+  planIcon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface },
   cardCopy: { flex: 1, minWidth: 0 },
-  cardTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 17, lineHeight: 22 },
-  cardMeta: { marginTop: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 16 },
-  detailGrid: { gap: spacing[1], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: colors.borderSubtle },
+  cardTitle: { ...typography.roles.rowTitle, color: colors.nav },
+  cardMeta: { ...typography.roles.caption, marginTop: 1, color: colors.textMuted },
   detailLine: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
   detailLabel: { width: 82, flexShrink: 0, color: colors.textSoft, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 17 },
   detailValue: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
-  actionRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing[3] },
-  actionColumn: { flexDirection: 'column' },
-  stackedAction: { width: '100%' },
-  stackedRejectAction: { width: '100%' },
-  approveButton: { flex: 1 },
-  rejectButton: { flex: 1 },
+  actionRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing[2] },
+  actionColumn: { flexDirection: 'column', alignItems: 'stretch' },
+  stackedAction: { alignSelf: 'stretch' },
   buttonPressed: { transform: [{ scale: 0.98 }], opacity: 0.88 },
-  buttonDisabled: { opacity: 0.55 },
   assignmentList: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.backgroundMuted },
   assignmentRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3], paddingHorizontal: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
   assignmentSubject: { flex: 1, color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
@@ -691,20 +637,22 @@ const styles = StyleSheet.create({
   profileCompare: { gap: spacing[2] },
   requestedProfile: { gap: spacing[2], padding: spacing[4], borderRadius: radius.lg, backgroundColor: colors.accentSurface },
   currentProfile: { padding: spacing[4], borderRadius: radius.lg, backgroundColor: colors.backgroundMuted },
-  compareEyebrow: { ...typography.roles.eyebrow, marginBottom: spacing[1], color: colors.accentStrong },
+  compareEyebrow: { ...typography.roles.eyebrow, marginBottom: spacing[1], color: colors.textMuted },
   compareEyebrowMuted: { ...typography.roles.eyebrow, color: colors.textSoft },
   currentProfileText: { ...typography.roles.body, marginTop: spacing[1], color: colors.textSecondary },
-  confirmBackdrop: { flex: 1, justifyContent: 'flex-end', padding: spacing[4], backgroundColor: 'rgba(3, 10, 24, 0.62)' },
+  confirmBackdrop: { flex: 1, backgroundColor: 'rgba(3, 10, 24, 0.62)' },
+  confirmScroll: { flexGrow: 1, justifyContent: 'flex-end', padding: spacing[4] },
   confirmSheet: { gap: spacing[3], padding: spacing[6], paddingBottom: spacing[7], borderRadius: 30, backgroundColor: colors.white, ...shadows.lg },
   confirmIcon: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
-  confirmEyebrow: { ...typography.roles.eyebrow, color: colors.accentStrong },
-  confirmTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 25, lineHeight: 31 },
+  confirmEyebrow: { ...typography.roles.eyebrow, color: colors.textMuted },
+  confirmTitle: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 25, lineHeight: 31 },
   confirmTarget: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 15, lineHeight: 21 },
   confirmAuditRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], padding: spacing[4], borderRadius: radius.lg, backgroundColor: colors.backgroundMuted },
   confirmAuditText: { ...typography.roles.body, flex: 1, color: colors.textMuted },
   confirmActions: { gap: spacing[3], marginTop: spacing[2] },
   rejectionReasonBlock: { gap: spacing[2] },
   rejectionReasonHint: { color: colors.textMuted, fontFamily: typography.fonts.body, fontSize: 12, lineHeight: 17 },
+  decisionError: { color: colors.dangerText, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
   confirmCancel: { minHeight: 52, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.white },
   confirmCancelText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   confirmPrimary: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: colors.accent },

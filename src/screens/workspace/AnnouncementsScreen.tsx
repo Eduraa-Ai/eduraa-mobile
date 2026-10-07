@@ -29,7 +29,7 @@ import {
   type AnnouncementType,
 } from '../../api/announcements'
 import { getHttpStatus } from '../../api/queryReliability'
-import { AppScreen, AuthenticatedImage, SkeletonCard, TextInputField } from '../../components/ui'
+import { AppHeaderAction, AppHeaderConfig, AppScreen, AuthenticatedImage, Avatar, SegmentedTabs, SkeletonCard, TextInputField } from '../../components/ui'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import { openProtectedDocument } from '../../utils/openProtectedDocument'
@@ -109,11 +109,16 @@ async function announcementAttachmentFromAsset(asset: DocumentPicker.DocumentPic
   }
 }
 
-function IconButton({ label, icon, onPress }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+// Each announcements view sets the shared app header: title, an optional back to
+// the previous view, and one optional action.
+function AnnouncementsHeader({ title, onBack, action }: { title: string; onBack?: () => void; action?: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void } }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-      <Ionicons name={icon} size={20} color={colors.nav} />
-    </Pressable>
+    <AppHeaderConfig
+      title={title}
+      onBack={onBack}
+      rightKey={action ? `${action.label}:${action.icon}` : undefined}
+      right={action ? () => <AppHeaderAction label={action.label} icon={action.icon} onPress={action.onPress} /> : undefined}
+    />
   )
 }
 
@@ -132,13 +137,9 @@ function ConnectionNotice({ stale }: { stale?: boolean }) {
 function LoadingAnnouncements() {
   return (
     <View style={styles.loadingStack} accessibilityLabel="Loading announcements">
-      <View style={styles.loadingIdentity}>
-        <View style={styles.inboxLogo}><Ionicons name="megaphone" size={19} color={colors.white} /></View>
-        <View style={styles.flexCopy}>
-          <Text style={styles.inboxBrand}>EDURAA</Text>
-          <Text style={styles.loadingTitle}>Syncing school announcements</Text>
-          <Text style={styles.loadingBody}>Checking the latest updates for this account.</Text>
-        </View>
+      <View style={styles.flexCopy}>
+        <Text style={styles.loadingTitle}>Syncing school announcements</Text>
+        <Text style={styles.loadingBody}>Checking the latest updates for this account.</Text>
       </View>
       <SkeletonCard lines={2} style={styles.loadingHero} />
       <SkeletonCard lines={3} />
@@ -180,11 +181,7 @@ function ErrorPane({ error, onRetry, onBack, detail = false, kind: forcedKind }:
         : [detail ? 'This announcement could not open' : 'Announcements could not sync', 'Check your connection and try again. Your saved work is still here.']
   return (
     <View style={styles.recoveryPage} accessibilityRole="alert">
-      <View style={styles.recoveryHeader}>
-        <View style={styles.inboxLogo}><Ionicons name="megaphone" size={19} color={colors.white} /></View>
-        <View style={styles.flexCopy}><Text style={styles.inboxBrand}>EDURAA</Text><Text style={styles.inboxContext}>School announcements</Text></View>
-        {onBack ? <IconButton label="Back to announcement inbox" icon="arrow-back" onPress={onBack} /> : null}
-      </View>
+      <AnnouncementsHeader title="Announcements" onBack={onBack} />
       <View style={styles.errorPane}>
         <View style={styles.errorIcon}><Ionicons name={kind === 'missing' ? 'archive-outline' : 'alert-circle-outline'} size={24} color={colors.danger} /></View>
         <Text style={styles.errorTitle}>{content[0]}</Text>
@@ -211,10 +208,10 @@ function AnnouncementRow({ item, onPress, teacher }: { item: Announcement; onPre
       onPress={onPress}
       style={({ pressed }) => [styles.announcementRow, unread && styles.announcementRowUnread, pressed && styles.pressed]}
     >
-      <View style={[styles.rowRail, unread && styles.rowRailUnread]} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
-          <Text style={[styles.rowType, unread && styles.rowTypeUnread]}>{typeLabel(item.announcement_type)}</Text>
+          {/* A plain announcement needs no label; only call out homework, classwork and timetables. */}
+          <Text style={[styles.rowType, unread && styles.rowTypeUnread]}>{item.announcement_type === 'announcement' ? '' : typeLabel(item.announcement_type)}</Text>
           <Text style={styles.rowDate}>{formatDate(item.published_at || item.updated_at)}</Text>
         </View>
         <Text style={[styles.rowTitle, unread && styles.rowTitleUnread]}>{item.title || 'Untitled draft'}</Text>
@@ -262,23 +259,16 @@ function AnnouncementDetail({ item, onBack, onEdit, onArchive }: { item: Announc
   const viewport = useWindowDimensions()
   return (
     <AppScreen contentStyle={styles.detailScreen}>
-      <View style={styles.detailHeader}>
-        <IconButton label="Back to announcements" icon="arrow-back" onPress={onBack} />
-        <View style={styles.detailHeaderCopy}>
-          <Text style={styles.detailHeaderLabel}>SCHOOL UPDATE</Text>
-          <Text style={styles.detailHeaderMeta}>{item.class_label || 'All authorized classes'}</Text>
-        </View>
-        {onEdit ? <IconButton label="Edit announcement" icon="create-outline" onPress={onEdit} /> : <View style={styles.iconButtonSpacer} />}
-      </View>
+      <AnnouncementsHeader title={item.class_label || 'School update'} onBack={onBack} action={onEdit ? { label: 'Edit', icon: 'create-outline', onPress: onEdit } : undefined} />
 
       <View style={styles.detailAnchor}>
         <View style={styles.detailTypeLine}>
-          <View style={styles.detailTypeIcon}><Ionicons name={TYPE_OPTIONS.find((option) => option.id === item.announcement_type)?.icon || 'megaphone-outline'} size={19} color={colors.accent} /></View>
+          <View style={styles.detailTypeIcon}><Ionicons name={TYPE_OPTIONS.find((option) => option.id === item.announcement_type)?.icon || 'megaphone-outline'} size={15} color={colors.iconInk} /></View>
           <Text style={styles.detailType}>{typeLabel(item.announcement_type)}</Text>
         </View>
         <Text style={styles.detailTitle}>{item.title}</Text>
         <View style={styles.authorLine}>
-          <View style={styles.authorMark}><Text style={styles.authorMarkText}>{item.teacher_name.trim().slice(0, 1).toUpperCase() || 'E'}</Text></View>
+          <Avatar name={item.teacher_name.trim() || 'Eduraa'} size={32} />
           <View style={styles.flexCopy}>
             <Text style={styles.authorName}>{item.teacher_name}</Text>
             <Text style={styles.authorDate}>{formatDate(item.published_at || item.updated_at)}</Text>
@@ -433,20 +423,10 @@ function StudentAnnouncements({ announcementId }: { announcementId?: string }) {
       contentStyle={styles.inboxScreen}
       refreshControl={<RefreshControl refreshing={listQuery.isRefetching} onRefresh={listQuery.refetch} tintColor={colors.accent} colors={[colors.accent]} />}
     >
-      <View style={styles.inboxHeader}>
-        <View style={styles.inboxIdentity}>
-          <View style={styles.inboxLogo}><Ionicons name="megaphone" size={19} color={colors.white} /></View>
-          <View>
-            <Text style={styles.inboxBrand}>EDURAA</Text>
-            <Text style={styles.inboxContext}>School announcements</Text>
-          </View>
-        </View>
+      <AnnouncementsHeader title="Announcements" />
+      <View style={styles.inboxIntroRow}>
+        <Text style={[styles.inboxSubtitle, styles.flexCopy]}>Only announcements for your current school and class appear here.</Text>
         <View style={styles.unreadCounter}><Text style={styles.unreadCounterValue}>{unread}</Text><Text style={styles.unreadCounterLabel}>unread</Text></View>
-      </View>
-      <View style={styles.inboxIntro}>
-        <Text style={styles.sectionEyebrow}>YOUR SCHOOL, CLEARLY</Text>
-        <Text style={styles.inboxTitle}>School updates, clearly.</Text>
-        <Text style={styles.inboxSubtitle}>Only announcements for your current school and class appear here.</Text>
       </View>
       {netInfo.isConnected === false || (listQuery.isError && items.length) ? <ConnectionNotice stale={Boolean(items.length)} /> : null}
       {items.length ? (
@@ -609,13 +589,7 @@ function TeacherComposer({
       automaticallyAdjustKeyboardInsets
       contentStyle={styles.composeScreen}
     >
-      <View style={styles.composeHeader}>
-        <IconButton label="Close composer" icon="close" onPress={onClose} />
-        <View style={styles.composeHeaderCopy}>
-          <Text style={styles.sectionEyebrow}>{isPublishedEdit ? 'EDIT PUBLISHED UPDATE' : 'TEACHER PUBLICATION DESK'}</Text>
-          <Text style={styles.composeHeaderTitle}>{isPublishedEdit ? 'Keep the message precise.' : 'Say it once. Make it clear.'}</Text>
-        </View>
-      </View>
+      <AnnouncementsHeader title={isPublishedEdit ? 'Edit announcement' : item ? 'Edit draft' : 'New announcement'} onBack={onClose} />
 
       {notice ? <View accessibilityRole="alert" style={[styles.draftNotice, errors && styles.draftNotice]}><Ionicons name={saveMutation.isError ? 'cloud-offline-outline' : 'shield-checkmark-outline'} size={17} color={saveMutation.isError ? colors.warning : colors.success} /><Text style={styles.draftNoticeText}>{notice}</Text></View> : null}
 
@@ -701,17 +675,14 @@ function TeacherAnnouncements() {
   const items = announcementsForState(allItems, state)
   return (
     <AppScreen contentStyle={styles.teacherScreen} refreshControl={<RefreshControl refreshing={listQuery.isRefetching} onRefresh={listQuery.refetch} tintColor={colors.accent} colors={[colors.accent]} />}>
-      <View style={styles.teacherHero}>
-        <View style={styles.teacherHeroGlow} />
-        <View style={styles.teacherHeroTop}><Text style={styles.teacherHeroEyebrow}>COMMUNICATION DESK</Text><View style={styles.teacherHeroMark}><Ionicons name="megaphone" size={18} color={colors.accent} /></View></View>
-        <Text style={styles.teacherHeroTitle}>Announcements</Text>
-        <Text style={styles.teacherHeroBody}>Draft privately, verify the audience, then publish.</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Write announcement" onPress={() => { setSelected(undefined); setMode('compose') }} style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}><Ionicons name="create-outline" size={18} color={colors.nav} /><Text style={styles.heroActionText}>Write announcement</Text></Pressable>
-      </View>
+      <AnnouncementsHeader title="Announcements" action={{ label: 'Write', icon: 'create-outline', onPress: () => { setSelected(undefined); setMode('compose') } }} />
       {netInfo.isConnected === false || (listQuery.isError && allItems.length) ? <ConnectionNotice stale={Boolean(allItems.length)} /> : null}
-      <View style={styles.stateTabs}>
-        {STATE_OPTIONS.map((option) => { const count = announcementsForState(allItems, option.id).length; const selectedState = state === option.id; return <Pressable accessibilityRole="tab" accessibilityState={{ selected: selectedState }} key={option.id} onPress={() => setState(option.id)} style={[styles.stateTab, selectedState && styles.stateTabSelected]}><Text style={[styles.stateTabText, selectedState && styles.stateTabTextSelected]}>{option.label}</Text><Text style={[styles.stateTabCount, selectedState && styles.stateTabCountSelected]}>{count}</Text></Pressable> })}
-      </View>
+      <SegmentedTabs
+        accessibilityLabel="Announcement states"
+        tabs={STATE_OPTIONS.map((option) => ({ id: option.id, label: option.label, count: announcementsForState(allItems, option.id).length }))}
+        value={state}
+        onChange={setState}
+      />
       {items.length ? <View style={styles.teacherList}>{items.map((item) => <AnnouncementRow teacher key={item.id} item={item} onPress={() => { setSelected(item); setMode(item.publish_state === 'draft' ? 'compose' : 'detail') }} />)}</View> : <EmptyInbox teacher onCompose={() => setMode('compose')} />}
     </AppScreen>
   )
@@ -729,29 +700,25 @@ const styles = StyleSheet.create({
   flexCopy: { flex: 1 },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.55 },
-  iconButton: { width: 46, height: 46, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.border, ...shadows.xs },
-  iconButtonSpacer: { width: 46 },
   connectionNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3], borderLeftWidth: 3, borderLeftColor: colors.warning, paddingVertical: spacing[3], paddingHorizontal: spacing[4], backgroundColor: colors.warningSurface },
   connectionTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   connectionBody: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
   loadingStack: { gap: spacing[4] },
-  loadingIdentity: { minHeight: 96, flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, backgroundColor: colors.nav },
-  loadingTitle: { marginTop: 3, color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
+  loadingTitle: { marginTop: 3, color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 17 },
   loadingBody: { marginTop: 2, color: colors.navMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
   loadingHero: { minHeight: 108 },
   emptyState: { alignItems: 'center', paddingVertical: spacing[10], paddingHorizontal: spacing[4] },
   emptyIllustration: { width: 92, height: 84, marginBottom: spacing[5] },
   emptyPaperBack: { position: 'absolute', width: 60, height: 70, top: 0, right: 3, borderRadius: 18, backgroundColor: colors.accentSurfaceStrong, transform: [{ rotate: '8deg' }] },
   emptyPaperFront: { position: 'absolute', width: 64, height: 72, bottom: 0, left: 3, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.borderBrand, ...shadows.sm },
-  emptyTitle: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 20, textAlign: 'center' },
+  emptyTitle: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 20, textAlign: 'center' },
   emptyBody: { maxWidth: 310, marginTop: spacing[2], color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14, textAlign: 'center' },
   secondaryAction: { minHeight: 46, marginTop: spacing[4], paddingHorizontal: spacing[5], borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurfaceStrong },
   secondaryActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   recoveryPage: { flex: 1, minHeight: 560 },
-  recoveryHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   errorPane: { flex: 1, minHeight: 400, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[5] },
   errorIcon: { width: 54, height: 54, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.dangerSurface },
-  errorTitle: { marginTop: spacing[4], color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 21, textAlign: 'center' },
+  errorTitle: { marginTop: spacing[4], color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 21, textAlign: 'center' },
   errorBody: { maxWidth: 310, marginTop: spacing[2], color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14, textAlign: 'center' },
   recoveryActions: { marginTop: spacing[5], flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing[3] },
   retryButton: { minHeight: 48, paddingHorizontal: spacing[6], borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
@@ -760,57 +727,49 @@ const styles = StyleSheet.create({
   backToInboxText: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   announcementRow: { minHeight: 140, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[4], paddingRight: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, backgroundColor: colors.backgroundElevated },
   announcementRowUnread: { backgroundColor: '#fffaf2' },
-  rowRail: { width: 3, alignSelf: 'stretch', borderRadius: radius.full, backgroundColor: 'transparent' },
-  rowRailUnread: { backgroundColor: colors.accent },
   rowMain: { flex: 1 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing[2] },
-  rowType: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 0.7, textTransform: 'uppercase' },
+  rowType: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 0.7, textTransform: 'uppercase' },
   rowTypeUnread: { color: colors.accentStrong },
-  rowDate: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  rowDate: { color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   rowTitle: { marginTop: spacing[2], color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 16 },
-  rowTitleUnread: { color: colors.nav, fontFamily: typography.fonts.headingSemibold },
+  rowTitleUnread: { color: colors.nav, fontFamily: typography.fonts.bodyBold },
   rowBody: { marginTop: 4, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13 },
   rowMeta: { marginTop: spacing[3], flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5 },
   rowMetaText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   unreadDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.accent },
   detailScreen: { gap: 0, paddingBottom: spacing[12] },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], marginBottom: spacing[7] },
-  detailHeaderCopy: { flex: 1 },
-  detailHeaderLabel: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1.1 },
-  detailHeaderMeta: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
-  detailAnchor: { marginHorizontal: -spacing[5], paddingHorizontal: spacing[5], paddingTop: spacing[7], paddingBottom: spacing[8], backgroundColor: colors.nav },
+  detailAnchor: { paddingTop: spacing[2], paddingBottom: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.border },
   detailTypeLine: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  detailTypeIcon: { width: 36, height: 36, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(249,115,22,0.14)' },
-  detailType: { color: colors.accentLight, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase' },
-  detailTitle: { marginTop: spacing[5], color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 29, letterSpacing: -0.5 },
-  authorLine: { marginTop: spacing[6], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  authorMark: { width: 38, height: 38, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
-  authorMarkText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 15 },
-  authorName: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
-  authorDate: { marginTop: 2, color: colors.navMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
-  bodySection: { paddingVertical: spacing[7], borderBottomWidth: 1, borderBottomColor: colors.border },
-  detailBody: { color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 17 },
+  detailTypeIcon: { width: 28, height: 28, borderRadius: radius.xs, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface },
+  detailType: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase' },
+  detailTitle: { marginTop: spacing[3], color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 22, lineHeight: 28, letterSpacing: -0.3 },
+  authorLine: { marginTop: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  authorName: { ...typography.roles.caption, fontFamily: typography.fonts.bodyBold, color: colors.nav },
+  authorDate: { ...typography.roles.caption, fontSize: 11.5, color: colors.textMuted },
+  bodySection: { paddingVertical: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.border },
+  detailBody: { color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 15, lineHeight: 23 },
   detailLink: { color: colors.info, textDecorationLine: 'underline' },
-  attachmentSection: { paddingVertical: spacing[6], gap: spacing[3] },
-  sectionEyebrow: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1.2 },
-  attachmentRow: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing[2], padding: spacing[3], borderWidth: 1, borderColor: colors.borderSubtle, borderRadius: radius.lg, backgroundColor: colors.backgroundElevated },
+  attachmentSection: { paddingVertical: spacing[4], gap: spacing[2] },
+  sectionEyebrow: { ...typography.roles.groupLabel, color: colors.textMuted },
+  attachmentRow: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing[2], padding: spacing[3], borderWidth: 1, borderColor: colors.borderSubtle, borderRadius: radius.card, backgroundColor: colors.backgroundElevated },
   attachmentImageRow: { minHeight: 92 },
   attachmentIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
   attachmentName: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   attachmentMeta: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   attachmentHint: { marginTop: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
-  attachmentHintText: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 10 },
+  attachmentHintText: { color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 11 },
   attachmentOpen: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.accentSurface },
   announcementThumbnail: { width: 68, height: 68, overflow: 'hidden', borderRadius: radius.md, backgroundColor: colors.backgroundMuted },
   announcementThumbnailImage: { width: '100%', height: '100%' },
   attachmentPreviewBackdrop: { flex: 1, backgroundColor: '#07152D' },
   attachmentPreviewHeader: { minHeight: 84, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingHorizontal: spacing[4], paddingBottom: spacing[3] },
   attachmentPreviewHeading: { flex: 1, minWidth: 0, gap: 3 },
-  attachmentPreviewEyebrow: { color: '#FDBA74', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.2 },
+  attachmentPreviewEyebrow: { color: '#FDBA74', fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.2 },
   attachmentPreviewTitle: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   attachmentPreviewClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)' },
   attachmentPreviewBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[3] },
-  attachmentPreviewCanvas: { width: '100%', overflow: 'hidden', borderRadius: radius.lg, backgroundColor: '#020817', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
+  attachmentPreviewCanvas: { width: '100%', overflow: 'hidden', borderRadius: radius.card, backgroundColor: '#020817', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
   attachmentPreviewImage: { width: '100%', height: '100%' },
   attachmentPreviewFooter: { minHeight: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[4], paddingTop: spacing[3] },
   attachmentPreviewTrust: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
@@ -818,7 +777,7 @@ const styles = StyleSheet.create({
   inlineError: { color: colors.danger, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
   archiveAction: { minHeight: 52, marginTop: spacing[6], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.full, backgroundColor: colors.dangerSurface },
   archiveActionText: { color: colors.danger, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
-  archiveConfirm: { marginTop: spacing[6], gap: spacing[4], padding: spacing[4], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface },
+  archiveConfirm: { marginTop: spacing[6], gap: spacing[4], padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.dangerBorder, backgroundColor: colors.dangerSurface },
   archiveConfirmTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
   archiveConfirmTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   archiveConfirmBody: { marginTop: 3, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
@@ -828,54 +787,49 @@ const styles = StyleSheet.create({
   archiveConfirmAction: { minHeight: 46, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: colors.danger },
   archiveConfirmActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   inboxScreen: { paddingBottom: spacing[16] },
-  inboxHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  inboxIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  inboxLogo: { width: 42, height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav },
-  inboxBrand: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 2.1 },
-  inboxContext: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   unreadCounter: { minWidth: 56, alignItems: 'flex-end' },
-  unreadCounterValue: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 23 },
-  unreadCounterLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
-  inboxIntro: { gap: spacing[2], paddingTop: spacing[2], paddingBottom: spacing[2] },
-  inboxTitle: { maxWidth: 350, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 27, letterSpacing: -0.5 },
+  unreadCounterValue: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 23 },
+  unreadCounterLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
+  inboxIntroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
   inboxSubtitle: { maxWidth: 340, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14 },
   inboxList: { overflow: 'hidden', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.backgroundElevated },
   composeScreen: { paddingBottom: spacing[12], gap: spacing[6] },
-  composeHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  composeHeaderCopy: { flex: 1 },
-  composeHeaderTitle: { marginTop: 3, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 20 },
   draftNotice: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], padding: spacing[3], borderRadius: radius.lg, backgroundColor: colors.successSurface },
   draftNoticeText: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
   formSection: { gap: spacing[3] },
-  formStep: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1.15 },
+  formStep: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.15 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  typeOption: { minHeight: 48, width: '48%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  typeOption: { minHeight: 48, width: '48%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   typeOptionSelected: { borderColor: colors.borderBrand, backgroundColor: colors.accentSurface },
   typeOptionText: { flex: 1, color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   typeOptionTextSelected: { color: colors.accentStrong },
-  audienceOption: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[3], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  audienceOption: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   audienceOptionSelected: { borderColor: colors.borderBrand, backgroundColor: colors.accentSurface },
   audienceIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundElevated },
   audienceTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   audienceBody: { marginTop: 2, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   classChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  classChip: { minWidth: 118, minHeight: 58, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  classChip: { minWidth: 118, minHeight: 58, paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   classChipSelected: { borderColor: colors.nav, backgroundColor: colors.nav },
   classChipTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   classChipTitleSelected: { color: colors.white },
-  classChipCount: { marginTop: 3, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  classChipCount: { marginTop: 3, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   bodyInput: { minHeight: 144, paddingTop: spacing[3] },
-  characterCount: { marginTop: -spacing[2], textAlign: 'right', color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 10 },
+  characterCount: { marginTop: -spacing[2], textAlign: 'right', color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   existingFiles: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
   stagedFile: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderRadius: radius.lg, backgroundColor: colors.accentSurface },
   stagedFileName: { flex: 1, color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
-  addFileAction: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderRadius: radius.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderBrand },
+  addFileAction: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[3], borderRadius: radius.card, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderBrand },
   addFileText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  addFileMeta: { flex: 1, textAlign: 'right', color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 9 },
+  addFileMeta: { flex: 1, textAlign: 'right', color: colors.textSoft, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   publishReview: { gap: spacing[3], padding: spacing[4], borderRadius: radius.xl, backgroundColor: colors.nav },
   publishReviewTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: spacing[2] },
-  publishReviewEyebrow: { color: colors.accentLight, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.1 },
-  publishReviewTitle: { marginTop: 3, color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 16 },
+  publishReviewEyebrow: { color: colors.accentLight, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.1 },
+  publishReviewTitle: { marginTop: 3, color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 16 },
   reviewLine: { flexDirection: 'row', gap: spacing[3], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
   reviewLabel: { width: 70, color: colors.navMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11 },
   reviewValue: { flex: 1, color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 11, textAlign: 'right' },
@@ -885,21 +839,5 @@ const styles = StyleSheet.create({
   publishAction: { minHeight: 54, flex: 1.35, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.full, backgroundColor: colors.accent },
   publishActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   teacherScreen: { paddingBottom: spacing[16] },
-  teacherHero: { minHeight: 184, overflow: 'hidden', padding: spacing[4], borderRadius: 24, backgroundColor: colors.nav },
-  teacherHeroGlow: { position: 'absolute', width: 220, height: 220, borderRadius: 110, right: -110, top: -90, backgroundColor: 'rgba(249,115,22,0.13)' },
-  teacherHeroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  teacherHeroEyebrow: { color: colors.accentLight, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1.15 },
-  teacherHeroMark: { width: 42, height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(249,115,22,0.14)' },
-  teacherHeroTitle: { maxWidth: 310, marginTop: spacing[3], color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 25, letterSpacing: -0.5 },
-  teacherHeroBody: { maxWidth: 310, marginTop: spacing[2], color: colors.navMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13 },
-  heroAction: { minHeight: 46, alignSelf: 'flex-start', marginTop: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[4], borderRadius: radius.full, backgroundColor: colors.white },
-  heroActionText: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
-  stateTabs: { minHeight: 54, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.borderStrong },
-  stateTab: { flex: 1, minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  stateTabSelected: { borderBottomColor: colors.accent },
-  stateTabText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  stateTabTextSelected: { color: colors.nav },
-  stateTabCount: { color: colors.textSoft, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  stateTabCountSelected: { color: colors.accentStrong },
   teacherList: { overflow: 'hidden', borderBottomWidth: 1, borderColor: colors.borderStrong },
 })
