@@ -21,6 +21,15 @@ import {
   shouldClearQueryCache,
 } from './src/auth/queryCacheScope'
 
+// Web only: a tap leaves focus on the pressed control, so the browser ring
+// lingers (e.g. on "All tools" after the sheet closes). Keep the ring for
+// keyboard users, drop it for pointer and touch focus.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const focusStyle = document.createElement('style')
+  focusStyle.textContent = '*:focus:not(:focus-visible) { outline: none; }'
+  document.head.appendChild(focusStyle)
+}
+
 onlineManager.setEventListener((setOnline) => NetInfo.addEventListener((state) => {
   setOnline(state.isConnected !== false && state.isInternetReachable !== false)
 }))

@@ -1,8 +1,9 @@
 import React, { ReactNode, useRef } from 'react'
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, ViewStyle } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import { colors, gradients, motion, radius, shadows, spacing, typography } from '../../theme'
+import { colors, motion, radius, spacing, typography } from '../../theme'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
+
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'auth'
 
 interface AnimatedButtonProps {
   label: string
@@ -11,11 +12,24 @@ interface AnimatedButtonProps {
   icon?: ReactNode
   loading?: boolean
   disabled?: boolean
-  variant?: 'primary' | 'secondary' | 'ghost' | 'auth'
+  /**
+   * primary: the one solid action on a screen. secondary: bordered, for
+   * supporting actions such as Retry. ghost: quiet text action. auth: sign-in
+   * flows only.
+   */
+  variant?: ButtonVariant
+  size?: 'regular' | 'compact'
   style?: ViewStyle
 }
 
-export function AnimatedButton({ label, accessibilityLabel, onPress, icon, loading = false, disabled = false, variant = 'primary', style }: AnimatedButtonProps) {
+const labelColors: Record<ButtonVariant, string> = {
+  primary: colors.textOnBrand,
+  auth: colors.textOnBrand,
+  secondary: colors.accentStrong,
+  ghost: colors.text,
+}
+
+export function AnimatedButton({ label, accessibilityLabel, onPress, icon, loading = false, disabled = false, variant = 'primary', size = 'regular', style }: AnimatedButtonProps) {
   const scale = useRef(new Animated.Value(1)).current
   const reducedMotion = useReducedMotion()
 
@@ -32,9 +46,8 @@ export function AnimatedButton({ label, accessibilityLabel, onPress, icon, loadi
     }).start()
   }
 
-  const isPrimary = variant === 'primary'
-  const isAuth = variant === 'auth'
-  const labelColor = isPrimary || isAuth ? colors.textOnBrand : variant === 'secondary' ? colors.accentStrong : colors.text
+  const labelColor = labelColors[variant]
+  const spinnerColor = variant === 'primary' || variant === 'auth' ? colors.white : colors.accent
 
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
@@ -46,46 +59,44 @@ export function AnimatedButton({ label, accessibilityLabel, onPress, icon, loadi
         onPress={onPress}
         onPressIn={() => animateTo(motion.press.scale)}
         onPressOut={() => animateTo(1)}
-        style={[styles.pressable, disabled && styles.disabled]}
+        style={({ pressed }) => [styles.fill, size === 'compact' && styles.compact, styles[variant], pressed && styles.pressed, disabled && styles.disabled]}
       >
-        {isPrimary ? (
-          <LinearGradient colors={[...gradients.tealAction]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fill}>
-            {loading ? <ActivityIndicator color={colors.white} /> : null}
-            {!loading && icon ? icon : null}
-            {!loading ? <Text style={[styles.label, { color: labelColor }]}>{label}</Text> : null}
-          </LinearGradient>
-        ) : (
-          <Animated.View style={[styles.fill, isAuth ? styles.auth : variant === 'secondary' ? styles.secondary : styles.ghost]}>
-            {loading ? <ActivityIndicator color={isAuth ? colors.white : colors.accent} /> : null}
-            {!loading && icon ? icon : null}
-            {!loading ? <Text style={[styles.label, { color: labelColor }]}>{label}</Text> : null}
-          </Animated.View>
-        )}
+        {loading ? <ActivityIndicator color={spinnerColor} /> : null}
+        {!loading && icon ? icon : null}
+        {!loading ? <Text style={[styles.label, size === 'compact' && styles.compactLabel, { color: labelColor }]}>{label}</Text> : null}
       </Pressable>
     </Animated.View>
   )
 }
 
 const styles = StyleSheet.create({
-  pressable: {
-    borderRadius: radius.full,
-  },
   fill: {
-    minHeight: 56,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing[6],
+    minHeight: 48,
+    borderRadius: radius.control,
+    paddingHorizontal: spacing[5],
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: spacing[2],
-    ...shadows.sm,
+  },
+  compact: {
+    minHeight: 40,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing[4],
+  },
+  primary: {
+    backgroundColor: colors.accent,
   },
   secondary: {
-    backgroundColor: colors.accentSurface,
+    backgroundColor: colors.backgroundElevated,
     borderWidth: 1,
-    borderColor: colors.borderBrand,
+    borderColor: colors.borderStrong,
+  },
+  ghost: {
+    backgroundColor: 'transparent',
   },
   auth: {
+    minHeight: 56,
     borderRadius: 16,
     backgroundColor: '#07152d',
     shadowColor: '#07152d',
@@ -93,17 +104,20 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
   },
-  ghost: {
-    backgroundColor: colors.backgroundElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
+  pressed: {
+    opacity: 0.86,
   },
   label: {
-    ...typography.roles.body,
     fontFamily: typography.fonts.bodyBold,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  compactLabel: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   disabled: {
-    opacity: 0.56,
+    opacity: 0.5,
   },
 })
 

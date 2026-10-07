@@ -8,6 +8,8 @@ import type { SelectOption } from './SelectField'
 
 interface MultiSelectFieldProps {
   label: string
+  /** compact: in-app forms (default). large: sign-in and registration. */
+  size?: 'compact' | 'large'
   values: string[]
   placeholder?: string
   options: SelectOption[]
@@ -18,7 +20,7 @@ interface MultiSelectFieldProps {
   onChange: (values: string[]) => void
 }
 
-export function MultiSelectField({
+export function MultiSelectField({ size = 'compact',
   label,
   values,
   placeholder = 'Select',
@@ -52,7 +54,7 @@ export function MultiSelectField({
         activeOpacity={0.88}
         disabled={!canOpen}
         onPress={() => setOpen(true)}
-        style={[styles.trigger, error && styles.triggerError, !canOpen && styles.triggerDisabled]}
+        style={[styles.trigger, size === 'large' && styles.triggerLarge, error && styles.triggerError, !canOpen && styles.triggerDisabled]}
       >
         <Text style={[styles.value, selectedLabels.length === 0 && styles.placeholder]} numberOfLines={1}>
           {loading ? 'Loading...' : selectedLabels.length > 0 ? selectedLabels.join(', ') : placeholder}
@@ -128,17 +130,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.3,
   },
+  triggerLarge: { minHeight: 56, borderRadius: radius.lg, borderWidth: 1.5, paddingHorizontal: spacing[4] },
   trigger: {
-    minHeight: 56,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
+    minHeight: 46,
+    borderRadius: radius.control,
+    borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing[3],
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: spacing[3],
   },
   triggerError: {
     borderColor: colors.danger,

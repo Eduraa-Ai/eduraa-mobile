@@ -54,23 +54,51 @@ export const typography = {
       lineHeight: 24,
       letterSpacing: 0,
     },
+    // Body headings use Manrope; the display face is reserved for the app header.
     title: {
-      fontFamily: fonts.displaySemibold,
-      fontSize: 20,
-      lineHeight: 26,
-      letterSpacing: 0,
+      fontFamily: fonts.bold,
+      fontSize: 18,
+      lineHeight: 24,
+      letterSpacing: -0.1,
     },
     screenTitle: {
-      fontFamily: fonts.displayBold,
-      fontSize: 28,
-      lineHeight: 34,
-      letterSpacing: 0,
+      fontFamily: fonts.bold,
+      fontSize: 22,
+      lineHeight: 28,
+      letterSpacing: -0.2,
     },
     hero: {
-      fontFamily: fonts.displayBold,
-      fontSize: 34,
-      lineHeight: 40,
+      fontFamily: fonts.bold,
+      fontSize: 26,
+      lineHeight: 32,
+      letterSpacing: -0.3,
+    },
+    // Staff UI benchmark (All tools sheet + compact header). Page bodies use
+    // only these four roles plus `body`, so every screen reads the same.
+    section: {
+      fontFamily: fonts.bold,
+      fontSize: 16,
+      lineHeight: 22,
+      letterSpacing: -0.1,
+    },
+    rowTitle: {
+      fontFamily: fonts.bold,
+      fontSize: 15,
+      lineHeight: 20,
       letterSpacing: 0,
+    },
+    caption: {
+      fontFamily: fonts.medium,
+      fontSize: 12,
+      lineHeight: 17,
+      letterSpacing: 0,
+    },
+    groupLabel: {
+      fontFamily: fonts.extrabold,
+      fontSize: 11,
+      lineHeight: 14,
+      letterSpacing: 1.2,
+      textTransform: 'uppercase' as const,
     },
   },
 

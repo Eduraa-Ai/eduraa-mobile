@@ -1,45 +1,52 @@
-import React from 'react'
+import React, { ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { colors } from '../../theme/colors'
-import { fonts } from '../../theme/fonts'
+import { colors, spacing, typography } from '../../theme'
 
 interface SectionHeadingProps {
-  eyebrow?: string
   title: string
   subtitle?: string
+  /** Short right-aligned fact, e.g. "12 students" or "2 saved". */
+  meta?: string
+  /** One small trailing control, e.g. a search or filter icon button. */
+  action?: ReactNode
 }
 
-export function SectionHeading({ eyebrow, title, subtitle }: SectionHeadingProps) {
+/** The one section header used inside page bodies. */
+export function SectionHeading({ title, subtitle, meta, action }: SectionHeadingProps) {
   return (
     <View style={styles.root}>
-      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      <View style={styles.copy}>
+        <Text style={styles.title} accessibilityRole="header">{title}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </View>
+      {meta ? <Text style={styles.meta}>{meta}</Text> : null}
+      {action ?? null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   root: {
-    gap: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
   },
-  eyebrow: {
-    fontFamily: fonts.semibold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
-    color: colors.textSubtle,
+  copy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   title: {
-    fontFamily: fonts.displaySemibold,
-    fontSize: 22,
-    letterSpacing: -0.4,
-    color: colors.text,
+    ...typography.roles.section,
+    color: colors.nav,
   },
   subtitle: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    lineHeight: 20,
+    ...typography.roles.caption,
+    color: colors.textMuted,
+  },
+  meta: {
+    ...typography.roles.caption,
+    fontFamily: typography.fonts.bodyBold,
     color: colors.textMuted,
   },
 })

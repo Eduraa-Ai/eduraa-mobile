@@ -8,7 +8,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 
 test('previous papers is an eligible final root tab with an accessible symbol', () => {
   const navigation = read('src/navigation/index.tsx')
-  const bottomTabBar = read('src/components/ui/BottomTabBar.tsx')
+  const dock = read('src/components/ui/StaffBottomTabBar.tsx')
   const profileIndex = navigation.indexOf('<Tab.Screen name="Profile"')
   const previousPapersIndex = navigation.indexOf('name="PreviousPapers"')
 
@@ -17,20 +17,21 @@ test('previous papers is an eligible final root tab with an accessible symbol', 
   assert.match(navigation, /previousPapersEligible\s*\?\s*\(/)
   assert.match(navigation, /previousPapersAccessibilityLabel = 'Previous-year JEE papers'/)
   assert.doesNotMatch(navigation, /<HomeStack\.Screen name="PreviousPapers"/)
-  assert.match(bottomTabBar, /function ConstellationField\(/)
-  assert.match(bottomTabBar, /PreviousPapers:\s*'documents-outline'/)
-  assert.match(bottomTabBar, /options\?\.tabBarAccessibilityLabel \?\? label/)
-  assert.match(bottomTabBar, /state\.routes\.length <= 6/)
+  // Students share the staff dock: Previous papers keeps its icon and its
+  // route-provided accessibility label wherever it lands (rail or More sheet).
+  assert.match(dock, /studentOrder = \[[^\]]*'PreviousPapers'/)
+  assert.match(dock, /PreviousPapers:\s*'documents-outline'/)
+  assert.match(dock, /options\?\.tabBarAccessibilityLabel \?\?/)
 })
 
 test('B2B students and teachers receive role-appropriate previous-paper tabs', () => {
   const navigation = read('src/navigation/index.tsx')
-  const bottomTabBar = read('src/components/ui/BottomTabBar.tsx')
+  const staffTools = read('src/data/staffToolGroups.ts')
 
   assert.match(navigation, /landing === 'school_learner'[\s\S]*previousPapersEligible=\{isPreviousPapersEligible\(user\)\}/)
   assert.match(navigation, /previousPapersAccessibilityLabel="School previous question papers"/)
   assert.match(navigation, /user\.role === 'teacher'[\s\S]*name="StaffPreviousPapers"/)
-  assert.match(bottomTabBar, /StaffPreviousPapers:\s*'documents-outline'/)
+  assert.match(staffTools, /'previous-papers':\s*'documents-outline'/)
 })
 
 test('the library back action falls back to Home without history', () => {
@@ -41,9 +42,11 @@ test('the library back action falls back to Home without history', () => {
 
 test('all previous-paper shortcuts target the independent tab', () => {
   const home = read('src/screens/home/HomeScreen.tsx')
+  const workspace = read('src/screens/workspace/WorkspaceScreen.tsx')
   const catalog = read('src/data/mobileControlCatalog.ts')
 
-  assert.match(home, /navigate\("PreviousPapers"\)/)
+  // Student Home opens catalog tab targets on the tab navigator itself.
+  assert.match(workspace, /parent\.navigate\(control\.target\.tab/)
   assert.doesNotMatch(home, /screen:\s*"PreviousPapers"/)
   assert.match(catalog, /tab:\s*'PreviousPapers'/)
 })

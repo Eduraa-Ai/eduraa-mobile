@@ -134,7 +134,10 @@ export const colors = {
   textOnBrand: palette.slate[0],
   textOnDark: palette.slate[0],
 
-  background: palette.slate[50],
+  background: '#fff8f0',
+  // Row/list icon tiles: green so icons separate from orange actions on cream.
+  iconSurface: palette.emerald[50],
+  iconInk: palette.emerald[700],
   backgroundMuted: palette.slate[100],
   backgroundElevated: palette.slate[0],
   backgroundTint: palette.orange[50],

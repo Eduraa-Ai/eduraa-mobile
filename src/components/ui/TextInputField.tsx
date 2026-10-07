@@ -7,9 +7,12 @@ interface TextInputFieldProps extends TextInputProps {
   error?: string
   left?: ReactNode
   right?: ReactNode
+  /** compact: in-app forms (default). large: sign-in and registration. */
+  size?: 'compact' | 'large'
 }
 
-export function TextInputField({ label, error, left, right, style, onFocus, onBlur, ...props }: TextInputFieldProps) {
+export function TextInputField({ label, error, left, right, size = 'compact', style, onFocus, onBlur, ...props }: TextInputFieldProps) {
+  const large = size === 'large'
   const [focused, setFocused] = useState(false)
   const focus = useRef(new Animated.Value(0)).current
 
@@ -31,11 +34,11 @@ export function TextInputField({ label, error, left, right, style, onFocus, onBl
   return (
     <View style={styles.root}>
       {label ? <Text style={[styles.label, focused && styles.labelFocused]}>{label}</Text> : null}
-      <Animated.View style={[styles.field, { borderColor }, error && styles.errorField]}>
+      <Animated.View style={[styles.field, large && styles.fieldLarge, { borderColor }, error && styles.errorField]}>
         {left ? <View style={styles.leftSlot}>{left}</View> : null}
         <TextInput
           {...props}
-          style={[styles.input, style]}
+          style={[styles.input, large && styles.inputLarge, style]}
           placeholderTextColor={colors.placeholder}
           onFocus={(event) => {
             setFocus(true)
@@ -55,7 +58,7 @@ export function TextInputField({ label, error, left, right, style, onFocus, onBl
 
 const styles = StyleSheet.create({
   root: {
-    gap: spacing[2],
+    gap: spacing[1] + 2,
   },
   label: {
     ...typography.roles.label,
@@ -65,12 +68,18 @@ const styles = StyleSheet.create({
     color: colors.accent,
   },
   field: {
-    minHeight: 56,
-    borderRadius: radius.authInput,
-    borderWidth: 1.5,
+    minHeight: 46,
+    borderRadius: radius.control,
+    borderWidth: 1,
     backgroundColor: colors.backgroundElevated,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: spacing[3],
+  },
+  fieldLarge: {
+    minHeight: 56,
+    borderRadius: radius.authInput,
+    borderWidth: 1.5,
     paddingHorizontal: spacing[4],
     ...shadows.xs,
   },
@@ -79,11 +88,15 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    minHeight: 52,
+    minHeight: 44,
     color: colors.text,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: typography.sizes.md,
+    fontSize: typography.sizes.base,
     paddingVertical: 0,
+  },
+  inputLarge: {
+    minHeight: 52,
+    fontSize: typography.sizes.md,
   },
   leftSlot: {
     marginRight: spacing[2],
