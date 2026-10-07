@@ -1328,7 +1328,7 @@ const styles = StyleSheet.create({
   loadingMark: {
     width: 52,
     height: 52,
-    borderRadius: 20,
+    borderRadius: radius.card,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.accentSurface,
@@ -1365,14 +1365,14 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
     lineHeight: 21,
   },
   headerMeta: {
     color: "rgba(255,255,255,0.52)",
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.9,
     textTransform: "uppercase",
     marginTop: 2,
@@ -1402,7 +1402,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     padding: spacing[4],
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     backgroundColor: "rgba(255,255,255,0.07)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -1413,13 +1413,13 @@ const styles = StyleSheet.create({
   progressEyebrow: {
     color: "rgba(255,255,255,0.46)",
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   progressTitle: {
     color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
     lineHeight: 22,
   },
@@ -1468,14 +1468,13 @@ const styles = StyleSheet.create({
   content: { padding: spacing[4], gap: spacing[4] },
   examSummary: {
     minHeight: 82,
-    borderRadius: radius.xl,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
     flexDirection: "row",
     alignItems: "center",
     padding: spacing[3],
-    ...shadows.sm,
   },
   summaryItem: {
     flex: 1,
@@ -1485,14 +1484,14 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 21,
     lineHeight: 24,
   },
   summaryLabel: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.9,
     textTransform: "uppercase",
   },
@@ -1551,7 +1550,7 @@ const styles = StyleSheet.create({
   },
   questionType: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
   },
   questionMarks: {
@@ -1589,7 +1588,7 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface2,
@@ -1625,7 +1624,7 @@ const styles = StyleSheet.create({
   tfBtn: {
     flex: 1,
     height: 44,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: "center",
@@ -1642,7 +1641,7 @@ const styles = StyleSheet.create({
   textInput: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing[3],
     color: colors.ink,
     fontFamily: typography.fonts.bodyMedium,
@@ -1661,7 +1660,7 @@ const styles = StyleSheet.create({
   },
   matchColumn: {
     flex: 1,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     backgroundColor: colors.backgroundMuted,
@@ -1671,7 +1670,7 @@ const styles = StyleSheet.create({
   matchLabel: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.9,
     textTransform: "uppercase",
   },
@@ -1694,7 +1693,7 @@ const styles = StyleSheet.create({
   matchKeyText: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
   },
   matchItemTextContainer: {
     flex: 1,
@@ -1725,7 +1724,7 @@ const styles = StyleSheet.create({
   },
   dockTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
   },
   dockMeta: {
@@ -1757,7 +1756,7 @@ const styles = StyleSheet.create({
   submitSheetIcon: {
     width: 52,
     height: 52,
-    borderRadius: 20,
+    borderRadius: radius.card,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.accentSurface,
@@ -1774,7 +1773,7 @@ const styles = StyleSheet.create({
   },
   submitSheetTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.heading,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 23,
     lineHeight: 28,
   },
@@ -1790,7 +1789,7 @@ const styles = StyleSheet.create({
   },
   submittedScoreBox: {
     minHeight: 72,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.successSurface,
     borderWidth: 1,
     borderColor: colors.successBorder,
@@ -1800,20 +1799,20 @@ const styles = StyleSheet.create({
   submittedScoreLabel: {
     color: colors.success,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.9,
     textTransform: "uppercase",
   },
   submittedScoreValue: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 23,
     lineHeight: 28,
     marginTop: spacing[1],
   },
   submittedStatusBox: {
     minHeight: 68,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.successSurface,
     borderWidth: 1,
     borderColor: colors.successBorder,
@@ -1844,7 +1843,7 @@ const styles = StyleSheet.create({
   },
   checkingPercent: {
     color: colors.success,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
   },
   checkingTrack: {
@@ -1873,7 +1872,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 15,
   },
   attemptAgainError: {
@@ -1882,7 +1881,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
     paddingHorizontal: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.dangerBorder,
     backgroundColor: colors.dangerSurface,
@@ -1897,7 +1896,7 @@ const styles = StyleSheet.create({
   submitStat: {
     flex: 1,
     minHeight: 64,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.backgroundMuted,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -1906,14 +1905,14 @@ const styles = StyleSheet.create({
   },
   submitStatValue: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 19,
     lineHeight: 22,
   },
   submitStatLabel: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.8,
     textTransform: "uppercase",
     marginTop: spacing[1],
@@ -1955,7 +1954,7 @@ const styles = StyleSheet.create({
   submitCancelButton: {
     flex: 1,
     minHeight: 48,
-    borderRadius: 18,
+    borderRadius: radius.card,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.backgroundMuted,

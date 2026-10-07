@@ -133,7 +133,7 @@ function AgenticTopicContent() {
   if (topicQuery.isLoading) {
     return (
       <AppScreen protectedChrome contentStyle={styles.screen}>
-        <AgenticHeader meta="Building concept lesson" pill="Repair" onBack={goBack} />
+        <AgenticHeader title={topicName || undefined} meta="Building concept lesson" pill="Repair" onBack={goBack} />
         <AgenticIntro kicker="Concept repair" title="Preparing your lesson" subtitle="Connecting attempts, checked work, and repeated mistake evidence." />
         <View style={styles.loadingState}><ActivityIndicator color={colors.accent} /><View style={styles.skeletonHero} /><View style={styles.skeletonBody} /></View>
       </AppScreen>
@@ -163,7 +163,7 @@ function AgenticTopicContent() {
 
     return (
       <AppScreen protectedChrome key={`concept-error-${topicId}`} contentStyle={styles.screen}>
-        <AgenticHeader meta={subjectName || 'Concept lesson'} pill={isOffline ? 'Offline' : 'Progress safe'} onBack={goBack} />
+        <AgenticHeader title={topicName || undefined} meta={subjectName || 'Concept lesson'} pill={isOffline ? 'Offline' : 'Progress safe'} onBack={goBack} />
         <AgenticIntro kicker="Concept repair" title={topicName || 'Your concept lesson'} subtitle="Your place in this learning route is preserved." />
         <ErrorState
           kind={isOffline ? 'offline' : 'error'}
@@ -188,7 +188,7 @@ function AgenticTopicContent() {
   if (isResolved) {
     return (
       <AppScreen protectedChrome key={`resolved-concept-${topicId}-${showRefreshFailure ? 'recovery' : 'ready'}`} contentStyle={styles.screen}>
-        <AgenticHeader meta={curriculumMeta || topic.subject_name} pill="Resolved" onBack={goBack} />
+        <AgenticHeader title={topicName || undefined} meta={curriculumMeta || topic.subject_name} pill="Resolved" onBack={goBack} />
         <AgenticIntro kicker="Loop closed" title="Concept resolved" />
         <LessonConnectionStatus failed={showRefreshFailure} offline={isOffline} loading={topicQuery.isFetching} onRetry={() => void topicQuery.refetch()} />
 
@@ -251,7 +251,7 @@ function AgenticTopicContent() {
 
   return (
     <AppScreen protectedChrome key={`concept-lesson-${topicId}-${showRefreshFailure ? 'recovery' : 'ready'}`} contentStyle={styles.screen}>
-      <AgenticHeader meta={curriculumMeta || topic.subject_name} pill={topicStatusLabel({ status: topic.status, mastery_score: topic.mastery_score })} onBack={goBack} />
+      <AgenticHeader title={topicName || undefined} meta={curriculumMeta || topic.subject_name} pill={topicStatusLabel({ status: topic.status, mastery_score: topic.mastery_score })} onBack={goBack} />
       <AgenticIntro kicker="Concept repair" title={topic.topic_name} subtitle={topic.summary} />
       <LessonConnectionStatus failed={showRefreshFailure} offline={isOffline} loading={topicQuery.isFetching} onRetry={() => void topicQuery.refetch()} />
 
@@ -287,7 +287,7 @@ function AgenticTopicContent() {
       ) : null}
 
       {topic.practice_questions.length > 0 ? (
-        <AgenticSurface dark style={styles.practiceCard}>
+        <AgenticSurface style={styles.practiceCard}>
           <View style={styles.practiceHeader}>
             <View><Text style={styles.practiceKicker}>Practice burst</Text><Text style={styles.practiceTitle}>Transfer it to exam language</Text></View>
             <View style={styles.practiceCount}><Text style={styles.practiceCountText}>{topic.practice_questions.length}</Text></View>
@@ -360,8 +360,8 @@ const styles = StyleSheet.create({
   screen: { gap: spacing[3], paddingBottom: spacing[6], backgroundColor: '#FBF6EC' },
   statGrid: { flexDirection: 'row', gap: spacing[2] },
   statTile: { flex: 1, minHeight: 70, justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: '#FFFCF6', borderWidth: 1, borderColor: '#E9DFD2', padding: spacing[3] },
-  statValue: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 21, lineHeight: 25 },
-  statLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 0.6, textTransform: 'uppercase' },
+  statValue: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 21, lineHeight: 25 },
+  statLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' },
   routeCard: { paddingVertical: spacing[3] },
   routeStep: { flexDirection: 'row', gap: spacing[3], minHeight: 52 },
   routeRail: { width: 28, alignItems: 'center' },
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
   routeTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 17 },
   routeBody: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16, marginTop: 2 },
   coreCard: { gap: spacing[3] },
-  cardKicker: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 1.1, textTransform: 'uppercase' },
+  cardKicker: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.1, textTransform: 'uppercase' },
   coreText: { color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 20 },
   diagram: { borderRadius: radius.md, backgroundColor: '#EEF4FF', borderWidth: 1, borderColor: '#C7DBF6', padding: spacing[3] },
   diagramText: { color: '#28457E', fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 19 },
@@ -382,15 +382,15 @@ const styles = StyleSheet.create({
   anchorText: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
   practiceCard: { gap: spacing[3] },
   practiceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
-  practiceKicker: { color: colors.orangeScale[300], fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
-  practiceTitle: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 17, lineHeight: 22, marginTop: 2 },
-  practiceCount: { width: 38, height: 38, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
-  practiceCountText: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 17 },
-  practiceRow: { flexDirection: 'row', gap: spacing[2], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.10)' },
-  practiceNumber: { width: 24, height: 24, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(249,115,22,0.22)' },
-  practiceNumberText: { color: colors.orangeScale[200], fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  practiceText: { flex: 1, color: '#D7DEEA', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
-  coachCard: { flexDirection: 'row', gap: spacing[3], borderRadius: radius.lg, backgroundColor: colors.warningSurface, borderWidth: 1, borderColor: colors.warningBorder, padding: spacing[3] },
+  practiceKicker: { ...typography.roles.groupLabel, color: colors.textMuted },
+  practiceTitle: { ...typography.roles.section, color: colors.nav, marginTop: 2 },
+  practiceCount: { minWidth: 30, height: 26, paddingHorizontal: spacing[2], borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  practiceCountText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
+  practiceRow: { flexDirection: 'row', gap: spacing[2], paddingTop: spacing[2], borderTopWidth: 1, borderTopColor: colors.borderSubtle },
+  practiceNumber: { width: 24, height: 24, borderRadius: radius.xs, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface },
+  practiceNumberText: { color: colors.iconInk, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  practiceText: { flex: 1, color: colors.textSecondary, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
+  coachCard: { flexDirection: 'row', gap: spacing[3], borderRadius: radius.card, backgroundColor: colors.warningSurface, borderWidth: 1, borderColor: colors.warningBorder, padding: spacing[3] },
   coachIcon: { width: 38, height: 38, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurfaceStrong },
   coachCopy: { flex: 1, gap: spacing[1] },
   coachTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
@@ -403,10 +403,10 @@ const styles = StyleSheet.create({
   inlineError: { color: colors.danger, fontFamily: typography.fonts.bodySemibold, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   resolvedHero: { alignItems: 'center', gap: spacing[2], borderRadius: radius.xl, backgroundColor: '#177A43', paddingHorizontal: spacing[5], paddingVertical: spacing[5], ...shadows.md },
   resolvedIcon: { width: 52, height: 52, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' },
-  resolvedTitle: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 23, lineHeight: 28, marginTop: spacing[2] },
+  resolvedTitle: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 23, lineHeight: 28, marginTop: spacing[2] },
   resolvedTopic: { color: '#D8F4E4', fontFamily: typography.fonts.bodyMedium, fontSize: 12, textAlign: 'center' },
-  resolvedMastery: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 36, lineHeight: 40, marginTop: spacing[2] },
-  resolvedMasteryLabel: { fontFamily: typography.fonts.headingSemibold, fontSize: 16 },
+  resolvedMastery: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 36, lineHeight: 40, marginTop: spacing[2] },
+  resolvedMasteryLabel: { fontFamily: typography.fonts.bodyBold, fontSize: 16 },
   resolvedNote: { color: '#D8F4E4', fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16, textAlign: 'center' },
   changedCard: { gap: spacing[3] },
   changedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
@@ -415,12 +415,12 @@ const styles = StyleSheet.create({
   nextCard: { gap: spacing[2] },
   nextTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
   nextCopy: { flex: 1, minWidth: 0 },
-  nextKicker: { color: '#927C69', fontFamily: typography.fonts.bodyBold, fontSize: 9, textTransform: 'uppercase' },
-  nextTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 18, lineHeight: 22, marginTop: 2 },
+  nextKicker: { color: '#927C69', fontFamily: typography.fonts.bodyBold, fontSize: 11, textTransform: 'uppercase' },
+  nextTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 18, lineHeight: 22, marginTop: 2 },
   nextPill: { borderRadius: radius.full, backgroundColor: colors.warningSurface, paddingHorizontal: spacing[3], paddingVertical: spacing[2] },
-  nextPillText: { color: colors.warning, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  nextPillText: { color: colors.warning, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   nextBody: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18 },
-  nextMeta: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  nextMeta: { color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   reopenAction: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   reopenText: { color: colors.textMuted, fontFamily: typography.fonts.bodySemibold, fontSize: 12 },
   loadingState: { gap: spacing[4], alignItems: 'center' },
@@ -428,9 +428,9 @@ const styles = StyleSheet.create({
   connectionDot: { width: 8, height: 8, borderRadius: radius.full },
   connectionCopy: { flex: 1, minWidth: 0 },
   connectionTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 15 },
-  connectionDetail: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 13 },
+  connectionDetail: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 13 },
   connectionAction: { minWidth: 76, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1], paddingHorizontal: spacing[2] },
-  connectionActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  connectionActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   skeletonHero: { width: '100%', height: 160, borderRadius: radius.xl, backgroundColor: colors.slate[200] },
   skeletonBody: { width: '100%', height: 260, borderRadius: radius.xl, backgroundColor: colors.slate[100] },
 })

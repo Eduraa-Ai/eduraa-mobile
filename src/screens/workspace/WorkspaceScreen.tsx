@@ -1,109 +1,104 @@
-import React, { useMemo, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import React, { ReactNode, useRef, useState } from 'react'
+import { ActivityIndicator, Image, Pressable, RefreshControlProps, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
-import { useQuery } from '@tanstack/react-query'
-import { AppScreen } from '../../components/ui'
-import { b2cApi } from '../../api/b2c'
-import { mobileControls, MobileControl, roleCanSeeControl } from '../../data/mobileControlCatalog'
-import { useClassTeacherAccess } from '../../hooks/useClassTeacherAccess'
+import { AppScreen, SegmentedTabs } from '../../components/ui'
+import { MobileControl } from '../../data/mobileControlCatalog'
+import { groupStaffControls, isLearnerRole, workspaceToolLabel } from '../../data/staffToolGroups'
+import { useVisibleControls } from '../../hooks/useVisibleControls'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, spacing, typography } from '../../theme'
 
 function roleLabel(role?: string) {
+  if (role === 'b2c_student') return 'Learner'
   return role ? role.replace(/_/g, ' ') : 'workspace'
 }
 
-function isCompetitiveProfile(user: ReturnType<typeof useAuthStore.getState>['user'], profile?: Awaited<ReturnType<typeof b2cApi.getProfile>>) {
-  return (
-    user?.b2c_education_level === 'competitive_exams' ||
-    user?.b2c_education_level === 'competitive_exam' ||
-    profile?.education_level === 'competitive_exams'
-  )
+const workflowSummaries: Record<string, string> = {
+  dashboard: 'Class and school performance',
+  attendance: 'Mark and review daily attendance',
+  'teacher-students': 'Roster and student profiles',
+  'class-teacher': 'Your class and enrollments',
+  exams: 'Set and manage exams',
+  generate: 'Create a question paper',
+  'generate-custom': 'Upload a paper and answer key',
+  'scan-upload': 'Scan answer sheets for checking',
+  'checked-papers': 'Review marks and feedback',
+  'previous-papers': 'School paper library',
+  approvals: 'Review incoming requests',
+  announcements: 'Send updates to your classes',
+  doubts: 'Answer student questions',
+  'ai-studio': 'Plan and create with AI',
+  teacher: 'Your teacher profile',
+  'principal-profile': 'Your school profile',
+  'index-books': 'School book catalog',
+  'index-notes': 'School notes catalog',
 }
 
-function isJeeProfile(user: ReturnType<typeof useAuthStore.getState>['user'], profile?: Awaited<ReturnType<typeof b2cApi.getProfile>>) {
-  const haystack = [
-    user?.b2c_board,
-    user?.b2c_standard,
-    user?.b2c_target_exam,
-    ...(user?.b2c_subjects ?? []),
-    profile?.school_board,
-    profile?.school_standard,
-    ...(profile?.subjects ?? []),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-
-  return haystack.includes('jee')
+/** Students read the same rows with learner wording. */
+const learnerSummaries: Record<string, string> = {
+  dashboard: 'Scores, progress and what to study next',
+  attendance: 'Your attendance and leave requests',
+  generate: 'Create a focused set of questions',
+  'scan-upload': 'Upload your answer sheet',
+  'checked-papers': 'Marks and teacher feedback',
+  'previous-papers': 'Past papers to practise',
+  announcements: 'Updates from your school',
+  doubts: 'Send and follow up on a doubt',
+  'agentic-learning': 'Work through a lesson at your pace',
+  'competitive-exam': 'JEE chapters, packs and drills',
+  'student-exams': 'Assigned exams and class practice',
+  'cheat-sheets': 'Quick revision notes',
+  'ai-studio': 'Get help when you are stuck',
+  'student-profile': 'Your school profile and account',
 }
 
-function WorkflowRow({ control, index, first, last, onPress }: { control: MobileControl; index: number; first: boolean; last: boolean; onPress: () => void }) {
+function WorkflowRow({ control, last, learner, onPress }: { control: MobileControl; last: boolean; learner: boolean; onPress: () => void }) {
   const iconName = control.icon as keyof typeof Ionicons.glyphMap
+  const label = workspaceToolLabel(control, learner)
+  const summary = (learner ? learnerSummaries[control.id] : undefined) ?? workflowSummaries[control.id] ?? control.description
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${control.label}. ${control.description}`}
-      style={({ pressed }) => [styles.workflowRow, first && styles.workflowRowFirst, last && styles.workflowRowLast, pressed && styles.pressed]}
+      accessibilityLabel={`${label}. ${summary}`}
+      style={({ pressed }) => [styles.workflowRow, last && styles.workflowRowLast, pressed && styles.pressed]}
     >
-      <View style={styles.workflowIndex}>
-        <Text style={styles.workflowIndexText}>{String(index + 1).padStart(2, '0')}</Text>
-      </View>
       <View style={styles.workflowIcon}>
         <Ionicons name={iconName in Ionicons.glyphMap ? iconName : 'ellipse'} size={18} color={colors.accent} />
       </View>
       <View style={styles.workflowCopy}>
-        {first ? <Text style={styles.workflowFirstLabel}>ROLE START</Text> : null}
-        <Text style={styles.workflowTitle}>{control.label}</Text>
-        <Text style={styles.workflowBody} numberOfLines={2}>{control.description}</Text>
+        <Text style={styles.workflowTitle}>{label}</Text>
+        <Text style={styles.workflowBody} numberOfLines={1}>{summary}</Text>
+        {control.nativeStatus === 'web-only' ? <Text style={styles.workflowWebHint}>Opens on Eduraa web</Text> : null}
       </View>
       <Ionicons name="arrow-forward" size={18} color={colors.textSoft} />
     </Pressable>
   )
 }
 
-export default function WorkspaceScreen() {
+/**
+ * The one Home for every role. Students pass `lead` (their Continue row) and a
+ * refresh control; the header, groups and rows are identical for everyone.
+ */
+export default function WorkspaceScreen({ lead, footer, refreshControl }: { lead?: ReactNode; footer?: ReactNode; refreshControl?: React.ReactElement<RefreshControlProps> } = {}) {
   const navigation = useNavigation<any>()
+  const screenRef = useRef<ScrollView>(null)
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const learner = isLearnerRole(user?.role)
+  const [activeWorkflowGroup, setActiveWorkflowGroup] = useState<string>(learner ? 'learn' : 'teach')
 
-  const b2cQuery = useQuery({
-    queryKey: ['workspace-b2c-profile', user?.id],
-    queryFn: b2cApi.getProfile,
-    enabled: user?.role === 'b2c_student',
-  })
-
-  const classTeacherAccess = useClassTeacherAccess({ enabled: user?.role === 'teacher' })
-
-  const controls = useMemo(() => {
-    if (!user?.role) return []
-    const competitive = isCompetitiveProfile(user, b2cQuery.data)
-    const jee = isJeeProfile(user, b2cQuery.data)
-    const requiresB2CEntitlements = user.role === 'b2c_student'
-
-    return mobileControls.filter((control) => {
-      if (control.hiddenOnWeb || !roleCanSeeControl(user.role, control)) return false
-      if (control.requiresClassTeacher) {
-        // The JWT claim can be stale in both directions, so the server's
-        // answer is the gate. Issue #61 forbids a client flag deciding this.
-        if (!classTeacherAccess.isAuthorized) return false
-      }
-      if (requiresB2CEntitlements && control.requiresCompetitiveExam && !competitive) return false
-      if (requiresB2CEntitlements && control.requiresJee && !jee) return false
-      return true
-    })
-  }, [b2cQuery.data, classTeacherAccess.isAuthorized, user])
+  const { controls, isPersonalizing } = useVisibleControls()
 
   const openControl = (control: MobileControl) => {
     const parent = navigation.getParent?.()
     const parentRoutes: string[] = parent?.getState?.().routeNames ?? []
 
     if (control.id === 'dashboard') {
-      navigation.navigate('Dashboard')
+      navigation.navigate(learner ? 'LearnerDashboard' : 'Dashboard')
       return
     }
     if (control.id === 'class-teacher') {
@@ -117,6 +112,7 @@ export default function WorkspaceScreen() {
     }
     if (control.id === 'attendance') {
       if (parentRoutes.includes('StaffAttendance')) parent.navigate('StaffAttendance')
+      else if (parentRoutes.includes('Attendance')) parent.navigate('Attendance')
       else navigation.navigate('Attendance')
       return
     }
@@ -159,7 +155,16 @@ export default function WorkspaceScreen() {
         return
       }
 
-      if (parent) {
+      // Learners: AI Studio lives in the Home stack; other targets are tabs.
+      if (control.target.tab === 'AIStudio') {
+        navigation.navigate('AIStudio')
+        return
+      }
+      if (control.target.tab === 'Home' && control.target.screen) {
+        navigation.navigate(control.target.screen, control.target.params)
+        return
+      }
+      if (parent && parentRoutes.includes(control.target.tab)) {
         parent.navigate(control.target.tab, control.target.screen ? { screen: control.target.screen, params: control.target.params } : undefined)
         return
       }
@@ -168,15 +173,18 @@ export default function WorkspaceScreen() {
     navigation.navigate('Feature', { featureId: control.id })
   }
 
-  const preferredId = user?.role === 'principal' ? 'approvals' : 'exams'
+  const preferredId = user?.role === 'principal' ? 'approvals' : learner ? 'agentic-learning' : 'exams'
   const focusControl = controls.find((control) => control.id === preferredId) ?? controls[0]
   const orderedControls = focusControl
     ? [focusControl, ...controls.filter((control) => control.id !== focusControl.id)]
     : controls
+  const groupedWorkflows = groupStaffControls(orderedControls, user?.role)
+  const selectedGroup = groupedWorkflows.find((group) => group.id === activeWorkflowGroup) ?? groupedWorkflows[0]
+  const displayedControls = selectedGroup?.controls ?? orderedControls
   const firstName = user?.display_name?.trim().split(/\s+/)[0]
 
   return (
-    <AppScreen contentStyle={styles.screen}>
+    <AppScreen scrollRef={screenRef} contentStyle={styles.screen} refreshControl={refreshControl}>
       <View style={styles.identityRow}>
         <Image source={require('../../../assets/eduraa-book-brain.png')} style={styles.logo} resizeMode="cover" />
         <View style={styles.identityCopy}>
@@ -215,11 +223,13 @@ export default function WorkspaceScreen() {
 
       <View style={styles.intro}>
         <Text style={styles.eyebrow}>TODAY’S DESK</Text>
-        <Text style={styles.title}>{firstName ? `${firstName}, choose your next move.` : 'Choose your next move.'}</Text>
-        <Text style={styles.subtitle}>Your role-ready tools, connected to Eduraa data and kept in one focused place.</Text>
+        <Text style={styles.title}>Workspace</Text>
+        <Text style={styles.subtitle}>{firstName ? `Choose a tool to get started, ${firstName}.` : 'Choose a tool to get started.'}</Text>
       </View>
 
-      {user?.role === 'b2c_student' && b2cQuery.isLoading ? (
+      {lead ?? null}
+
+      {isPersonalizing ? (
         <View style={styles.inlineLoading}>
           <ActivityIndicator color={colors.accent} />
           <Text style={styles.inlineLoadingText}>Personalizing your workspace</Text>
@@ -229,23 +239,35 @@ export default function WorkspaceScreen() {
       {orderedControls.length ? (
         <View style={styles.workflowSection}>
           <View style={styles.workflowHeader}>
-            <Text style={styles.workflowHeading}>Live workflows</Text>
-            <Text style={styles.workflowMeta}>{orderedControls.length} ready</Text>
+            <Text style={styles.workflowHeading}>{selectedGroup?.label ?? 'Your workflows'}</Text>
+            <Text style={styles.workflowMeta}>{displayedControls.length} of {orderedControls.length} tools</Text>
           </View>
+          {groupedWorkflows.length > 1 ? (
+            <SegmentedTabs
+              accessibilityLabel="Workspace sections"
+              tabs={groupedWorkflows.map((group) => ({ id: group.id, label: group.label }))}
+              value={selectedGroup.id}
+              onChange={(group) => {
+                setActiveWorkflowGroup(group)
+                screenRef.current?.scrollTo({ y: 0, animated: false })
+              }}
+            />
+          ) : null}
           <View style={styles.workflowList}>
-            {orderedControls.map((control, index) => (
+            {displayedControls.map((control, index) => (
               <WorkflowRow
                 key={control.id}
                 control={control}
-                index={index}
-                first={index === 0}
-                last={index === orderedControls.length - 1}
+                last={index === displayedControls.length - 1}
+                learner={learner}
                 onPress={() => openControl(control)}
               />
             ))}
           </View>
         </View>
       ) : null}
+
+      {footer ?? null}
     </AppScreen>
   )
 }
@@ -266,24 +288,21 @@ const styles = StyleSheet.create({
   logoutText: { color: colors.danger, fontFamily: typography.fonts.bodyBold, fontSize: 13 },
   intro: { gap: spacing[2], marginTop: -spacing[1] },
   eyebrow: { color: colors.accent, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.3 },
-  title: { maxWidth: 350, color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 28, lineHeight: 34, letterSpacing: -0.6 },
+  title: { maxWidth: 350, color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 24, lineHeight: 30, letterSpacing: -0.4 },
   subtitle: { maxWidth: 355, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 14, lineHeight: 21 },
   inlineLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   inlineLoadingText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12 },
   workflowSection: { gap: spacing[3] },
   workflowHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  workflowHeading: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 20 },
+  workflowHeading: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 18 },
   workflowMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   workflowList: { overflow: 'hidden', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.borderStrong },
-  workflowRow: { minHeight: 102, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[4], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-  workflowRowFirst: { minHeight: 124, borderLeftWidth: 4, borderLeftColor: colors.accent, paddingLeft: spacing[3], backgroundColor: colors.accentSurface },
+  workflowRow: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
   workflowRowLast: { borderBottomWidth: 0 },
-  workflowIndex: { width: 24 },
-  workflowIndexText: { color: colors.textSoft, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
-  workflowIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.accentSurface },
+  workflowIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.accentSurface },
   workflowCopy: { flex: 1 },
-  workflowFirstLabel: { marginBottom: spacing[1], color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.1 },
   workflowTitle: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 15 },
   workflowBody: { marginTop: spacing[1], color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 17 },
+  workflowWebHint: { marginTop: spacing[1], color: colors.accentStrong, fontFamily: typography.fonts.bodySemibold, fontSize: 11 },
   pressed: { opacity: 0.7, backgroundColor: colors.accentSurface },
 })

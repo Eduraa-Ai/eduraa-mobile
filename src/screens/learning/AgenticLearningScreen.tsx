@@ -161,7 +161,7 @@ export default function AgenticLearningScreen() {
 
   return (
     <AppScreen protectedChrome contentStyle={styles.screen} refreshControl={undefined}>
-      <AgenticHeader meta={headerMeta} pill="Learn" onBack={goBack} />
+      <AgenticHeader meta={headerMeta} onBack={goBack} />
       <AgenticIntro
         kicker="Agentic learning"
         title={subjectsQuery.isLoading ? 'Building your learning map' : openCount > 0 ? `${openCount} concepts need work` : 'Your concept map is steady'}
@@ -249,14 +249,14 @@ const styles = StyleSheet.create({
   priorityKicker: {
     color: colors.orangeScale[300],
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   priorityTitle: {
     color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 19,
     lineHeight: 23,
   },
@@ -268,12 +268,12 @@ const styles = StyleSheet.create({
   },
   ringWrap: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center' },
   ringCopy: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
-  ringValue: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 20, lineHeight: 23 },
-  ringLabel: { color: '#B7C2D3', fontFamily: typography.fonts.bodyBold, fontSize: 8, textTransform: 'uppercase' },
+  ringValue: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 20, lineHeight: 23 },
+  ringLabel: { color: '#B7C2D3', fontFamily: typography.fonts.bodyBold, fontSize: 11, textTransform: 'uppercase' },
   subjectList: { gap: spacing[2] },
   subjectCard: {
     minHeight: 86,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: '#FFFCF6',
     borderWidth: 1,
     borderColor: '#E6D7C5',
@@ -283,17 +283,17 @@ const styles = StyleSheet.create({
   },
   subjectCardActive: { borderColor: colors.borderBrand },
   subjectTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
-  subjectName: { flex: 1, color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 16, lineHeight: 20 },
+  subjectName: { flex: 1, color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 16, lineHeight: 20 },
   subjectMastery: { fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   subjectMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 15 },
   weakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], minHeight: 16 },
-  weakText: { flex: 1, color: colors.warning, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  weakText: { flex: 1, color: colors.warning, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   progressTrack: { height: 6, borderRadius: radius.full, backgroundColor: '#E9E1D6', overflow: 'hidden', marginTop: spacing[1] },
   progressFill: { height: '100%', borderRadius: radius.full },
   pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
   skeletonStack: { gap: spacing[3] },
   skeletonHero: { height: 112, borderRadius: radius.xl, backgroundColor: colors.slate[200] },
-  skeletonRow: { height: 86, borderRadius: radius.lg, backgroundColor: colors.slate[100], borderWidth: 1, borderColor: colors.borderSubtle },
+  skeletonRow: { height: 86, borderRadius: radius.card, backgroundColor: colors.slate[100], borderWidth: 1, borderColor: colors.borderSubtle },
   refreshNotice: {
     minHeight: 44,
     flexDirection: 'row',
@@ -314,6 +314,6 @@ const styles = StyleSheet.create({
   },
   emptySurface: { alignItems: 'center', gap: spacing[3], paddingVertical: spacing[8] },
   emptyIcon: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
-  emptyTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 19, textAlign: 'center' },
+  emptyTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 19, textAlign: 'center' },
   emptyBody: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 })

@@ -33,6 +33,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { LatexText, QuestionVisual } from "../../components/ui";
 import { colors } from "../../theme/colors";
 import { spacing, radius, shadows, layout } from "../../theme/spacing";
+import { typography } from "../../theme";
 import { shouldShowQuestionStemText } from "../../utils/questionVisual";
 import {
   buildMatchColumnsRows,
@@ -673,11 +674,9 @@ export default function PaperDetailScreen() {
         }
       >
         <View style={styles.pageHeader}>
-          <Text style={styles.paperEyebrow}>
-            {canEditPaper ? "YOUR PAPER" : isTeacher ? "PAPER WORKSPACE" : "QUESTION PAPER"}
-          </Text>
+          {canEditPaper ? <Text style={styles.paperEyebrow}>YOUR PAPER</Text> : null}
           <Text style={styles.paperTitle}>{paper.title}</Text>
-          <Text style={styles.paperSub}>
+          <Text style={styles.paperSub} numberOfLines={2}>
             {paper.subtitle || (canEditPaper
               ? "Tap any question to rewrite it. Ask AI for changes whenever you want."
               : isPublished
@@ -1589,6 +1588,7 @@ export default function PaperDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  paperEyebrow: { ...typography.roles.groupLabel, color: colors.textMuted },
   root: { flex: 1, backgroundColor: colors.paperStudio.paper },
   content: { paddingTop: spacing[4], gap: 0 },
   center: {
@@ -1628,7 +1628,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
   },
   headerPublishDisabled: { opacity: 0.42 },
-  headerPublishText: { color: colors.white, fontSize: 12, fontWeight: "800" },
+  headerPublishText: { color: colors.white, fontSize: 12, fontFamily: typography.fonts.bodyBold },
 
   infoCard: {
     paddingHorizontal: 0,
@@ -1637,28 +1637,17 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderStrong,
     gap: spacing[3],
   },
-  pageHeader: {
-    gap: spacing[1],
-    paddingHorizontal: spacing[1],
-    paddingTop: spacing[1],
-    paddingBottom: spacing[2],
-  },
+  pageHeader: { gap: 2, paddingTop: spacing[1], paddingBottom: spacing[1] },
   paperHeadingRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing[3],
   },
-  paperEyebrow: {
-    color: colors.accentStrong,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-  },
   readOnlySectionLabel: {
     color: colors.text,
     fontSize: 17,
-    fontWeight: "800",
+    fontFamily: typography.fonts.bodyBold,
   },
   draftLabel: {
     flexDirection: "row",
@@ -1666,7 +1655,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingRight: spacing[2],
   },
-  draftLabelText: { color: colors.warning, fontSize: 12, fontWeight: "700" },
+  draftLabelText: { color: colors.warning, fontSize: 12, fontFamily: typography.fonts.bodyBold },
   statusPill: {
     minHeight: 28,
     flexDirection: "row",
@@ -1679,16 +1668,10 @@ const styles = StyleSheet.create({
   statusPillPublished: { backgroundColor: colors.successSurface },
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
   statusDotPublished: { backgroundColor: colors.success },
-  statusPillText: { color: colors.warning, fontSize: 11, fontWeight: "700" },
+  statusPillText: { color: colors.warning, fontSize: 11, fontFamily: typography.fonts.bodyBold },
   statusPillTextPublished: { color: colors.success },
-  paperTitle: {
-    fontSize: 27,
-    lineHeight: 32,
-    fontWeight: "800",
-    color: colors.ink,
-    letterSpacing: -0.4,
-  },
-  paperSub: { fontSize: 13, color: colors.muted },
+  paperTitle: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 20, lineHeight: 26, letterSpacing: -0.2 },
+  paperSub: { ...typography.roles.caption, color: colors.textMuted },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing[2] },
   chip: {
     flexDirection: "row",
@@ -1696,10 +1679,10 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingRight: spacing[2],
   },
-  chipText: { fontSize: 12, fontWeight: "600" },
+  chipText: { fontSize: 12, fontFamily: typography.fonts.bodySemibold },
   instructions: {
     backgroundColor: colors.infoBg,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing[3],
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.infoBorder,
@@ -1707,7 +1690,7 @@ const styles = StyleSheet.create({
   },
   instructionsLabel: {
     fontSize: 11,
-    fontWeight: "700",
+    fontFamily: typography.fonts.bodyBold,
     color: colors.info,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1721,7 +1704,7 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     borderWidth: 1,
     borderColor: colors.dangerBorder,
-    borderRadius: 20,
+    borderRadius: radius.card,
     backgroundColor: colors.dangerSurface,
     paddingHorizontal: spacing[3],
   },
@@ -1732,7 +1715,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: spacing[3],
     backgroundColor: colors.infoBg,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing[3],
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.infoBorder,
@@ -1740,7 +1723,7 @@ const styles = StyleSheet.create({
   generationNoticeCopy: { flex: 1, gap: 2 },
   generationNoticeTitle: {
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: typography.fonts.bodyBold,
     color: colors.infoText,
   },
   generationNoticeBody: {
@@ -1754,12 +1737,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: spacing[3],
     backgroundColor: colors.successBg,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing[3],
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.successBorder,
   },
-  submittedText: { fontSize: 13, fontWeight: "700", color: colors.successText },
+  submittedText: { fontSize: 13, fontFamily: typography.fonts.bodyBold, color: colors.successText },
   submittedScore: { fontSize: 12, color: colors.success, marginTop: 2 },
 
   actions: { flexDirection: "row", gap: spacing[3] },
@@ -1778,7 +1761,7 @@ const styles = StyleSheet.create({
   },
   publishedNoticeText: {
     color: colors.success,
-    fontWeight: "700",
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 14,
   },
   primaryBtn: {
@@ -1791,7 +1774,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing[2],
   },
-  primaryBtnText: { color: colors.white, fontWeight: "700", fontSize: 14 },
+  primaryBtnText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   primaryBtnDisabled: { opacity: 0.58 },
   secondaryBtn: {
     flex: 1,
@@ -1805,14 +1788,14 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.accent,
   },
-  secondaryBtnText: { color: colors.accent, fontWeight: "700", fontSize: 14 },
+  secondaryBtnText: { color: colors.accent, fontFamily: typography.fonts.bodyBold, fontSize: 14 },
   downloadStack: {
     flex: 1,
     gap: spacing[3],
   },
   downloadBtn: {
     minHeight: 58,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
@@ -1829,20 +1812,15 @@ const styles = StyleSheet.create({
   downloadTitle: {
     color: colors.text,
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: typography.fonts.bodyBold,
   },
   downloadMeta: {
     color: colors.textSoft,
     fontSize: 11,
   },
-  downloadError: {
-    color: colors.danger,
-    fontSize: 12,
-    lineHeight: 17,
-  },
   actionError: {
     minHeight: 48,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: `${colors.danger}35`,
     backgroundColor: colors.dangerSurface,
@@ -1865,11 +1843,11 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     borderWidth: 1,
     borderColor: colors.successBorder,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     backgroundColor: colors.successSurface,
     paddingHorizontal: spacing[3],
   },
-  savedBannerText: { flex: 1, color: colors.success, fontSize: 12, fontWeight: "700" },
+  savedBannerText: { flex: 1, color: colors.success, fontSize: 12, fontFamily: typography.fonts.bodyBold },
 
   aiComposerDock: {
     position: "absolute",
@@ -1881,7 +1859,7 @@ const styles = StyleSheet.create({
   aiConversationPanel: {
     borderWidth: 1,
     borderColor: colors.borderBrand,
-    borderRadius: 22,
+    borderRadius: radius.card,
     backgroundColor: colors.backgroundElevated,
     paddingVertical: spacing[2],
     paddingHorizontal: spacing[2],
@@ -1915,7 +1893,7 @@ const styles = StyleSheet.create({
   },
   aiMessageText: { color: colors.text, fontSize: 13, lineHeight: 19 },
   aiMessageTextUser: { color: colors.white },
-  aiThinkingText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
+  aiThinkingText: { color: colors.textMuted, fontSize: 12, fontFamily: typography.fonts.bodyBold },
   aiAvatarSmall: {
     width: 28,
     height: 28,
@@ -1931,7 +1909,7 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     borderWidth: 1,
     borderColor: colors.borderStrong,
-    borderRadius: 28,
+    borderRadius: radius.card,
     backgroundColor: colors.backgroundElevated,
     padding: spacing[2],
     shadowColor: colors.shadowStrong,
@@ -1970,7 +1948,7 @@ const styles = StyleSheet.create({
 
   sectionLabel: {
     fontSize: 11,
-    fontWeight: "700",
+    fontFamily: typography.fonts.bodyBold,
     color: colors.subtle,
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -1986,8 +1964,8 @@ const styles = StyleSheet.create({
     marginTop: spacing[3],
   },
   editHint: { flexDirection: "row", alignItems: "center", gap: 5 },
-  editHintText: { color: colors.accentStrong, fontSize: 11, fontWeight: "700" },
-  questionCount: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
+  editHintText: { color: colors.accentStrong, fontSize: 11, fontFamily: typography.fonts.bodyBold },
+  questionCount: { color: colors.textMuted, fontSize: 12, fontFamily: typography.fonts.bodyBold },
   questionCard: {
     backgroundColor: "transparent",
     borderRadius: 0,
@@ -2010,27 +1988,8 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     alignItems: "center",
   },
-  questionNum: {
-    minWidth: 42,
-    height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing[2],
-    borderRadius: 14,
-    backgroundColor: colors.nav,
-    shadowColor: colors.shadowStrong,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.16,
-    shadowRadius: 7,
-    elevation: 3,
-    flexShrink: 0,
-  },
-  questionNumText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.white,
-    letterSpacing: -0.2,
-  },
+  questionNum: { minWidth: 34, height: 30, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[2], borderRadius: radius.xs, backgroundColor: colors.iconSurface },
+  questionNumText: { color: colors.iconInk, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   questionMetaGroup: { flex: 1, minWidth: 0, justifyContent: "center", gap: 4 },
   questionMeta: { minHeight: 18, flexDirection: "row", alignItems: "center", gap: 7 },
   questionEditIcon: {
@@ -2052,7 +2011,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingTop: spacing[1],
   },
-  questionEditCueText: { color: colors.accentStrong, fontSize: 11, fontWeight: "600" },
+  questionEditCueText: { color: colors.accentStrong, fontSize: 11, fontFamily: typography.fonts.bodySemibold },
   qtypeBadge: {
     alignSelf: "flex-start",
     maxWidth: "100%",
@@ -2060,7 +2019,7 @@ const styles = StyleSheet.create({
   qtypeText: {
     fontSize: 11,
     lineHeight: 14,
-    fontWeight: "800",
+    fontFamily: typography.fonts.bodyBold,
     color: colors.text,
     textTransform: "uppercase",
     letterSpacing: 0.75,
@@ -2069,7 +2028,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  marksText: { fontSize: 11, lineHeight: 15, fontWeight: "700", color: colors.textMuted },
+  marksText: { fontSize: 11, lineHeight: 15, fontFamily: typography.fonts.bodyBold, color: colors.textMuted },
   metaDivider: {
     width: 3,
     height: 3,
@@ -2085,7 +2044,7 @@ const styles = StyleSheet.create({
   diffDotHard: { backgroundColor: colors.danger },
   diffDotMedium: { backgroundColor: colors.warning },
   diffDotEasy: { backgroundColor: colors.success },
-  diffText: { fontSize: 11, lineHeight: 15, fontWeight: "700", textTransform: "capitalize" },
+  diffText: { fontSize: 11, lineHeight: 15, fontFamily: typography.fonts.bodyBold, textTransform: "capitalize" },
   questionText: { fontSize: 14, color: colors.ink, lineHeight: 22 },
   optionsList: { gap: spacing[2] },
   optionRow: {
@@ -2102,7 +2061,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  optionLetterText: { fontSize: 11, fontWeight: "700", color: colors.muted },
+  optionLetterText: { fontSize: 11, fontFamily: typography.fonts.bodyBold, color: colors.muted },
   optionTextContainer: { flex: 1 },
   optionText: {
     fontSize: 13,
@@ -2116,7 +2075,7 @@ const styles = StyleSheet.create({
   },
   matchColumn: {
     flex: 1,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     backgroundColor: colors.surface2,
@@ -2124,8 +2083,8 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   matchColumnLabel: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 11,
+    fontFamily: typography.fonts.bodyBold,
     letterSpacing: 0.9,
     textTransform: "uppercase",
     color: colors.muted,
@@ -2147,7 +2106,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     flexShrink: 0,
   },
-  matchKeyText: { fontSize: 10, fontWeight: "700", color: colors.muted },
+  matchKeyText: { fontSize: 11, fontFamily: typography.fonts.bodyBold, color: colors.muted },
   matchItemTextContainer: { flex: 1 },
   matchItemText: {
     fontSize: 13,
@@ -2163,18 +2122,17 @@ const styles = StyleSheet.create({
     right: spacing[3],
     width: 304,
     maxWidth: "92%",
-    borderRadius: 22,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
     padding: spacing[3],
     gap: spacing[1],
-    ...shadows.lg,
   },
   actionMenuEyebrow: {
     color: colors.accentStrong,
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 11,
+    fontFamily: typography.fonts.bodyBold,
     letterSpacing: 1.1,
     textTransform: "uppercase",
     paddingHorizontal: spacing[2],
@@ -2219,7 +2177,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: "800",
+    fontFamily: typography.fonts.bodyBold,
   },
   actionMenuTitleDanger: {
     color: colors.danger,
@@ -2258,7 +2216,7 @@ const styles = StyleSheet.create({
   confirmIcon: {
     width: 52,
     height: 52,
-    borderRadius: 19,
+    borderRadius: radius.card,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.dangerSurface,
@@ -2267,8 +2225,8 @@ const styles = StyleSheet.create({
   },
   confirmEyebrow: {
     color: colors.accentStrong,
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 11,
+    fontFamily: typography.fonts.bodyBold,
     letterSpacing: 1.1,
     textTransform: "uppercase",
   },
@@ -2276,7 +2234,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 24,
     lineHeight: 29,
-    fontWeight: "800",
+    fontFamily: typography.fonts.bodyBold,
     letterSpacing: -0.35,
   },
   confirmBody: {
@@ -2302,7 +2260,7 @@ const styles = StyleSheet.create({
   confirmCancelText: {
     color: colors.text,
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: typography.fonts.bodyBold,
   },
   confirmDelete: {
     flex: 1,
@@ -2329,7 +2287,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
     marginTop: spacing[4],
     paddingHorizontal: spacing[4],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
@@ -2339,6 +2297,6 @@ const styles = StyleSheet.create({
   confirmDeleteText: {
     color: colors.white,
     fontSize: 13,
-    fontWeight: "800",
+    fontFamily: typography.fonts.bodyBold,
   },
 });

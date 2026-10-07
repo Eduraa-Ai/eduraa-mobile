@@ -733,7 +733,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
   },
   timerPill: {
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing[3],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundMuted,
@@ -877,7 +877,7 @@ const styles = StyleSheet.create({
   booleanButton: {
     flex: 1,
     minHeight: 46,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundMuted,
@@ -898,7 +898,7 @@ const styles = StyleSheet.create({
   },
   textInput: {
     minHeight: 96,
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundMuted,

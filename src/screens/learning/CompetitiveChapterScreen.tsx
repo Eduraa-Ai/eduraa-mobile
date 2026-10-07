@@ -16,7 +16,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { HomeStackParamList } from '../../navigation'
-import { AnimatedButton, AnimatedCard, AppScreen, SelectableChip } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppHeaderConfig, AppScreen, SelectableChip } from '../../components/ui'
 import {
   competitiveExamApi,
   CompetitiveChapterOption,
@@ -333,19 +333,10 @@ export default function CompetitiveChapterScreen() {
 
   return (
     <AppScreen contentStyle={styles.screen}>
-      <View style={styles.topRow}>
-        <TouchableOpacity
-          activeOpacity={0.82}
-          onPress={() => navigation.navigate('CompetitiveSubject', { subjectName: activeSubjectName })}
-          style={styles.backButton}
-        >
-          <Ionicons name="arrow-back" size={17} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.topCopy}>
-          <Text style={styles.topKicker}>Chapter workspace</Text>
-          <Text style={styles.topTitle} numberOfLines={1}>{activeChapter?.title || 'Loading chapter'}</Text>
-        </View>
-      </View>
+      <AppHeaderConfig
+        title={activeChapter?.title || 'Chapter'}
+        onBack={() => navigation.navigate('CompetitiveSubject', { subjectName: activeSubjectName })}
+      />
 
       <LinearGradient colors={[colors.slate[950], colors.slate[900], `${tone}55`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <View style={styles.heroHead}>
@@ -589,7 +580,7 @@ const styles = StyleSheet.create({
   },
   centerTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
   },
   centerButton: {
@@ -604,36 +595,6 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: typography.fonts.bodyBold,
     fontSize: 13,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.xs,
-  },
-  topCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  topKicker: {
-    ...typography.roles.eyebrow,
-    color: colors.accentStrong,
-  },
-  topTitle: {
-    color: colors.text,
-    fontFamily: typography.fonts.heading,
-    fontSize: 21,
-    lineHeight: 26,
   },
   hero: {
     borderRadius: radius['2xl'],
@@ -657,7 +618,7 @@ const styles = StyleSheet.create({
   },
   subjectMarkText: {
     color: colors.white,
-    fontFamily: typography.fonts.heading,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 21,
   },
   trackPill: {
@@ -676,11 +637,11 @@ const styles = StyleSheet.create({
   },
   heroKicker: {
     ...typography.roles.eyebrow,
-    color: colors.accentLight,
+    color: colors.textMuted,
   },
   heroTitle: {
     color: colors.white,
-    fontFamily: typography.fonts.heading,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 27,
     lineHeight: 33,
   },
@@ -737,7 +698,7 @@ const styles = StyleSheet.create({
   },
   sectionKicker: {
     ...typography.roles.eyebrow,
-    color: colors.accentStrong,
+    color: colors.textMuted,
   },
   sectionTitle: {
     ...typography.roles.title,
@@ -800,7 +761,7 @@ const styles = StyleSheet.create({
   },
   smallSectionTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 16,
   },
   diagramSteps: {
@@ -858,7 +819,7 @@ const styles = StyleSheet.create({
   },
   packTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 16,
     lineHeight: 21,
   },
@@ -891,7 +852,7 @@ const styles = StyleSheet.create({
   },
   chatList: {
     gap: spacing[2],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing[3],
     backgroundColor: colors.backgroundMuted,
     borderWidth: 1,
@@ -906,7 +867,7 @@ const styles = StyleSheet.create({
   chatBubble: {
     alignSelf: 'flex-start',
     maxWidth: '94%',
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing[3],
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -930,7 +891,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing[2],
-    borderRadius: radius.lg,
+    borderRadius: radius.card,
     padding: spacing[2],
     backgroundColor: colors.backgroundElevated,
     borderWidth: 1,
@@ -996,7 +957,7 @@ const styles = StyleSheet.create({
   },
   resourceTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 18,
     lineHeight: 23,
   },

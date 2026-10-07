@@ -41,13 +41,13 @@ test('doubt creation and replies support attachments while resolution stays inde
 test('both roles have native routes and unauthorized thread failures recover', () => {
   const navigation = read('src/navigation/index.tsx')
   const catalog = read('src/data/mobileControlCatalog.ts')
-  const home = read('src/screens/home/HomeScreen.tsx')
+  const workspace = read('src/screens/workspace/WorkspaceScreen.tsx')
   const screen = read('src/screens/workspace/DoubtsScreen.tsx')
 
   assert.match(navigation, /Doubts: 'student\/doubts\/\:doubtId\?'/)
   assert.match(navigation, /Doubts: 'teacher\/doubts\/\:doubtId\?'/)
   assert.match(catalog, /id: 'doubts'[\s\S]*roles: \['student', 'teacher'\]/)
-  assert.match(home, /navigation\.navigate\("Doubts"\)/)
+  assert.match(workspace, /navigation\.navigate\('Doubts'\)/)
   assert.match(screen, /This thread is no longer available/)
   assert.match(screen, /Your access changed/)
   assert.match(screen, /returnFromDoubts\(navigation, isTeacher\)/)

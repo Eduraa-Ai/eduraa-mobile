@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,6 +12,8 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { useNavigation } from '@react-navigation/native'
+import { HeaderShownContext } from '@react-navigation/elements'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { authApi } from '../../api/auth'
@@ -26,6 +28,7 @@ import {
 import { MultiSelectField } from '../../components/ui/MultiSelectField'
 import { SelectField } from '../../components/ui/SelectField'
 import { ProfileDisclosure } from '../../components/ui/ProfileDisclosure'
+import { useAppHeaderBack } from '../../navigation/headerScroll'
 import { useAuthStore } from '../../stores/authStore'
 import { typography } from '../../theme'
 import type { B2BProfileRole, TeacherProfileApprovalDraft, TeacherDraftErrors } from './b2bProfileModel'
@@ -135,6 +138,13 @@ function profileErrorMessage(error: unknown) {
   return apiError.message || 'Something interrupted this request. Please try again.'
 }
 
+function surfaceTitle(surface: Surface) {
+  if (surface === 'teacher-edit') return 'Request changes'
+  if (surface === 'security' || surface === 'security-sent') return 'Account security'
+  if (surface === 'logout-confirm') return 'Sign out safely'
+  return 'Profile'
+}
+
 export default function B2BProfileScreen() {
   const insets = useSafeAreaInsets()
   const queryClient = useQueryClient()
@@ -160,6 +170,14 @@ export default function B2BProfileScreen() {
   })
 
   const [surface, setSurface] = useState<Surface>('view')
+  const navigation = useNavigation<any>()
+  // Under the app header the screen no longer needs to clear the status bar itself.
+  const topInset = useContext(HeaderShownContext) ? 0 : insets.top
+  const closeToViewRef = useRef<() => void>(() => undefined)
+  useAppHeaderBack(surface === 'view' ? undefined : () => closeToViewRef.current())
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerTitle: surfaceTitle(surface) })
+  }, [navigation, surface])
   const [draft, setDraft] = useState<TeacherProfileApprovalDraft>(emptyTeacherDraft)
   const [draftErrors, setDraftErrors] = useState<TeacherDraftErrors>({})
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -323,14 +341,14 @@ export default function B2BProfileScreen() {
         title="Profile unavailable"
         body="This account does not use an institution profile."
         icon="person-circle-outline"
-        topInset={insets.top}
+        topInset={topInset}
       />
     )
   }
 
   const activeQuery = role === 'student' ? studentQuery : role === 'teacher' ? teacherQuery : principalQuery
   if (activeQuery.isLoading) {
-    return <ProfileLoading role={role} topInset={insets.top} />
+    return <ProfileLoading role={role} topInset={topInset} />
   }
   if (activeQuery.isError || !activeQuery.data) {
     return (
@@ -338,7 +356,7 @@ export default function B2BProfileScreen() {
         title="Your profile paused here."
         body={profileErrorMessage(activeQuery.error)}
         icon="cloud-offline-outline"
-        topInset={insets.top}
+        topInset={topInset}
         actionLabel="Try again"
         onAction={() => void activeQuery.refetch()}
       />
@@ -369,6 +387,7 @@ export default function B2BProfileScreen() {
     setSaveError(null)
     setResetError(null)
   }
+  closeToViewRef.current = closeToView
 
   const confirmSignOut = () => {
     if (signingOut) return
@@ -407,8 +426,7 @@ export default function B2BProfileScreen() {
           role={role}
           surface={surface}
           identity={identity}
-          topInset={insets.top}
-          onClose={closeToView}
+          topInset={topInset}
         />
 
         <View style={styles.sheet}>
@@ -538,24 +556,13 @@ function ProfileHero({
   surface,
   identity,
   topInset,
-  onClose,
 }: {
   role: B2BProfileRole
   surface: Surface
   identity: ResolvedIdentity
   topInset: number
-  onClose: () => void
 }) {
-  const isView = surface === 'view'
   const [compact, setCompact] = useState(false)
-  const title =
-    surface === 'teacher-edit'
-      ? 'Request changes'
-      : surface === 'security' || surface === 'security-sent'
-        ? 'Account security'
-        : surface === 'logout-confirm'
-          ? 'Sign out safely'
-        : 'Profile'
   const roleLabel = role === 'student' ? 'Student' : role === 'teacher' ? 'Teacher' : 'Principal'
 
   return (
@@ -563,24 +570,6 @@ function ProfileHero({
       onLayout={(event) => setCompact(event.nativeEvent.layout.width <= 340)}
       style={[styles.hero, compact && styles.heroCompact, { paddingTop: topInset + 18 }]}
     >
-      <View style={styles.heroTop}>
-        <View style={styles.heroTitleBlock}>
-          {!isView ? <Text style={styles.heroEyebrow}>ACCOUNT PROFILE</Text> : null}
-          <Text style={[styles.heroTitle, compact && styles.heroTitleCompact]}>{title}</Text>
-        </View>
-        {!isView ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close profile panel"
-            hitSlop={8}
-            onPress={onClose}
-            style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="close" color={WHITE} size={19} />
-          </Pressable>
-        ) : null}
-      </View>
-
       <View style={[styles.identityRow, compact && styles.identityRowCompact]}>
         <View style={[styles.avatar, compact && styles.avatarCompact]}>
           <Text style={[styles.avatarText, compact && styles.avatarTextCompact]}>{initials(identity.firstName, identity.lastName, roleLabel.slice(0, 2))}</Text>
@@ -1463,12 +1452,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: CREAM },
   hero: { minHeight: 238, overflow: 'hidden', paddingHorizontal: 22, paddingBottom: 14, backgroundColor: NAVY },
   heroCompact: { minHeight: 224, paddingHorizontal: 18, paddingBottom: 12 },
-  heroTop: { minHeight: 38, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  heroTitleBlock: { flex: 1, minWidth: 0, paddingRight: 12 },
   heroEyebrow: { color: '#FF9A63', fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14, letterSpacing: 1.7 },
-  heroTitle: { marginTop: 2, color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 25, lineHeight: 30 },
-  heroTitleCompact: { fontSize: 23, lineHeight: 28 },
-  heroButton: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 23, borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)', backgroundColor: 'rgba(255,255,255,0.08)' },
   identityRow: { minHeight: 92, flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8 },
   identityRowCompact: { minHeight: 82, gap: 12, marginTop: 6 },
   avatar: { width: 66, height: 66, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: 2, borderColor: 'rgba(255,255,255,0.74)', backgroundColor: ORANGE },
@@ -1476,18 +1460,21 @@ const styles = StyleSheet.create({
   avatarCompact: { width: 64, height: 64, borderRadius: 22 },
   avatarTextCompact: { fontSize: 21 },
   avatarSignal: { position: 'absolute', right: -2, bottom: 8, width: 14, height: 14, borderRadius: 7, borderWidth: 3, borderColor: NAVY, backgroundColor: '#57C284' },
-  identityCopy: { flex: 1, minWidth: 0 },
   roleLine: { flexDirection: 'row', marginBottom: 4 },
   rolePill: { minHeight: 27, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,209,184,0.25)', backgroundColor: 'rgba(243,108,33,0.12)' },
   rolePillText: { color: '#FFD1B8', fontFamily: typography.fonts.bodyBold, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' },
-  identityName: { color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 22, lineHeight: 27 },
   identityNameCompact: { fontSize: 19, lineHeight: 23 },
-  identityIdentifier: { marginTop: 5, color: '#C0C9D5', fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
   schoolPath: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 4, paddingVertical: 9, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.16)' },
   schoolPathCompact: { minHeight: 48, marginTop: 2, paddingVertical: 7 },
   schoolPathCopy: { flex: 1, minWidth: 0 },
   schoolPathValue: { color: WHITE, fontFamily: typography.fonts.bodySemibold, fontSize: 12.5, lineHeight: 18 },
   schoolPathValueCompact: { fontSize: 10.5, lineHeight: 15 },
+  loadingHero: { minHeight: 332, paddingHorizontal: 22, paddingBottom: 28, backgroundColor: NAVY },
+  loadingHeroTitle: { maxWidth: 300, marginTop: 8, color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 29, lineHeight: 35 },
+  loadingIdentity: { flexDirection: 'row', alignItems: 'center', gap: 15, marginTop: 35 },
+  identityCopy: { flex: 1, minWidth: 0 },
+  identityName: { color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 22, lineHeight: 27 },
+  identityIdentifier: { marginTop: 5, color: '#C0C9D5', fontFamily: typography.fonts.bodyMedium, fontSize: 13, lineHeight: 19 },
   sheet: { minHeight: 540, marginTop: -12, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 30, borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: CREAM },
   sectionIntro: { marginBottom: 20 },
   sectionEyebrow: { color: RUST, fontFamily: typography.fonts.bodyBold, fontSize: 9.5, lineHeight: 13, letterSpacing: 1.5 },
@@ -1638,9 +1625,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.82 },
   pressedFirm: { opacity: 0.93, transform: [{ scale: 0.988 }] },
   disabled: { opacity: 0.62 },
-  loadingHero: { minHeight: 332, paddingHorizontal: 22, paddingBottom: 28, backgroundColor: NAVY },
-  loadingHeroTitle: { maxWidth: 300, marginTop: 8, color: WHITE, fontFamily: typography.fonts.headingSemibold, fontSize: 29, lineHeight: 35 },
-  loadingIdentity: { flexDirection: 'row', alignItems: 'center', gap: 15, marginTop: 35 },
   loadingAvatar: { width: 76, height: 76, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.11)' },
   loadingLines: { flex: 1, gap: 10 },
   loadingLine: { height: 11, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.15)' },

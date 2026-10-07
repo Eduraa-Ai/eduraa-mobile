@@ -15,7 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
-import { AppScreen, AuthenticatedImage, ErrorState, PremiumHeader } from '../../components/ui'
+import { AppScreen, AuthenticatedImage, ErrorState } from '../../components/ui'
 import {
   learningResourcePageImagePath,
   learningResourcesApi,
@@ -28,9 +28,6 @@ import { colors, radius, shadows, spacing, typography } from '../../theme'
 // Only cheat-sheet-typed resources; subject and chapter pickers filter them.
 // Sheet selection opens a per-page PNG viewer (mirrors CheatSheetPageImage
 // with authenticated image fetching).
-const TITLE = 'Cheat Sheets'
-const SUBTITLE = 'Select subject, chapter, and sheet'
-const EYEBROW = 'Revision Library'
 const NO_SHEETS = 'No sheets match this chapter.'
 const PICK_HINT = 'Select a subject and chapter to view sheets.'
 const LOADING_LIBRARY = 'Loading revision library'
@@ -212,8 +209,6 @@ export default function CheatSheetsScreen() {
         />
       }
     >
-      <PremiumHeader eyebrow={EYEBROW} title={TITLE} subtitle={SUBTITLE} />
-
       <View style={styles.pickers}>
         <PickerField
           label="Subject"
@@ -872,7 +867,7 @@ const styles = StyleSheet.create({
   pickerLabel: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
@@ -919,7 +914,7 @@ const styles = StyleSheet.create({
   listHeader: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginTop: spacing[1],
@@ -955,7 +950,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 14,
     lineHeight: 18,
   },
@@ -982,7 +977,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     alignItems: 'flex-start',
-    ...shadows.xs,
   },
   emptyIcon: {
     width: 40,
@@ -994,7 +988,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
   },
   emptyBody: {
@@ -1041,7 +1035,7 @@ const styles = StyleSheet.create({
   combinedCtaCopy: { flex: 1, minWidth: 0, gap: 2 },
   combinedCtaTitle: {
     color: colors.textOnBrand,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 14,
     lineHeight: 18,
   },
@@ -1075,7 +1069,7 @@ const sheetStyles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 16,
   },
   close: {
@@ -1195,7 +1189,7 @@ const viewerStyles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
   },
   meta: {
@@ -1229,7 +1223,7 @@ const viewerStyles = StyleSheet.create({
     gap: 2,
   },
   sectionKicker: {
-    color: colors.accentStrong,
+    color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
     fontSize: 11,
     letterSpacing: 0.6,
@@ -1237,7 +1231,7 @@ const viewerStyles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 15,
     lineHeight: 19,
   },
@@ -1266,7 +1260,7 @@ const viewerStyles = StyleSheet.create({
   },
   fallbackTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
   },
   fallbackBody: {

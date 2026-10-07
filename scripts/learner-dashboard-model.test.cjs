@@ -107,8 +107,9 @@ test('learner dashboard exposes the server-backed mobile contract and real desti
   assert.match(resultDetail, /Result not released yet/)
   assert.match(resultDetail, /paper\?\.results_visible_to_student === false/)
   assert.match(navigation, /name="LearnerDashboard"/)
-  assert.match(home, /onDashboard=\{\(\) => navigation\.navigate\("LearnerDashboard"\)\}/)
-  assert.match(home, /navigation\.navigate\("LearnerDashboard"\)/)
+  const workspace = fs.readFileSync('src/screens/workspace/WorkspaceScreen.tsx', 'utf8')
+  assert.match(home, /<WorkspaceScreen/)
+  assert.match(workspace, /navigation\.navigate\(learner \? 'LearnerDashboard' : 'Dashboard'\)/)
 })
 
 test('release actions invalidate learner evidence caches and preserve the exam gate', () => {

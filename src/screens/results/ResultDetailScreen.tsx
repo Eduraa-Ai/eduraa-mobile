@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Circle } from 'react-native-svg'
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
@@ -12,7 +11,9 @@ import { checkedPapersApi } from '../../api/checkedPapers'
 import { prefetchAgenticLearning } from '../../api/agenticLearning'
 import { papersApi } from '../../api/papers'
 import { isLearnerRole } from '../../auth/roles'
-import { AuthLogoMark, MathText } from '../../components/ui'
+import { HeaderShownContext } from '@react-navigation/elements'
+import { AppHeaderAction, MathText } from '../../components/ui'
+import { useAppHeaderBack } from '../../navigation/headerScroll'
 import type { ResultsStackParamList } from '../../navigation'
 import { returnToCheckedPapers } from '../../navigation/paperResultsNavigation'
 import { useAuthStore } from '../../stores/authStore'
@@ -89,7 +90,7 @@ function ReportScoreRing({
         : `${percent} percent, ${score} out of ${max} marks`}
     >
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Circle cx={size / 2} cy={size / 2} r={ringRadius} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={stroke} />
+        <Circle cx={size / 2} cy={size / 2} r={ringRadius} fill="none" stroke={colors.backgroundMuted} strokeWidth={stroke} />
         {!isChecking || checkingPercent != null ? <Circle
           cx={size / 2}
           cy={size / 2}
@@ -157,7 +158,7 @@ function ProcessingTimeline({
               accessibilityLabel={`${stage.label}, ${blocked ? 'needs attention' : active ? 'in progress' : complete ? 'complete' : 'waiting'}, ${duration}`}
             >
               <View style={styles.timelineRail}>
-                <View style={[styles.timelineNode, { borderColor: tone, backgroundColor: complete ? tone : '#fffaf2' }]}>
+                <View style={[styles.timelineNode, { borderColor: tone, backgroundColor: complete ? tone : colors.backgroundElevated }]}>
                   {complete ? <Ionicons name="checkmark" size={10} color={colors.white} /> : active ? <View style={[styles.timelinePulse, { backgroundColor: tone }]} /> : blocked ? <Ionicons name="alert" size={10} color={tone} /> : null}
                 </View>
                 {!isLast ? <View style={[styles.timelineConnector, complete && { backgroundColor: colors.success }]} /> : null}
@@ -380,9 +381,33 @@ export default function ResultDetailScreen() {
     }
   }
 
+  // The app header carries the title, back and the PDF action for every state of this report.
+  const headerShown = useContext(HeaderShownContext)
+  const topPad = headerShown ? 0 : insets.top + spacing[2]
+  const downloadRef = useRef(downloadReport)
+  downloadRef.current = downloadReport
+  const headerTitle = data ? checkedPaperTitle(data) : 'Result'
+  const canDownload = Boolean(data && report && !isChecking)
+  useAppHeaderBack(goBack)
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle,
+      headerRight: canDownload
+        ? () => (
+            <AppHeaderAction
+              label={isDownloading ? 'Saving' : 'PDF'}
+              icon="download-outline"
+              accessibilityLabel="Download checked paper PDF"
+              onPress={() => void downloadRef.current()}
+            />
+          )
+        : undefined,
+    })
+  }, [canDownload, headerTitle, isDownloading, navigation])
+
   if (!id || !data || !report) {
     return (
-      <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
+      <View style={[styles.root, { paddingTop: topPad }]}>
         <View style={styles.stateSurface}>
           {isLoading ? <><ActivityIndicator color={colors.accent} size="large" /><Text style={styles.stateMessage}>Loading the performance report…</Text></> : (
             <ResultState
@@ -399,7 +424,7 @@ export default function ResultDetailScreen() {
 
   if (checkFailed && !isStaff) {
     return (
-      <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
+      <View style={[styles.root, { paddingTop: topPad }]}>
         <View style={styles.stateSurface}>
           <ResultState
             title="Needs your input"
@@ -414,7 +439,7 @@ export default function ResultDetailScreen() {
 
   if (!isStaff && data.results_visible_to_student === false) {
     return (
-      <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
+      <View style={[styles.root, { paddingTop: topPad }]}>
         <View style={styles.stateSurface}>
           <ResultState
             title="Result not released yet"
@@ -427,7 +452,6 @@ export default function ResultDetailScreen() {
     )
   }
 
-  const title = checkedPaperTitle(data)
   const pendingReviews = pendingQuestionReviewItems(data)
   const pendingReviewPreview = pendingReviews.slice(0, 3).map(({ item, index }) => questionReviewLabel(item, index)).join(', ')
   const pendingReviewTitle = `${pendingReviews.length} question review${pendingReviews.length === 1 ? '' : 's'} pending`
@@ -500,38 +524,10 @@ export default function ResultDetailScreen() {
     : 'Start a focused repair'
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
+    <View style={[styles.root, { paddingTop: topPad }]}>
       <View style={styles.reportSurface}>
-        <View style={[styles.identityRow, width < 380 && styles.identityRowCompact]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back to checked papers" onPress={goBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={18} color={colors.white} />
-          </Pressable>
-          <AuthLogoMark size={width < 380 ? 34 : 38} />
-          <View style={styles.identityCopy}>
-            <Text style={styles.identityTitle} numberOfLines={1}>{title}</Text>
-            <Text style={styles.identityMeta} numberOfLines={1}>{data.subject_name || 'Checked paper'} · {formatReportDate(data.updated_at || data.created_at)}</Text>
-          </View>
-          {!isChecking ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Download checked paper PDF"
-              accessibilityHint="Downloads this checked paper report as a PDF."
-              accessibilityState={{ busy: isDownloading, disabled: isDownloading }}
-              disabled={isDownloading}
-              onPress={() => void downloadReport()}
-              style={({ pressed }) => [
-                styles.headerDownloadButton,
-                pressed && styles.headerDownloadButtonPressed,
-                isDownloading && styles.headerDownloadButtonDisabled,
-              ]}
-            >
-              {isDownloading ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Ionicons name="download-outline" size={19} color={colors.white} />
-              )}
-            </Pressable>
-          ) : null}
+        <View style={styles.identityRow}>
+          <Text style={[styles.identityMeta, styles.identityCopy]} numberOfLines={1}>{data.subject_name || 'Checked paper'} · {formatReportDate(data.updated_at || data.created_at)}</Text>
           <View style={styles.finalPill}><View style={styles.pillDot} /><Text style={styles.finalPillText}>{statusLabel}</Text></View>
         </View>
 
@@ -543,14 +539,14 @@ export default function ResultDetailScreen() {
         >
           {downloadError ? (
             <View style={styles.downloadErrorBanner} accessibilityRole="alert">
-              <Ionicons name="alert-circle-outline" size={17} color="#ffd9c3" />
+              <Ionicons name="alert-circle-outline" size={17} color={colors.dangerText} />
               <Text style={styles.downloadErrorText}>{downloadError}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Dismiss download error" hitSlop={8} onPress={() => setDownloadError(null)}>
-                <Ionicons name="close" size={17} color={colors.white} />
+                <Ionicons name="close" size={17} color={colors.textSecondary} />
               </Pressable>
             </View>
           ) : null}
-          <LinearGradient colors={['#07152d', '#0b1830', '#0d1a33']} style={styles.hero}>
+          <View style={styles.hero}>
             <Text style={styles.heroKicker}>{isStaff ? 'Teacher result' : 'Performance report'}</Text>
             <Text style={styles.heroTitle}>{reportHeadline}</Text>
             <View style={[styles.scoreStage, width < 380 && styles.scoreStageCompact]}>
@@ -572,7 +568,7 @@ export default function ResultDetailScreen() {
                     accessible
                     accessibilityLabel={isChecking ? `Checking elapsed time ${stopwatchLabel}` : `Paper checked in ${stopwatchLabel}`}
                   >
-                    <Ionicons name={isChecking ? 'stopwatch-outline' : 'checkmark-circle-outline'} size={13} color={isChecking ? '#5eead4' : '#93e2b7'} />
+                    <Ionicons name={isChecking ? 'stopwatch-outline' : 'checkmark-circle-outline'} size={13} color={isChecking ? colors.info : colors.successText} />
                     <Text style={[styles.stopwatchText, !isChecking && styles.stopwatchTextComplete]}>
                       {isChecking ? 'Elapsed' : 'Checked in'} {stopwatchLabel}
                     </Text>
@@ -580,16 +576,15 @@ export default function ResultDetailScreen() {
                 ) : null}
                 {!isChecking ? (
                   <View style={styles.signalPill}>
-                    <Ionicons name={isStaff ? 'checkmark-circle-outline' : 'analytics-outline'} size={13} color="#93e2b7" />
+                    <Ionicons name={isStaff ? 'checkmark-circle-outline' : 'analytics-outline'} size={13} color={colors.successText} />
                     <Text style={styles.signalPillText}>{report.questions.length ? `${report.questions.length} questions ${isStaff ? 'checked' : 'diagnosed'}` : 'Summary only'}</Text>
                   </View>
                 ) : null}
               </View>
             </View>
-          </LinearGradient>
+          </View>
 
           <View style={styles.reportSheet}>
-            <View style={styles.grabber} />
             <View style={styles.diagnosis}>
               <View style={styles.diagnosisIcon}>
                 <Ionicons name={pollingIssue ? 'cloud-offline-outline' : isChecking ? 'timer-outline' : isStaff ? resultPublished ? 'people-outline' : 'lock-closed-outline' : 'bulb-outline'} size={20} color={pollingIssue ? colors.warning : colors.accentStrong} />
@@ -687,96 +682,89 @@ export default function ResultDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#07152d' },
-  reportSurface: { flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: '#07152d' },
-  stateSurface: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf2', padding: spacing[5] },
-  identityRow: { minHeight: 58, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: '#07152d' },
-  identityRowCompact: { gap: spacing[1] },
-  backButton: { width: 44, height: 44, borderRadius: radius.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
+  root: { flex: 1, backgroundColor: colors.background },
+  reportSurface: { flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: colors.background },
+  stateSurface: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: spacing[5] },
+  identityRow: { minHeight: 36, paddingHorizontal: spacing[4], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   identityCopy: { flex: 1, minWidth: 0 },
-  identityTitle: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 13, lineHeight: 17 },
-  identityMeta: { color: 'rgba(255,255,255,0.62)', fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 13 },
-  headerDownloadButton: { width: 44, height: 44, flexShrink: 0, borderRadius: radius.full, borderWidth: 0, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
-  headerDownloadButtonPressed: { backgroundColor: 'rgba(243,108,33,0.18)' },
-  headerDownloadButtonDisabled: { opacity: 0.65 },
-  finalPill: { minHeight: 28, maxWidth: 82, borderRadius: radius.full, paddingHorizontal: spacing[2], flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(241,100,35,0.13)' },
+  identityMeta: { ...typography.roles.caption, color: colors.textMuted },
+  finalPill: { minHeight: 24, maxWidth: 120, borderRadius: radius.full, paddingHorizontal: spacing[2], flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.accentSurface },
   pillDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent },
-  finalPillText: { color: '#ffd9c3', fontFamily: typography.fonts.bodyBold, fontSize: 8, textTransform: 'uppercase', flexShrink: 1 },
+  finalPillText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11, flexShrink: 1 },
   reportScroll: { flex: 1 },
   reportContent: { flexGrow: 1 },
-  downloadErrorBanner: { minHeight: 48, marginHorizontal: spacing[4], marginTop: spacing[1], paddingHorizontal: spacing[3], borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,217,195,0.28)', backgroundColor: 'rgba(193,55,45,0.2)', flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  downloadErrorText: { flex: 1, color: '#ffd9c3', fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 14 },
-  hero: { paddingHorizontal: spacing[4], paddingTop: spacing[2], paddingBottom: spacing[4], alignItems: 'center', overflow: 'hidden' },
-  heroKicker: { color: '#ff8543', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.35, textTransform: 'uppercase' },
-  heroTitle: { maxWidth: 330, marginTop: spacing[1], color: colors.white, fontFamily: typography.fonts.heading, fontSize: 22, lineHeight: 23, textAlign: 'center' },
+  downloadErrorBanner: { minHeight: 44, marginHorizontal: spacing[4], marginTop: spacing[1], paddingHorizontal: spacing[3], borderRadius: radius.sm, backgroundColor: colors.dangerSurface, flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  downloadErrorText: { ...typography.roles.caption, flex: 1, color: colors.dangerText },
+  hero: { marginHorizontal: spacing[4], marginTop: spacing[2], padding: spacing[4], alignItems: 'center', borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  heroKicker: { ...typography.roles.groupLabel, color: colors.textMuted },
+  heroTitle: { maxWidth: 330, marginTop: spacing[1], color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 18, lineHeight: 24, textAlign: 'center' },
   scoreStage: { marginTop: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[4] },
   scoreStageCompact: { gap: spacing[3] },
   scoreRing: { width: 88, height: 88, alignItems: 'center', justifyContent: 'center' },
   scoreRingCenter: { position: 'absolute', alignItems: 'center' },
-  scoreRingPercent: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 22, lineHeight: 24 },
-  scoreRingMarks: { maxWidth: 72, color: 'rgba(255,255,255,0.76)', fontFamily: typography.fonts.bodyBold, fontSize: 9, lineHeight: 11, marginTop: 2, textAlign: 'center' },
+  scoreRingPercent: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 22, lineHeight: 24 },
+  scoreRingMarks: { maxWidth: 72, color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 13, marginTop: 2, textAlign: 'center' },
   scoreContext: { width: 142, gap: spacing[1] },
-  scoreContextLabel: { color: 'rgba(255,255,255,0.62)', fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 13 },
-  scoreContextValue: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 15, lineHeight: 18 },
-  stopwatchPill: { alignSelf: 'flex-start', minHeight: 26, paddingHorizontal: spacing[2], borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(45,212,191,0.12)' },
-  stopwatchPillComplete: { backgroundColor: 'rgba(44,188,116,0.12)' },
-  stopwatchText: { color: '#99f6e4', fontFamily: typography.fonts.bodyBold, fontSize: 9, fontVariant: ['tabular-nums'] },
-  stopwatchTextComplete: { color: '#93e2b7' },
-  signalPill: { alignSelf: 'flex-start', minHeight: 28, paddingHorizontal: spacing[2], borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(44,188,116,0.12)' },
-  signalPillText: { color: '#93e2b7', fontFamily: typography.fonts.bodyBold, fontSize: 8 },
-  reportSheet: { marginTop: -10, minHeight: 500, paddingHorizontal: spacing[4], paddingBottom: spacing[8], borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#fffaf2', gap: spacing[2] },
-  grabber: { width: 42, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: spacing[2], marginBottom: spacing[1], backgroundColor: '#cdbda9' },
-  diagnosis: { flexDirection: 'row', gap: spacing[3], paddingBottom: spacing[2], borderBottomWidth: 1, borderBottomColor: '#eadfd1' },
-  diagnosisIcon: { width: 40, height: 40, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff0e5' },
+  scoreContextLabel: { ...typography.roles.caption, fontSize: 11.5, color: colors.textMuted },
+  scoreContextValue: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 15, lineHeight: 20 },
+  stopwatchPill: { alignSelf: 'flex-start', minHeight: 24, paddingHorizontal: spacing[2], borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.infoSurface },
+  stopwatchPillComplete: { backgroundColor: colors.successSurface },
+  stopwatchText: { color: colors.info, fontFamily: typography.fonts.bodyBold, fontSize: 11, fontVariant: ['tabular-nums'] },
+  stopwatchTextComplete: { color: colors.successText },
+  signalPill: { alignSelf: 'flex-start', minHeight: 24, paddingHorizontal: spacing[2], borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.successSurface },
+  signalPillText: { color: colors.successText, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  reportSheet: { paddingHorizontal: spacing[4], paddingTop: spacing[3], paddingBottom: spacing[8], gap: spacing[3] },
+  diagnosis: { flexDirection: 'row', gap: spacing[3], padding: spacing[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  diagnosisIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface },
   diagnosisCopy: { flex: 1, minWidth: 0 },
-  diagnosisTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 15, lineHeight: 19 },
-  diagnosisText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16, marginTop: 3 },
-  distribution: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eadfd1', paddingBottom: spacing[2] },
+  diagnosisTitle: { ...typography.roles.rowTitle, color: colors.nav },
+  diagnosisText: { ...typography.roles.caption, color: colors.textMuted, marginTop: 2 },
+  distribution: { flexDirection: 'row', paddingVertical: spacing[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
   distributionMetric: { flex: 1, minWidth: 0, paddingHorizontal: spacing[2], alignItems: 'center' },
   metricRail: { width: 20, height: 2, borderRadius: 1, marginBottom: spacing[2] },
-  distributionValue: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 16, lineHeight: 18, textAlign: 'center' },
-  distributionLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 0.7, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
-  timelinePanel: { borderWidth: 1, borderColor: '#eadfd1', borderRadius: 16, backgroundColor: '#fffdf8', paddingHorizontal: spacing[3], paddingTop: spacing[3], paddingBottom: spacing[2] },
+  distributionValue: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 20, lineHeight: 24, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  distributionLabel: { ...typography.roles.caption, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
+  timelinePanel: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.card, backgroundColor: colors.backgroundElevated, paddingHorizontal: spacing[3], paddingTop: spacing[3], paddingBottom: spacing[2] },
   timelineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing[2] },
-  timelineTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 13, lineHeight: 17 },
-  timelineHint: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 12, marginTop: 1 },
+  timelineTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 17 },
+  timelineHint: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 12, marginTop: 1 },
   timelineList: { gap: 0 },
   timelineRow: { minHeight: 34, flexDirection: 'row', alignItems: 'flex-start' },
   timelineRail: { width: 24, alignSelf: 'stretch', alignItems: 'center' },
   timelineNode: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   timelinePulse: { width: 6, height: 6, borderRadius: 3 },
-  timelineConnector: { position: 'absolute', top: 18, bottom: 0, width: 2, backgroundColor: '#ded3c6' },
-  timelineStageLabel: { flex: 1, minWidth: 0, paddingTop: 1, paddingHorizontal: spacing[2], color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 16 },
+  timelineConnector: { position: 'absolute', top: 18, bottom: 0, width: 2, backgroundColor: colors.borderStrong },
+  timelineStageLabel: { flex: 1, minWidth: 0, paddingTop: 1, paddingHorizontal: spacing[2], color: colors.textSecondary, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 16 },
   timelineStageLabelActive: { color: colors.text },
-  timelineDuration: { minWidth: 66, paddingTop: 1, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 16, fontVariant: ['tabular-nums'], textAlign: 'right' },
-  primaryAction: { minHeight: 44, borderRadius: 14, backgroundColor: '#07152d', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
-  primaryActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
+  timelineDuration: { minWidth: 66, paddingTop: 1, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 16, fontVariant: ['tabular-nums'], textAlign: 'right' },
+  primaryAction: { minHeight: 48, borderRadius: radius.control, backgroundColor: colors.accent, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
+  primaryActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 15 },
   reviewBanner: { minHeight: 58, borderRadius: 16, borderWidth: 1, borderColor: '#f8c979', backgroundColor: '#fff8e7', paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   reviewBannerIcon: { width: 34, height: 34, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff0cf' },
   reviewBannerCopy: { flex: 1, minWidth: 0 },
-  reviewBannerTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 16 },
-  reviewBannerText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 13, marginTop: 2 },
+  reviewBannerTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 16 },
+  reviewBannerText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 13, marginTop: 2 },
   breakdownHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing[3], marginTop: spacing[1] },
-  breakdownTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 17 },
-  breakdownHint: { maxWidth: 250, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 12, marginTop: 1 },
-  breakdownCount: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  breakdownTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 17 },
+  breakdownHint: { maxWidth: 250, color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 12, marginTop: 1 },
+  breakdownCount: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   questionList: { borderTopWidth: 1, borderTopColor: '#eadfd1' },
   questionRow: { minHeight: 62, paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[3], borderBottomWidth: 1, borderBottomColor: '#eadfd1' },
   questionIndex: { width: 38, height: 38, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  questionIndexText: { fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  questionIndexText: { fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   questionCopy: { flex: 1, minWidth: 0 },
   questionReviewChip: { alignSelf: 'flex-start', minHeight: 22, borderRadius: radius.full, paddingHorizontal: spacing[2], flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff0cf', borderWidth: 1, borderColor: '#f8c979', marginBottom: spacing[1] },
-  questionReviewChipText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8 },
-  questionTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 12 },
-  questionDetail: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, marginTop: 3 },
+  questionReviewChipText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
+  questionTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
+  questionDetail: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, marginTop: 3 },
   questionScore: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  questionScoreText: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  questionScoreText: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   emptyQuestions: { minHeight: 110, alignItems: 'center', justifyContent: 'center', padding: spacing[4] },
   pressed: { opacity: 0.76 },
-  stateCard: { width: '100%', alignItems: 'center', gap: spacing[3], padding: spacing[5], borderRadius: 24, backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.border },
+  stateCard: { width: '100%', alignItems: 'center', gap: spacing[3], padding: spacing[5], borderRadius: radius.card, backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.border },
   stateIcon: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
-  stateTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 20, textAlign: 'center' },
+  stateTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 20, textAlign: 'center' },
   stateMessage: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18, textAlign: 'center' },
-  stateButton: { minHeight: 44, borderRadius: radius.full, paddingHorizontal: spacing[5], backgroundColor: '#07152d', alignItems: 'center', justifyContent: 'center' },
+  stateButton: { minHeight: 46, borderRadius: radius.control, paddingHorizontal: spacing[5], backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   stateButtonText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
 })

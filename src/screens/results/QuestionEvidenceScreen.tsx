@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,13 +17,14 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import { HeaderShownContext } from '@react-navigation/elements'
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { checkedPapersApi } from '../../api/checkedPapers'
 import { isLearnerRole } from '../../auth/roles'
-import { AuthLogoMark, MathText, ProtectedContentImage } from '../../components/ui'
+import { AppHeaderConfig, MathText, ProtectedContentImage } from '../../components/ui'
 import type { ResultsStackParamList } from '../../navigation'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, spacing, typography } from '../../theme'
@@ -328,6 +329,7 @@ export default function QuestionEvidenceScreen() {
   const navigation = useNavigation<Nav>()
   const queryClient = useQueryClient()
   const insets = useSafeAreaInsets()
+  const topPad = useContext(HeaderShownContext) ? 0 : insets.top + spacing[2]
   const { width } = useWindowDimensions()
   const user = useAuthStore((state) => state.user)
   const isStaff = Boolean(user && !isLearnerRole(user.role))
@@ -489,7 +491,7 @@ export default function QuestionEvidenceScreen() {
 
   if (!data || !evidence || !review) {
     return (
-      <View style={[styles.root, { paddingTop: insets.top + spacing[2] }]}>
+      <View style={[styles.root, { paddingTop: topPad }]}>
         <View style={styles.stateSurface}>
           {isLoading ? (
             <>
@@ -525,7 +527,6 @@ export default function QuestionEvidenceScreen() {
   const previousEvidence = findPreviousEvidenceQuestion(data, params.questionId, params.questionIndex)
   const status = questionStatus(item)
   const statusMeta = STATUS_META[status]
-  const isStrong = status === 'correct'
   const response = review.unanswered ? '' : review.studentAnswer
   const expected = review.expectedAnswer
   const feedback = item.feedback || ''
@@ -600,28 +601,17 @@ export default function QuestionEvidenceScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.root, { paddingTop: insets.top + spacing[2] }]}
+      style={[styles.root, { paddingTop: topPad }]}
     >
       <View style={styles.detailSurface}>
         <LinearGradient colors={['#07152d', '#0b1932']} style={styles.navyHeader}>
+          <AppHeaderConfig title={`Question ${questionNumber} of ${totalQuestions}`} />
           <View style={styles.identityRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back to performance report" onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={18} color={colors.white} />
-            </Pressable>
-            <AuthLogoMark size={38} />
-            <View style={styles.identityCopy}>
-              <Text style={styles.identityTitle}>Question {String(questionNumber).padStart(2, '0')} of {String(totalQuestions).padStart(2, '0')}</Text>
-              <Text style={styles.identityMeta}>{questionTypeLabel(item)} · {item.score ?? '-'}/{item.max_score ?? '-'}</Text>
-            </View>
+            <Text style={[styles.identityMeta, styles.identityCopy]} numberOfLines={1}>{questionTypeLabel(item)} · {item.score ?? '-'}/{item.max_score ?? '-'}</Text>
             <View key={`status-${evidence.index}`} accessible accessibilityLabel={`Question status: ${statusMeta.label}`} style={styles.statusPill}>
               <View style={[styles.statusDot, { backgroundColor: statusMeta.tone }]} />
               <Text style={[styles.statusPillText, { color: statusMeta.tone }]}>{statusMeta.label}</Text>
             </View>
-          </View>
-          <View style={styles.hero}>
-            <Text style={styles.heroKicker}>{isStrong ? 'Evidence-led reinforcement' : 'Evidence-led feedback'}</Text>
-            <Text style={styles.heroTitle}>{isStrong ? <>See exactly what{`\n`}you did well.</> : <>See exactly where{`\n`}the marks slipped.</>}</Text>
-            <Text style={styles.heroSubtitle}>{isStrong ? 'Your response and evaluator evidence show what is worth repeating.' : 'Question context, answers, and evaluator evidence stay connected.'}</Text>
           </View>
         </LinearGradient>
 
@@ -1002,23 +992,17 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#07152d' },
   detailSurface: { flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: '#07152d' },
   navyHeader: { backgroundColor: '#07152d' },
-  identityRow: { minHeight: 58, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  backButton: { width: 44, height: 44, borderRadius: radius.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
+  identityRow: { minHeight: 40, paddingHorizontal: spacing[4], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   identityCopy: { flex: 1, minWidth: 0 },
-  identityTitle: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 13 },
-  identityMeta: { color: 'rgba(255,255,255,0.62)', fontFamily: typography.fonts.bodyMedium, fontSize: 9, marginTop: 2 },
+  identityMeta: { color: 'rgba(255,255,255,0.72)', fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 16 },
   statusPill: { minHeight: 28, maxWidth: 78, borderRadius: radius.full, paddingHorizontal: spacing[2], flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(241,100,35,0.12)' },
   statusDot: { width: 5, height: 5, borderRadius: 3 },
-  statusPillText: { fontFamily: typography.fonts.bodyBold, fontSize: 8, textTransform: 'uppercase', flexShrink: 1 },
-  hero: { paddingHorizontal: spacing[4], paddingTop: spacing[2], paddingBottom: spacing[3] },
-  heroKicker: { color: '#ff8543', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.25, textTransform: 'uppercase' },
-  heroTitle: { color: colors.white, fontFamily: typography.fonts.heading, fontSize: 22, lineHeight: 22, marginTop: spacing[1] },
-  heroSubtitle: { maxWidth: 320, color: 'rgba(255,255,255,0.66)', fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 13, marginTop: spacing[1] },
+  statusPillText: { fontFamily: typography.fonts.bodyBold, fontSize: 11, textTransform: 'uppercase', flexShrink: 1 },
   detailSheet: { flex: 1, minHeight: 0, marginTop: -8, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#fffaf2', overflow: 'hidden' },
   grabber: { width: 42, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: spacing[2], backgroundColor: '#cdbda9' },
   tabs: { minHeight: 56, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'stretch', borderBottomWidth: 1, borderBottomColor: '#eadfd1' },
   tab: { flex: 1, minHeight: 54, paddingHorizontal: spacing[1], alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  tabText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, lineHeight: 12, textAlign: 'center' },
+  tabText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 12, textAlign: 'center' },
   tabTextActive: { color: colors.text },
   tabIndicator: { position: 'absolute', bottom: -1, left: spacing[1], right: spacing[1], height: 3, borderRadius: 2, backgroundColor: colors.accent },
   sheetScroll: { flex: 1 },
@@ -1028,29 +1012,29 @@ const styles = StyleSheet.create({
   questionNavigationActionEnd: { justifyContent: 'flex-end' },
   questionNavigationPressed: { backgroundColor: colors.accentSurface },
   questionNavigationDisabled: { opacity: 0.34 },
-  questionNavigationLabel: { color: colors.nav, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 17 },
-  questionNavigationProgress: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 14, textAlign: 'center' },
+  questionNavigationLabel: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 17 },
+  questionNavigationProgress: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 14, textAlign: 'center' },
   reviewSuccessNotice: { width: '100%', maxWidth: 760, alignSelf: 'center', minHeight: 48, marginBottom: spacing[3], borderRadius: 14, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successSurface, paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  reviewSuccessText: { flex: 1, minWidth: 0, color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 15 },
+  reviewSuccessText: { flex: 1, minWidth: 0, color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 15 },
   panel: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: spacing[3] },
   panelCompact: { gap: spacing[2] },
   questionBlock: { paddingBottom: spacing[4], borderBottomWidth: 1, borderBottomColor: '#eadfd1' },
   questionMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
-  tinyLabel: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 1 },
-  marksLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 9, textAlign: 'right' },
-  questionText: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 17, lineHeight: 23, marginTop: spacing[2] },
+  tinyLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 1 },
+  marksLabel: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, textAlign: 'right' },
+  questionText: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 17, lineHeight: 23, marginTop: spacing[2] },
   questionTextCompact: { fontSize: 15, lineHeight: 21 },
   questionFigure: { width: '100%', marginTop: spacing[3], gap: spacing[2] },
   questionFigureLabel: { minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
-  questionFigureLabelText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 0.45, textTransform: 'uppercase' },
+  questionFigureLabelText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 0.45, textTransform: 'uppercase' },
   questionFigureMedia: { width: '100%', position: 'relative' },
   questionImage: { borderWidth: 1, borderColor: '#eadfd1', backgroundColor: colors.backgroundElevated },
   expandFigureButton: { position: 'absolute', top: spacing[2], right: spacing[2], width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(7,21,45,0.92)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
   viewerBackdrop: { flex: 1, paddingTop: spacing[6], paddingBottom: spacing[4], paddingHorizontal: spacing[3], backgroundColor: 'rgba(3,12,28,0.98)' },
   viewerHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   viewerTitleGroup: { flex: 1, minWidth: 0 },
-  viewerKicker: { color: '#ff8543', fontFamily: typography.fonts.bodyBold, fontSize: 9, letterSpacing: 1.1, textTransform: 'uppercase' },
-  viewerTitle: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 13, lineHeight: 18, marginTop: 3 },
+  viewerKicker: { color: '#ff8543', fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1.1, textTransform: 'uppercase' },
+  viewerTitle: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 18, marginTop: 3 },
   viewerClose: { width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.08)' },
   viewerCanvas: { flex: 1, minHeight: 0, marginVertical: spacing[3], borderRadius: 22, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fffaf2' },
   viewerFigure: { width: '100%', alignItems: 'center', justifyContent: 'center' },
@@ -1059,14 +1043,14 @@ const styles = StyleSheet.create({
   viewerControl: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: 'rgba(255,255,255,0.09)' },
   viewerReset: { minWidth: 82, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   viewerResetText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
-  chapterText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, marginTop: spacing[2] },
+  chapterText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, marginTop: spacing[2] },
   questionOptions: { marginTop: spacing[3], paddingTop: spacing[1], borderTopWidth: 1, borderTopColor: '#eadfd1' },
   missingContext: { marginTop: spacing[2], borderRadius: 16, padding: spacing[3], gap: spacing[2], backgroundColor: colors.dangerSurface, borderWidth: 1, borderColor: colors.border },
   missingContextCopy: { gap: spacing[1] },
-  missingContextTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 13, lineHeight: 18 },
-  missingContextText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15 },
+  missingContextTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 18 },
+  missingContextText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 15 },
   inlineAction: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing[2] },
-  inlineActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  inlineActionText: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   optionContextActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing[1] },
   optionRow: { width: '100%', minHeight: 54, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], backgroundColor: 'transparent' },
   optionExpected: { borderLeftWidth: 3, borderLeftColor: colors.success, paddingLeft: spacing[2], backgroundColor: colors.successSurface },
@@ -1074,33 +1058,33 @@ const styles = StyleSheet.create({
   optionKey: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundElevated },
   optionKeyExpected: { borderColor: colors.success, backgroundColor: colors.success },
   optionKeySelected: { borderColor: colors.accent, backgroundColor: colors.accent },
-  optionKeyText: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 10 },
+  optionKeyText: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   optionKeyTextActive: { color: colors.white },
   optionCopy: { flex: 1, minWidth: 0, gap: spacing[2] },
   optionText: { color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17, flexShrink: 1 },
   optionState: { alignSelf: 'flex-start', minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  optionStateText: { fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  optionStateText: { fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   unansweredState: { minHeight: 48, borderRadius: 14, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2], backgroundColor: colors.dangerSurface },
   unansweredText: { flex: 1, color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 16 },
   answerCompare: { width: '100%', borderLeftWidth: 3, paddingLeft: spacing[3], paddingVertical: spacing[2], borderBottomWidth: 1, borderBottomColor: '#eadfd1' },
   responseBlock: { borderLeftColor: colors.accent },
   expectedBlock: { borderLeftColor: colors.success },
-  compareTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 12 },
+  compareTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
   compareText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17, marginTop: spacing[1], flexShrink: 1 },
   coachNote: { width: '100%', borderRadius: 16, padding: spacing[3], flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2], backgroundColor: '#07152d' },
   coachMark: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
-  coachMarkText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 9 },
+  coachMarkText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   coachCopy: { flex: 1, minWidth: 0 },
-  coachTitle: { color: colors.white, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 17 },
-  coachText: { color: 'rgba(255,255,255,0.72)', fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 16, marginTop: spacing[1] },
+  coachTitle: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 17 },
+  coachText: { color: 'rgba(255,255,255,0.72)', fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 16, marginTop: spacing[1] },
   unavailableCard: { width: '100%', borderRadius: 16, padding: spacing[3], backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.border },
-  unavailableTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 12, lineHeight: 17 },
-  unavailableText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15, marginTop: spacing[1] },
+  unavailableTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 12, lineHeight: 17 },
+  unavailableText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 15, marginTop: spacing[1] },
   detailsIntro: { paddingBottom: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.border },
-  detailsIntroTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 16, lineHeight: 21 },
-  detailsIntroText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15, marginTop: spacing[1] },
+  detailsIntroTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 16, lineHeight: 21 },
+  detailsIntroText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 15, marginTop: spacing[1] },
   explanationSection: { width: '100%', paddingBottom: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.border },
-  explanationTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 13, lineHeight: 18 },
+  explanationTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 13, lineHeight: 18 },
   explanationBody: { marginTop: spacing[2], gap: spacing[2] },
   explanationLine: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
   bullet: { width: 5, height: 5, borderRadius: 3, marginTop: 6, backgroundColor: colors.accent },
@@ -1109,27 +1093,27 @@ const styles = StyleSheet.create({
   primaryActionText: { color: colors.white, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   secondaryAction: { width: '100%', minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], backgroundColor: colors.backgroundElevated },
   secondaryActionText: { color: colors.nav, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
-  reviewState: { width: '100%', borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, padding: spacing[4], flexDirection: 'row', gap: spacing[3] },
+  reviewState: { width: '100%', borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, padding: spacing[4], flexDirection: 'row', gap: spacing[3] },
   reviewCopy: { flex: 1, minWidth: 0 },
-  reviewTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 15 },
-  reviewText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 10, lineHeight: 15, marginTop: 3 },
+  reviewTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 15 },
+  reviewText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 15, marginTop: 3 },
   reviewLabel: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 11 },
   reviewInput: { width: '100%', minHeight: 120, maxHeight: 260, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18, padding: spacing[3], textAlignVertical: 'top' },
   feedbackInput: { minHeight: 86 },
   threadBox: { width: '100%', borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundMuted, overflow: 'hidden' },
   threadItem: { paddingHorizontal: spacing[3], paddingVertical: spacing[2], borderBottomWidth: 1, borderBottomColor: colors.border },
-  threadMeta: { color: colors.accentStrong, fontFamily: typography.fonts.bodyBold, fontSize: 8, letterSpacing: 1, textTransform: 'uppercase' },
+  threadMeta: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase' },
   threadText: { color: colors.text, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 17, marginTop: 3 },
   teacherActionRow: { width: '100%', flexDirection: 'row', gap: spacing[2] },
   teacherAction: { flex: 1 },
   regradeRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  scoreInput: { width: 96, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 15, paddingHorizontal: spacing[3] },
+  scoreInput: { width: 96, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated, color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 15, paddingHorizontal: spacing[3] },
   maxScoreText: { color: colors.textMuted, fontFamily: typography.fonts.bodyBold, fontSize: 12 },
-  helperText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 9, lineHeight: 14 },
-  errorText: { color: colors.danger, fontFamily: typography.fonts.bodyBold, fontSize: 10, lineHeight: 15 },
+  helperText: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 11, lineHeight: 14 },
+  errorText: { color: colors.danger, fontFamily: typography.fonts.bodyBold, fontSize: 11, lineHeight: 15 },
   disabled: { opacity: 0.58 },
   stateSurface: { flex: 1, marginHorizontal: spacing[3], borderTopLeftRadius: 28, borderTopRightRadius: 28, alignItems: 'center', justifyContent: 'center', gap: spacing[3], backgroundColor: '#fffaf2', padding: spacing[5] },
-  stateTitle: { color: colors.text, fontFamily: typography.fonts.headingSemibold, fontSize: 20, textAlign: 'center' },
+  stateTitle: { color: colors.text, fontFamily: typography.fonts.bodyBold, fontSize: 20, textAlign: 'center' },
   stateMessage: { color: colors.textMuted, fontFamily: typography.fonts.bodyMedium, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   stateActions: { flexDirection: 'row', gap: spacing[2] },
   stateSecondary: { minHeight: 44, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing[4], alignItems: 'center', justifyContent: 'center' },

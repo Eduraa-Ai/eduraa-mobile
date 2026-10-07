@@ -5,7 +5,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
 import { analyticsApi } from '../../api/analytics'
 import { attendanceApi } from '../../api/attendance'
-import { AnimatedButton, AnimatedCard, AppScreen, DateField, EmptyState, ErrorState, SelectField, SkeletonCard } from '../../components/ui'
+import { AnimatedButton, AnimatedCard, AppScreen, DateField, EmptyState, ErrorState, SectionHeading, SegmentedTabs, SelectField, SkeletonCard } from '../../components/ui'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, radius, shadows, spacing, typography } from '../../theme'
 import type { DashboardSubmission, DashboardTopicMastery, StudentDashboardInsightAction } from '../../types'
@@ -53,12 +53,10 @@ const formatDate = (value?: string | null) => {
     : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// Section headings share the app's SectionHeading; `eyebrow` stays as the
+// accessible group name rather than a second visible label.
 function Heading({ eyebrow, title, body }: { eyebrow?: string; title: string; body?: string }) {
-  return <View style={styles.heading}>
-    {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-    <Text style={styles.headingTitle}>{title}</Text>
-    {body ? <Text style={styles.body}>{body}</Text> : null}
-  </View>
+  return <View accessibilityLabel={eyebrow ? `${eyebrow.toLowerCase()}: ${title}` : undefined}><SectionHeading title={title} subtitle={body} /></View>
 }
 
 function Metric({ label, value, note, tone }: { label: string; value: string; note: string; tone?: string }) {
@@ -195,7 +193,6 @@ export default function LearnerDashboardScreen() {
   const weakest = rankedTopics[0]
   const strongest = rankedTopics.at(-1)
   const weakType = [...filtered.questionTypes].sort((a, b) => a.accuracy - b.accuracy)[0]
-  const firstName = data.student.first_name || user?.display_name?.split(' ')[0] || 'Student'
   const upcoming = [...data.upcoming_exams].sort((a, b) => new Date(a.date ?? '').getTime() - new Date(b.date ?? '').getTime())
   const aiMessages = data.ai_usage.reduce((sum, row) => sum + row.messages, 0)
   const aiPeak = aiUsagePeak(data.ai_usage)
@@ -215,20 +212,8 @@ export default function LearnerDashboardScreen() {
     contentStyle={styles.screen}
     refreshControl={<RefreshControl refreshing={dashboardQuery.isFetching} onRefresh={() => void refresh()} tintColor={colors.accent} />}
   >
-    <View style={styles.topBar}>
-      <View style={styles.flex}>
-        <Text style={styles.eyebrow}>LEARNER COMMAND CENTER</Text>
-        <Text style={styles.title}>Your next win, {firstName}.</Text>
-        <Text style={styles.body}>Evidence from your work, turned into one clear next move.</Text>
-      </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Ask Eduraa AI" onPress={() => navigation.navigate('AIStudio')} style={styles.aiButton}>
-        <Ionicons name="sparkles" size={20} color={colors.white} />
-      </Pressable>
-    </View>
-
-    <AnimatedCard elevated style={styles.mission}>
-      <View style={styles.glow} />
-      <Text style={styles.missionEyebrow}>YOUR NEXT BEST MOVE</Text>
+    <View style={styles.mission}>
+      <Text style={styles.missionEyebrow}>Your next best move</Text>
       <Text style={styles.missionTitle}>{weakest ? `Repair ${masteryFocusLabel(weakest)}` : 'Create your first learning signal'}</Text>
       <Text style={styles.missionBody}>{weakest
         ? `${pct(weakest.mastery)} mastery${weakest.subtopic ? ` in ${weakest.topic}` : weakest.chapter ? ` in ${weakest.chapter}` : ''}. A focused attempt will give you the fastest useful feedback.`
@@ -239,22 +224,23 @@ export default function LearnerDashboardScreen() {
         icon={<Ionicons name="arrow-forward" size={18} color={colors.white} />}
         style={styles.missionCta}
       />
-      <View style={styles.proof}><Ionicons name="shield-checkmark-outline" size={15} color="#baf2e4" /><Text style={styles.proofText}>Only released results and completed work shape this recommendation</Text></View>
-    </AnimatedCard>
+      <View style={styles.proof}><Ionicons name="shield-checkmark-outline" size={14} color={colors.iconInk} /><Text style={styles.proofText}>Based only on released results and completed work</Text></View>
+    </View>
 
     {evidenceIsStale ? <View accessibilityRole="alert" style={styles.staleNotice}>
       <Ionicons name="time-outline" size={18} color={colors.warning} />
       <View style={styles.flex}><Text style={styles.staleTitle}>Your priorities need a fresh signal</Text><Text style={styles.staleBody}>These recommendations are based on work older than 90 days. Complete a focused paper to refresh them.</Text></View>
     </View> : null}
 
-    <View style={styles.tabs} accessibilityRole="tablist">
-      {dashboardTabs.map((tab) => <Pressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} onPress={() => setActiveTab(tab)} style={[styles.tab, activeTab === tab && styles.tabActive]}>
-        <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-      </Pressable>)}
-    </View>
+    <SegmentedTabs
+      accessibilityLabel="Dashboard sections"
+      tabs={dashboardTabs.map((tab) => ({ id: tab, label: tab }))}
+      value={activeTab}
+      onChange={setActiveTab}
+    />
 
     <Pressable accessibilityRole="button" accessibilityState={{ expanded: showFilters }} onPress={() => setShowFilters((value) => !value)} style={styles.filterToggle}>
-      <View style={styles.filterToggleCopy}><Ionicons name="options-outline" size={18} color={colors.accentStrong} /><Text style={styles.filterToggleText}>{activeFilterCount ? `${activeFilterCount} active ${activeFilterCount === 1 ? 'filter' : 'filters'}` : 'Filter your evidence'}</Text></View>
+      <View style={styles.filterToggleCopy}><Ionicons name="options-outline" size={17} color={colors.textSecondary} /><Text style={styles.filterToggleText}>{activeFilterCount ? `${activeFilterCount} active ${activeFilterCount === 1 ? 'filter' : 'filters'}` : 'Filter your evidence'}</Text></View>
       <Ionicons name={showFilters ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
     </Pressable>
     {showFilters ? <AnimatedCard style={styles.filterCard}>
@@ -280,7 +266,7 @@ export default function LearnerDashboardScreen() {
       <AnimatedCard>
         <Heading eyebrow="UPCOMING" title="Know what is next" body="Open the exact exam instead of searching for it again." />
         {upcoming.length ? upcoming.slice(0, 3).map((exam) => <Pressable key={exam.id} accessibilityRole="button" accessibilityLabel={`Open ${exam.name}`} onPress={() => navigation.navigate('Exams', { focusExamId: exam.id })} style={styles.listRow}>
-          <View style={styles.iconTile}><Ionicons name="calendar-outline" size={18} color={colors.accentStrong} /></View>
+          <View style={styles.iconTile}><Ionicons name="calendar-outline" size={18} color={colors.iconInk} /></View>
           <View style={styles.flex}><Text style={styles.rowTitle}>{exam.name}</Text><Text style={styles.rowMeta}>{[formatDate(exam.date), exam.subject, exam.cat].filter(Boolean).join(' · ')}</Text></View>
           <Ionicons name="chevron-forward" size={18} color={colors.textSoft} />
         </Pressable>) : <EmptyState icon="calendar-outline" title="No upcoming exams" body="When your school schedules an exam, it will appear here with one-tap access." />}
@@ -377,25 +363,22 @@ export default function LearnerDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { gap: spacing[5] }, flex: { flex: 1 }, stack: { gap: spacing[5] }, pressed: { opacity: 0.72 }, disabled: { opacity: 0.45 },
-  topBar: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[4] },
-  eyebrow: { ...typography.roles.eyebrow, color: colors.accentStrong }, title: { ...typography.roles.screenTitle, color: colors.text, marginTop: spacing[1] },
-  body: { ...typography.roles.body, color: colors.textMuted, marginTop: spacing[1] }, heading: { gap: spacing[1] }, headingTitle: { ...typography.roles.title, color: colors.text },
-  aiButton: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav, ...shadows.sm },
-  mission: { overflow: 'hidden', padding: spacing[6], backgroundColor: colors.nav, borderColor: 'rgba(255,255,255,0.08)' }, glow: { position: 'absolute', width: 180, height: 180, borderRadius: 90, right: -74, top: -86, backgroundColor: 'rgba(20,184,166,0.24)' },
-  missionEyebrow: { ...typography.roles.eyebrow, color: '#9ee7d7' }, missionTitle: { ...typography.roles.screenTitle, color: colors.white, marginTop: spacing[2] }, missionBody: { ...typography.roles.bodyLarge, color: '#cbd5e1', marginTop: spacing[3] }, missionCta: { marginTop: spacing[5] },
-  proof: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginTop: spacing[4] }, proofText: { ...typography.roles.label, color: '#baf2e4', flex: 1 },
-  staleNotice: { minHeight: 64, flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3], padding: spacing[4], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.warning, backgroundColor: colors.warningSurface }, staleTitle: { ...typography.roles.body, fontFamily: typography.fonts.bodyBold, color: colors.text }, staleBody: { ...typography.roles.label, color: colors.textMuted, marginTop: spacing[1] },
-  tabs: { flexDirection: 'row', padding: spacing[1], borderRadius: radius.full, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...shadows.xs }, tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full }, tabActive: { backgroundColor: colors.nav }, tabText: { ...typography.roles.label, fontSize: 11, color: colors.textMuted }, tabTextActive: { color: colors.white },
-  filterToggle: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing[4], borderRadius: radius.lg, backgroundColor: colors.accentSurface, borderWidth: 1, borderColor: colors.borderBrand }, filterToggleCopy: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] }, filterToggleText: { ...typography.roles.body, color: colors.accentStrong }, filterCard: { gap: spacing[4] }, filterGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] }, filterHalf: { width: '47%' }, reset: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing[3] },
-  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] }, metric: { width: '47%', minHeight: 110, padding: spacing[4], borderRadius: radius.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...shadows.xs }, label: { ...typography.roles.label, color: colors.text }, mutedLabel: { ...typography.roles.label, color: colors.textMuted }, metricValue: { fontFamily: typography.fonts.heading, fontSize: 27, color: colors.text, marginVertical: spacing[1] },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] }, listRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: spacing[3], borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: spacing[3], marginTop: spacing[3] }, iconTile: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface }, rowTitle: { ...typography.roles.bodyLarge, fontFamily: typography.fonts.bodyBold, color: colors.text }, rowMeta: { ...typography.roles.label, color: colors.textMuted, marginTop: spacing[1] },
-  trend: { flexDirection: 'row', alignItems: 'center', gap: spacing[4], marginTop: spacing[4] }, trendIcon: { width: 56, height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  dataBlock: { gap: spacing[3], paddingVertical: spacing[3] }, divider: { borderTopWidth: 1, borderTopColor: colors.borderSubtle, marginTop: spacing[2], paddingTop: spacing[4] }, dataValue: { fontFamily: typography.fonts.heading, fontSize: 20 }, barTrack: { height: 8, borderRadius: 4, backgroundColor: colors.backgroundMuted, overflow: 'hidden' }, barFill: { height: '100%', borderRadius: 4 },
+  screen: { gap: spacing[4] }, flex: { flex: 1 }, stack: { gap: spacing[4] }, pressed: { opacity: 0.72 }, disabled: { opacity: 0.45 },
+  eyebrow: { ...typography.roles.eyebrow, color: colors.textMuted },
+  body: { ...typography.roles.body, color: colors.textMuted, marginTop: spacing[1] }, headingTitle: { ...typography.roles.title, color: colors.text },
+  mission: { gap: spacing[2], padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundElevated },
+  missionEyebrow: { ...typography.roles.groupLabel, color: colors.textMuted }, missionTitle: { ...typography.roles.section, fontSize: 18, color: colors.nav }, missionBody: { ...typography.roles.caption, fontSize: 13, lineHeight: 19, color: colors.textSecondary }, missionCta: { marginTop: spacing[2] },
+  proof: { flexDirection: 'row', alignItems: 'center', gap: 6 }, proofText: { ...typography.roles.caption, flex: 1, fontSize: 11.5, color: colors.textMuted },
+  staleNotice: { minHeight: 64, flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3], padding: spacing[4], borderRadius: radius.card, borderWidth: 1, borderColor: colors.warning, backgroundColor: colors.warningSurface }, staleTitle: { ...typography.roles.body, fontFamily: typography.fonts.bodyBold, color: colors.text }, staleBody: { ...typography.roles.label, color: colors.textMuted, marginTop: spacing[1] },
+  filterToggle: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing[3], borderRadius: radius.card, backgroundColor: colors.backgroundElevated, borderWidth: 1, borderColor: colors.border }, filterToggleCopy: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] }, filterToggleText: { ...typography.roles.body, fontFamily: typography.fonts.bodySemibold, color: colors.nav }, filterCard: { gap: spacing[4] }, filterGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] }, filterHalf: { width: '47%' }, reset: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing[3] },
+  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] }, metric: { width: '48%', padding: spacing[3], borderRadius: radius.card, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }, label: { ...typography.roles.label, color: colors.text }, mutedLabel: { ...typography.roles.label, color: colors.textMuted }, metricValue: { fontFamily: typography.fonts.bodyBold, fontSize: 22, lineHeight: 28, color: colors.nav, marginVertical: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] }, listRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing[3], borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: spacing[3], marginTop: spacing[3] }, iconTile: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSurface }, rowTitle: { ...typography.roles.rowTitle, color: colors.nav }, rowMeta: { ...typography.roles.label, color: colors.textMuted, marginTop: spacing[1] },
+  trend: { flexDirection: 'row', alignItems: 'center', gap: spacing[4], marginTop: spacing[4] }, trendIcon: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  dataBlock: { gap: spacing[3], paddingVertical: spacing[3] }, divider: { borderTopWidth: 1, borderTopColor: colors.borderSubtle, marginTop: spacing[2], paddingTop: spacing[4] }, dataValue: { fontFamily: typography.fonts.bodyBold, fontSize: 20 }, barTrack: { height: 8, borderRadius: 4, backgroundColor: colors.backgroundMuted, overflow: 'hidden' }, barFill: { height: '100%', borderRadius: 4 },
   action: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingHorizontal: spacing[4], borderRadius: radius.full, backgroundColor: colors.accentSurface, borderWidth: 1, borderColor: colors.borderBrand }, actionText: { ...typography.roles.label, color: colors.accentStrong }, more: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: colors.borderSubtle }, moreStandalone: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }, moreText: { ...typography.roles.body, color: colors.accentStrong },
-  scoreCard: { gap: spacing[3] }, badge: { minWidth: 34, height: 34, paddingHorizontal: spacing[2], borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav }, badgeText: { ...typography.roles.label, color: colors.white }, attempt: { gap: spacing[3], paddingTop: spacing[3] }, score: { fontFamily: typography.fonts.heading, fontSize: 22 },
+  scoreCard: { gap: spacing[3] }, badge: { minWidth: 34, height: 34, paddingHorizontal: spacing[2], borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.nav }, badgeText: { ...typography.roles.label, color: colors.white }, attempt: { gap: spacing[3], paddingTop: spacing[3] }, score: { fontFamily: typography.fonts.bodyBold, fontSize: 22 },
   modeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] }, mode: { width: '48%', minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], borderRadius: radius.full, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }, modeActive: { backgroundColor: colors.nav, borderColor: colors.nav }, modeText: { ...typography.roles.label, color: colors.textMuted }, modeTextActive: { color: colors.white },
   callout: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3], padding: spacing[4], marginTop: spacing[4], borderRadius: radius.lg, backgroundColor: colors.accentSurface }, calloutText: { ...typography.roles.bodyLarge, color: colors.text, flex: 1 }, support: { ...typography.roles.body, color: colors.textSecondary, marginTop: spacing[3] }, priority: { alignSelf: 'flex-start', paddingHorizontal: spacing[3], paddingVertical: spacing[1], borderRadius: radius.full, backgroundColor: colors.nav }, priorityText: { ...typography.roles.eyebrow, color: colors.white },
   recovery: { flexDirection: 'row', gap: spacing[3], paddingVertical: spacing[3] }, step: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent }, stepText: { ...typography.roles.label, color: colors.white }, study: { flexDirection: 'row', gap: spacing[3], paddingVertical: spacing[3] }, timeline: { width: 20, alignItems: 'center' }, dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.accent, marginTop: spacing[1] }, line: { flex: 1, width: 2, backgroundColor: colors.accentSoft, marginTop: spacing[1] },
-  aiCard: { gap: spacing[4], backgroundColor: '#f8fbff' }, aiSpark: { width: 48, height: 48, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ai.violet }, chart: { height: 150, flexDirection: 'row', alignItems: 'flex-end', gap: spacing[2], paddingTop: spacing[4] }, chartColumn: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end', gap: spacing[1] }, chartTrack: { width: '70%', flex: 1, justifyContent: 'flex-end', borderRadius: radius.full, overflow: 'hidden', backgroundColor: colors.backgroundMuted }, chartBar: { width: '100%', borderRadius: radius.full, backgroundColor: colors.ai.violet }, week: { ...typography.roles.label, fontSize: 9, color: colors.textMuted, width: '100%', textAlign: 'center' }, privacy: { ...typography.roles.label, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing[4], paddingBottom: spacing[4] },
+  aiCard: { gap: spacing[4], backgroundColor: '#f8fbff' }, aiSpark: { width: 48, height: 48, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ai.violet }, chart: { height: 150, flexDirection: 'row', alignItems: 'flex-end', gap: spacing[2], paddingTop: spacing[4] }, chartColumn: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end', gap: spacing[1] }, chartTrack: { width: '70%', flex: 1, justifyContent: 'flex-end', borderRadius: radius.full, overflow: 'hidden', backgroundColor: colors.backgroundMuted }, chartBar: { width: '100%', borderRadius: radius.full, backgroundColor: colors.ai.violet }, week: { ...typography.roles.label, fontSize: 11, color: colors.textMuted, width: '100%', textAlign: 'center' }, privacy: { ...typography.roles.label, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing[4], paddingBottom: spacing[4] },
 })

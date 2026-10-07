@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -32,6 +32,7 @@ import {
   type PreviousQuestion,
 } from '../../api/previousPapers'
 import { isPreviousPapersEligible } from '../../auth/landing'
+import { useAppHeaderBack } from '../../navigation/headerScroll'
 import { useAuthStore } from '../../stores/authStore'
 import { colors, layout, radius, shadows, spacing, typography } from '../../theme'
 import PreviousPaperAssemblyState, { type AssemblyStage } from './PreviousPaperAssemblyState'
@@ -159,7 +160,6 @@ function PaperCard({ paper, onPress }: { paper: PreviousPaper; onPress: () => vo
       accessibilityLabel={`${paper.title}, ${paper.question_count} questions`}
       style={({ pressed }) => [styles.paperCard, pressed && styles.paperCardPressed]}
     >
-      <View style={styles.paperCardAccent} />
       <View style={styles.paperTop}>
         <View style={styles.paperCopy}>
           <Text style={styles.paperMeta}>{metaForPaper(paper)}</Text>
@@ -344,6 +344,16 @@ function QuestionCard({ question }: { question: PreviousQuestion }) {
         </View>
       ) : null}
     </AnimatedCard>
+  )
+}
+
+// One muted line of context plus a count; the app header carries the title.
+function StepContextRow({ text, count }: { text: string; count: string }) {
+  return (
+    <View style={styles.stepContextRow}>
+      <Text style={styles.stepContextText} numberOfLines={2}>{text}</Text>
+      <View style={styles.headerCount}><Text style={styles.headerCountText}>{count}</Text></View>
+    </View>
   )
 }
 
@@ -640,6 +650,18 @@ function CompetitivePreviousPapersScreen() {
     }, 220)
   }
 
+  const step = pendingResume
+    ? { title: 'Unfinished set', back: () => setPendingResume(null) }
+    : view === 'preview' && selectedPaper
+      ? { title: 'Question preview', back: handleBack }
+      : view === 'builder' && selectedPaper
+        ? { title: 'Shape your set', back: handleBack }
+        : null
+  useAppHeaderBack(step?.back)
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerTitle: step?.title })
+  }, [navigation, step?.title])
+
   if (!allowed) {
     return (
       <AppScreen scroll={false} protectedChrome contentStyle={styles.center}>
@@ -702,10 +724,8 @@ function CompetitivePreviousPapersScreen() {
     return (
       <AppScreen scroll={false} protectedChrome contentStyle={styles.resumeStateScreen}>
         <PremiumHeader
-          eyebrow="UNFINISHED SET FOUND"
           title="Keep your place or begin fresh."
           subtitle="This choice applies only to the same unfinished practice selection."
-          onBack={() => setPendingResume(null)}
         />
         <View style={styles.resumeStateBody}>
           <View style={styles.resumeIcon}>
@@ -745,13 +765,7 @@ function CompetitivePreviousPapersScreen() {
   if (view === 'preview' && selectedPaper) {
     const previewHeader = (
       <View style={styles.previewHeader}>
-        <PremiumHeader
-          eyebrow="QUESTION PREVIEW"
-          title="What you will get"
-          subtitle={previewSelectionLabel}
-          onBack={handleBack}
-          right={<View style={styles.headerCount}><Text style={styles.headerCountText}>{questions.length} Q</Text></View>}
-        />
+        <StepContextRow text={previewSelectionLabel} count={`${questions.length} Q`} />
         <View style={styles.previewPromise}>
           <View style={styles.previewPromiseIcon}>
             <Ionicons name="eye-outline" size={19} color={colors.paperStudio.jee} />
@@ -869,19 +883,7 @@ function CompetitivePreviousPapersScreen() {
 
     return (
       <AppScreen protectedChrome contentStyle={styles.screen} keyboardShouldPersistTaps="handled">
-          <PremiumHeader
-            eyebrow="BUILD PRACTICE"
-            title="Shape your set"
-            subtitle="Choose a practice scope."
-            onBack={handleBack}
-            right={
-              <View style={styles.headerCount}>
-                <Text style={styles.headerCountText}>
-                  {builderCountLabel}
-                </Text>
-              </View>
-            }
-          />
+          <StepContextRow text="Choose a practice scope." count={builderCountLabel} />
 
           <View style={styles.selectedPaperCard}>
             <View style={styles.selectedPaperMark}>
@@ -1103,13 +1105,7 @@ function CompetitivePreviousPapersScreen() {
 
   return (
     <AppScreen protectedChrome contentStyle={styles.screen} keyboardShouldPersistTaps="handled">
-        <PremiumHeader
-          eyebrow="JEE PREVIOUS PAPERS"
-          title="Practice from PYQs"
-          subtitle="Browse, inspect, and shape a fresh practice set."
-          onBack={handleBack}
-          right={<View style={styles.headerCount}><Text style={styles.headerCountText}>{papers.length}</Text></View>}
-        />
+        <StepContextRow text="JEE PYQs. Browse, inspect, and shape a fresh practice set." count={String(papers.length)} />
 
         {papers.length === 0 ? (
           <View style={styles.archiveEmpty}>
@@ -1128,22 +1124,6 @@ function CompetitivePreviousPapersScreen() {
           </View>
         ) : (
           <>
-          <View style={styles.libraryHero}>
-          <View style={styles.heroOrbit}>
-            <Ionicons name="documents-outline" size={30} color={colors.white} />
-            <View style={styles.heroClock}>
-              <Ionicons name="time" size={12} color={colors.white} />
-            </View>
-          </View>
-          <View style={styles.heroCopy}>
-            <Text style={styles.heroKicker}>YOUR JEE QUESTION ARCHIVE</Text>
-            <Text style={styles.heroTitle}>The past becomes your next advantage.</Text>
-            <Text style={styles.heroBody}>
-              Every paper is structured by subject and chapter, with answers and solutions ready to inspect.
-            </Text>
-          </View>
-        </View>
-
         <SearchField
           value={paperSearch}
           onChangeText={setPaperSearch}
@@ -1243,6 +1223,19 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.78,
   },
+  stepContextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  stepContextText: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.textMuted,
+    fontFamily: typography.fonts.bodyMedium,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   headerCount: {
     minWidth: 42,
     height: 34,
@@ -1265,11 +1258,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
     paddingHorizontal: spacing[4],
-    borderRadius: 18,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
-    ...shadows.xs,
   },
   searchInput: {
     flex: 1,
@@ -1286,63 +1278,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  libraryHero: {
-    minHeight: 192,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[4],
-    padding: spacing[5],
-    borderRadius: 28,
-    backgroundColor: colors.nav,
-    ...shadows.md,
-  },
-  heroOrbit: {
-    width: 72,
-    height: 88,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  heroClock: {
-    position: 'absolute',
-    right: 8,
-    bottom: 16,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accent,
-    borderWidth: 2,
-    borderColor: colors.nav,
-  },
-  heroCopy: {
-    flex: 1,
-  },
-  heroKicker: {
-    color: '#fdba74',
-    fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
-    letterSpacing: 1.2,
-  },
-  heroTitle: {
-    marginTop: spacing[2],
-    color: colors.white,
-    fontFamily: typography.fonts.heading,
-    fontSize: 22,
-    lineHeight: 27,
-  },
-  heroBody: {
-    marginTop: spacing[2],
-    color: 'rgba(255,255,255,0.68)',
-    fontFamily: typography.fonts.bodyMedium,
-    fontSize: 11,
-    lineHeight: 17,
-  },
   filterSection: {
     gap: spacing[2],
     paddingVertical: spacing[1],
@@ -1351,7 +1286,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[1],
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
@@ -1367,13 +1302,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 16,
   },
   sectionMeta: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
   },
   clearText: {
     color: colors.accentStrong,
@@ -1384,28 +1319,17 @@ const styles = StyleSheet.create({
     gap: spacing[3],
   },
   paperCard: {
-    minHeight: 116,
     overflow: 'hidden',
     padding: spacing[4],
-    paddingLeft: spacing[5],
     gap: spacing[3],
-    borderRadius: 20,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
-    ...shadows.xs,
   },
   paperCardPressed: {
     opacity: 0.82,
     transform: [{ scale: 0.99 }],
-  },
-  paperCardAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: colors.paperStudio.jee,
   },
   paperTop: {
     flexDirection: 'row',
@@ -1418,14 +1342,14 @@ const styles = StyleSheet.create({
   paperMeta: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     lineHeight: 13,
     textTransform: 'uppercase',
   },
   paperTitle: {
     marginTop: spacing[1],
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
     lineHeight: 22,
   },
@@ -1499,7 +1423,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[2],
     color: colors.accentStrong,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 1.2,
   },
   libraryEmptyIcon: {
@@ -1512,7 +1436,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 19,
     lineHeight: 24,
     textAlign: 'center',
@@ -1548,7 +1472,7 @@ const styles = StyleSheet.create({
   },
   loadingTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 19,
   },
   loadingBody: {
@@ -1582,14 +1506,14 @@ const styles = StyleSheet.create({
   selectedPaperLabel: {
     color: '#fdba74',
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   selectedPaperTitle: {
     marginTop: spacing[1],
     color: colors.white,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 16,
     lineHeight: 20,
   },
@@ -1597,7 +1521,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[1],
     color: 'rgba(255,255,255,0.62)',
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
   },
   builderSection: {
@@ -1626,7 +1550,7 @@ const styles = StyleSheet.create({
   modeOptionText: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     textAlign: 'center',
   },
   modeOptionTextSelected: {
@@ -1677,7 +1601,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
     paddingHorizontal: spacing[3],
-    borderRadius: 18,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
@@ -1702,7 +1626,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 9,
+    fontSize: 11,
     lineHeight: 12,
   },
   timerChoiceBodySelected: {
@@ -1711,7 +1635,7 @@ const styles = StyleSheet.create({
   durationPanel: {
     gap: spacing[3],
     padding: spacing[3],
-    borderRadius: 20,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: '#dbe5f4',
     backgroundColor: '#f5f8fd',
@@ -1740,14 +1664,14 @@ const styles = StyleSheet.create({
   },
   durationNumber: {
     color: colors.paperStudio.jee,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 25,
     lineHeight: 28,
   },
   durationUnit: {
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.7,
     textTransform: 'uppercase',
   },
@@ -1808,7 +1732,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing[3],
     padding: spacing[4],
-    borderRadius: 20,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: '#dbe5f4',
     backgroundColor: '#f1f5fb',
@@ -1870,7 +1794,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: colors.textMuted,
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
   },
   previewRoot: {
@@ -1915,13 +1839,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: 'rgba(255,255,255,0.66)',
     fontFamily: typography.fonts.bodyMedium,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
   },
   questionCard: {
     gap: spacing[3],
     padding: spacing[4],
-    borderRadius: 22,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundElevated,
@@ -1936,7 +1860,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     lineHeight: 13,
     textTransform: 'uppercase',
   },
@@ -1947,9 +1871,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSurface,
   },
   questionType: {
-    color: colors.accentStrong,
+    color: colors.textMuted,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     textTransform: 'uppercase',
   },
   questionText: {
@@ -2043,7 +1967,7 @@ const styles = StyleSheet.create({
   revealButtonText: {
     color: colors.paperStudio.jee,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 10,
+    fontSize: 11,
   },
   answerBand: {
     flexDirection: 'row',
@@ -2068,7 +1992,7 @@ const styles = StyleSheet.create({
   solutionLabel: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
@@ -2084,7 +2008,7 @@ const styles = StyleSheet.create({
   figureLabel: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.7,
     textTransform: 'uppercase',
   },
@@ -2109,7 +2033,7 @@ const styles = StyleSheet.create({
   },
   inlineStateTitle: {
     color: colors.text,
-    fontFamily: typography.fonts.headingSemibold,
+    fontFamily: typography.fonts.bodyBold,
     fontSize: 17,
     textAlign: 'center',
   },
@@ -2157,7 +2081,7 @@ const styles = StyleSheet.create({
   resumePaperLabel: {
     color: colors.textSoft,
     fontFamily: typography.fonts.bodyBold,
-    fontSize: 9,
+    fontSize: 11,
     textTransform: 'uppercase',
   },
   resumePaperTitle: {
